@@ -1,0 +1,23 @@
+# 德语查词评测样例（每行一个查询）
+# 可按你的真实使用习惯增删，建议长期维护到 50-100 条
+
+Anfang
+helfen
+antworten
+Verkehr
+Kühlschrank
+Interesse
+zufällig
+eigentlich
+entscheiden
+Möglichkeit
+vorstellen
+verstehen
+Erfahrung
+Beziehung
+begegnen
+bemerken
+erreichen
+umgehen
+gewöhnlich
+gründlich
