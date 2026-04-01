@@ -1,0 +1,226 @@
+[
+  {
+    "headword": "Abend",
+    "cefr_level": "A1",
+    "cefr_rank": 1,
+    "learning_order": 1,
+    "source": "telc_einfach_gut_a1_1_l1"
+  },
+  {
+    "headword": "alles",
+    "cefr_level": "A1",
+    "cefr_rank": 1,
+    "learning_order": 2,
+    "source": "telc_einfach_gut_a1_1_l1"
+  },
+  {
+    "headword": "antworten",
+    "cefr_level": "A1",
+    "cefr_rank": 1,
+    "learning_order": 3,
+    "source": "telc_einfach_gut_a1_1_l1"
+  },
+  {
+    "headword": "auch",
+    "cefr_level": "A1",
+    "cefr_rank": 1,
+    "learning_order": 4,
+    "source": "telc_einfach_gut_a1_1_l1"
+  },
+  {
+    "headword": "auf",
+    "cefr_level": "A1",
+    "cefr_rank": 1,
+    "learning_order": 5,
+    "source": "telc_einfach_gut_a1_1_l1"
+  },
+  {
+    "headword": "aus",
+    "cefr_level": "A1",
+    "cefr_rank": 1,
+    "learning_order": 6,
+    "source": "telc_einfach_gut_a1_1_l1"
+  },
+  {
+    "headword": "Aussage",
+    "cefr_level": "A1",
+    "cefr_rank": 1,
+    "learning_order": 7,
+    "source": "telc_einfach_gut_a1_1_l1"
+  },
+  {
+    "headword": "bitte",
+    "cefr_level": "A1",
+    "cefr_rank": 1,
+    "learning_order": 8,
+    "source": "telc_einfach_gut_a1_1_l1"
+  },
+  {
+    "headword": "Abendkasse",
+    "cefr_level": "A2",
+    "cefr_rank": 2,
+    "learning_order": 1,
+    "source": "telc_einfach_gut_a2_1_l1"
+  },
+  {
+    "headword": "abholen",
+    "cefr_level": "A2",
+    "cefr_rank": 2,
+    "learning_order": 2,
+    "source": "telc_einfach_gut_a2_1_l1"
+  },
+  {
+    "headword": "aktuell",
+    "cefr_level": "A2",
+    "cefr_rank": 2,
+    "learning_order": 3,
+    "source": "telc_einfach_gut_a2_1_l1"
+  },
+  {
+    "headword": "alle",
+    "cefr_level": "A2",
+    "cefr_rank": 2,
+    "learning_order": 4,
+    "source": "telc_einfach_gut_a2_1_l1"
+  },
+  {
+    "headword": "App",
+    "cefr_level": "A2",
+    "cefr_rank": 2,
+    "learning_order": 5,
+    "source": "telc_einfach_gut_a2_1_l1"
+  },
+  {
+    "headword": "bestellen",
+    "cefr_level": "A2",
+    "cefr_rank": 2,
+    "learning_order": 6,
+    "source": "telc_einfach_gut_a2_1_l1"
+  },
+  {
+    "headword": "chatten",
+    "cefr_level": "A2",
+    "cefr_rank": 2,
+    "learning_order": 7,
+    "source": "telc_einfach_gut_a2_1_l1"
+  },
+  {
+    "headword": "Datei",
+    "cefr_level": "A2",
+    "cefr_rank": 2,
+    "learning_order": 8,
+    "source": "telc_einfach_gut_a2_1_l1"
+  },
+  {
+    "headword": "Abfall",
+    "cefr_level": "B1",
+    "cefr_rank": 3,
+    "learning_order": 1,
+    "source": "telc_einfach_gut_b1_1_l1"
+  },
+  {
+    "headword": "Abflug",
+    "cefr_level": "B1",
+    "cefr_rank": 3,
+    "learning_order": 2,
+    "source": "telc_einfach_gut_b1_1_l1"
+  },
+  {
+    "headword": "Absage",
+    "cefr_level": "B1",
+    "cefr_rank": 3,
+    "learning_order": 3,
+    "source": "telc_einfach_gut_b1_1_l1"
+  },
+  {
+    "headword": "aktiv",
+    "cefr_level": "B1",
+    "cefr_rank": 3,
+    "learning_order": 4,
+    "source": "telc_einfach_gut_b1_1_l1"
+  },
+  {
+    "headword": "Alkohol",
+    "cefr_level": "B1",
+    "cefr_rank": 3,
+    "learning_order": 5,
+    "source": "telc_einfach_gut_b1_1_l1"
+  },
+  {
+    "headword": "angenehm",
+    "cefr_level": "B1",
+    "cefr_rank": 3,
+    "learning_order": 6,
+    "source": "telc_einfach_gut_b1_1_l1"
+  },
+  {
+    "headword": "Bewohner",
+    "cefr_level": "B1",
+    "cefr_rank": 3,
+    "learning_order": 7,
+    "source": "telc_einfach_gut_b1_1_l1"
+  },
+  {
+    "headword": "Container",
+    "cefr_level": "B1",
+    "cefr_rank": 3,
+    "learning_order": 8,
+    "source": "telc_einfach_gut_b1_1_l1"
+  },
+  {
+    "headword": "Arbeitgeber",
+    "cefr_level": "B2",
+    "cefr_rank": 4,
+    "learning_order": 1,
+    "source": "telc_einfach_besser_500_l1"
+  },
+  {
+    "headword": "Architekt",
+    "cefr_level": "B2",
+    "cefr_rank": 4,
+    "learning_order": 2,
+    "source": "telc_einfach_besser_500_l1"
+  },
+  {
+    "headword": "Beratung",
+    "cefr_level": "B2",
+    "cefr_rank": 4,
+    "learning_order": 3,
+    "source": "telc_einfach_besser_500_l1"
+  },
+  {
+    "headword": "Branche",
+    "cefr_level": "B2",
+    "cefr_rank": 4,
+    "learning_order": 4,
+    "source": "telc_einfach_besser_500_l1"
+  },
+  {
+    "headword": "Betrieb",
+    "cefr_level": "B2",
+    "cefr_rank": 4,
+    "learning_order": 5,
+    "source": "telc_einfach_besser_500_l1"
+  },
+  {
+    "headword": "produzieren",
+    "cefr_level": "B2",
+    "cefr_rank": 4,
+    "learning_order": 6,
+    "source": "telc_einfach_besser_500_l1"
+  },
+  {
+    "headword": "geistig",
+    "cefr_level": "B2",
+    "cefr_rank": 4,
+    "learning_order": 7,
+    "source": "telc_einfach_besser_500_l1"
+  },
+  {
+    "headword": "sozial",
+    "cefr_level": "B2",
+    "cefr_rank": 4,
+    "learning_order": 8,
+    "source": "telc_einfach_besser_500_l1"
+  }
+]

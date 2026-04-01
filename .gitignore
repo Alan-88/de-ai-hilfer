@@ -1,0 +1,81 @@
+# ====================
+# macOS
+# ====================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ====================
+# IDEs
+# ====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ====================
+# Temporary files
+# ====================
+tmp/
+temp/
+*.tmp
+_tmp_*
+*.log
+*.bak
+__pycache__/
+*.pyc
+
+# ====================
+# Environment / secrets
+# ====================
+.env
+.env.*
+!.env.example
+
+# ====================
+# Build outputs / caches
+# ====================
+backend/target/
+frontend-web/build/
+frontend-web/.svelte-kit/
+frontend-web/node_modules/
+frontend-web/.tmp-*.json
+
+# ====================
+# Local logs / reports
+# ====================
+backend/logs/
+
+# ====================
+# Legacy reference (backup only, not for active development)
+# ====================
+legacy_reference/
+
+# ====================
+# Internal project memory / agent docs
+# ====================
+docs/
+AGENTS.md
+GEMINI.md
+Rust-全栈重构项目思路.md
+backend/README.md
+.clinerules/
+
+# ====================
+# Large assets (manage separately if needed)
+# ====================
+# Kaikki/Wiktionary raw dumps are large and should be downloaded separately.
+assets/dictionary/*.jsonl
+*.zip
+*.tar.gz
+
+# ====================
+# Local scratch / samples
+# ====================
+abbauen_raw.json
+abbaut_raw.json
+sample_entry.json
+db_samples.txt
+db_json_samples.txt

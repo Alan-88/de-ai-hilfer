@@ -1,0 +1,67 @@
+[package]
+name = "de_ai_hilfer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web Framework
+axum = { version = "0.7", features = ["macros", "multipart"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Async Runtime
+tokio = { version = "1", features = ["full"] }
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "macros", "migrate", "chrono", "json"] }
+pgvector = { version = "0.3.2", features = ["sqlx", "serde"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# HTTP Client
+reqwest = { version = "0.11", features = ["json", "stream"] }
+futures-util = "0.3"
+tokio-stream = "0.1"
+
+# OpenAI Client
+async-openai = "0.20"
+
+# FSRS Algorithm (Spaced Repetition)
+fsrs = "5.2"
+
+# Logging and Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error Handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Configuration
+config = "0.14"
+dotenvy = "0.15"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
+
+[[bin]]
+name = "import_dictionary"
+path = "src/bin/import_dictionary.rs"
+
+[[bin]]
+name = "check_db"
+path = "src/bin/check_db.rs"
+
+[[bin]]
+name = "rebuild_dictionary_lexemes"
+path = "src/bin/rebuild_dictionary_lexemes.rs"

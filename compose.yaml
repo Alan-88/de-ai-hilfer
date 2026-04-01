@@ -1,0 +1,38 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: de-ai-hilfer-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      DB_HOST: ${DB_HOST_IN_DOCKER:-PostgreSQL}
+      DB_PORT: ${DB_PORT_IN_DOCKER:-5432}
+      DB_NAME: ${DB_NAME_IN_DOCKER:-de_ai_hilfer}
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8000
+    restart: unless-stopped
+    expose:
+      - "8000"
+    networks:
+      - app
+      - caddy_net
+
+  frontend:
+    build:
+      context: ./frontend-web
+    container_name: de-ai-hilfer-frontend
+    depends_on:
+      - backend
+    restart: unless-stopped
+    expose:
+      - "80"
+    networks:
+      - app
+      - caddy_net
+
+networks:
+  app:
+    name: de_ai_hilfer
+  caddy_net:
+    external: true

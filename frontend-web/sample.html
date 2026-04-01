@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="canvas">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>De-AI-Hilfer Prototype</title>
+  <!-- 引入 Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    /* =========================================
+       主题变量 (Theme Variables)
+       ========================================= */
+    :root {
+      --transition-smooth: 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+      --transition-fast: 0.3s ease;
+      --font-ui: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-serif: "Iowan Old Style", "Palatino Linotype", serif;
+      
+      --radius-sm: 12px;
+      --radius-md: 18px;
+      --radius-lg: 24px;
+      --radius-full: 9999px;
+    }
+
+    /* ☀️ 主题 1：Canvas Light (亮色模式) */
+    [data-theme="canvas"] {
+      --bg-color: #EFEBE2;        
+      --sidebar-bg: #E7E2D6;      
+      --card-bg: #FFFFFF;         
+      --text-main: #342E55;       /* 柔和的深紫色 */
+      --text-muted: #8D8898;      
+      --accent-main: #E55C11;     
+      --accent-glow: rgba(229, 92, 17, 0.35);
+      --btn-secondary: #E3DFED;   
+      --btn-secondary-text: #666175;
+      --border-color: rgba(52, 46, 85, 0.08);
+      --shadow-sm: 0 4px 20px rgba(52, 46, 85, 0.04);
+      --shadow-hover: 0 8px 30px rgba(229, 92, 17, 0.12);
+      
+      /* 侧边栏专属文字色 */
+      --nav-text: #8D8898;
+      --nav-hover-text: #342E55;
+
+      --success-bg: #E2F0E9;
+      --success-text: #1B5E3C;
+      --warning-bg: #FFF0D4;
+      --warning-text: #8C5A0D;
+    }
+
+    /* 🌙 主题 2：Canvas Dark (深色模式 - 柔和紫黑) */
+    [data-theme="canvas-dark"] {
+      --bg-color: #2E2A42;        /* 柔和的紫黑背景色 */
+      --sidebar-bg: #262238;      
+      --card-bg: #383350;         /* 柔和的卡片底色 */
+      --text-main: #F4F0F8;       /* 偏紫调的米白色，作为主字色 */
+      --text-muted: #B8B3CE;      
+      --accent-main: #FF8A45;     /* 提亮的活力橙色 */
+      --accent-glow: rgba(255, 138, 69, 0.45);
+      --btn-secondary: #4A4468;   
+      --btn-secondary-text: #F4F0F8;
+      --border-color: rgba(255, 255, 255, 0.06);
+      --shadow-sm: 0 8px 30px rgba(0, 0, 0, 0.15);
+      --shadow-hover: 0 8px 30px rgba(255, 138, 69, 0.2);
+
+      /* 专属导航色：引入推荐的浅紫色 #E4DFED */
+      --nav-text: #C4BCD9;        /* 默认状态稍微低调一点的浅紫 */
+      --nav-hover-text: #E4DFED;  /* Hover时提亮到 #E4DFED */
+
+      --success-bg: #1F4F3B;
+      --success-text: #AEEAD1;
+      --warning-bg: #6E4918;
+      --warning-text: #FEE7C3;
+    }
+
+    /* =========================================
+       全局与复位
+       ========================================= */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-ui); background-color: var(--bg-color); color: var(--text-main);
+      display: flex; height: 100vh; overflow: hidden;
+      transition: background-color var(--transition-fast), color var(--transition-fast);
+    }
+    button, input { font-family: inherit; border: none; outline: none; }
+    button { cursor: pointer; transition: all var(--transition-fast); }
+
+    /* =========================================
+       布局：侧边栏 & 底栏
+       ========================================= */
+    .app-layout { display: flex; width: 100%; height: 100%; }
+
+    .nav-menu { display: flex; gap: 0.5rem; }
+    .nav-item {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.8rem 1rem; border-radius: var(--radius-sm);
+      color: var(--nav-text); text-decoration: none;
+      font-weight: 600; transition: all var(--transition-fast);
+    }
+    .nav-item i { font-size: 1.4rem; }
+    .nav-item:hover { background-color: var(--border-color); color: var(--nav-hover-text); }
+    .nav-item.active { background-color: var(--btn-secondary); color: var(--accent-main); }
+
+    .sidebar {
+      width: 240px; background-color: var(--sidebar-bg);
+      padding: 2rem 1.25rem; display: flex; flex-direction: column;
+      border-right: 1px solid var(--border-color); z-index: 10;
+      transition: background-color var(--transition-fast), border-color var(--transition-fast);
+    }
+    .logo {
+      font-size: 1.25rem; font-weight: 800; margin-bottom: 2.5rem;
+      padding-left: 0.5rem; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;
+    }
+    .logo i { color: var(--accent-main); font-size: 1.5rem; }
+    .sidebar .nav-menu { flex-direction: column; }
+
+    .bottom-nav {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0;
+      background-color: var(--sidebar-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border-color);
+      padding: 0.5rem 1rem calc(0.5rem + env(safe-area-inset-bottom)); z-index: 100;
+      transition: background-color var(--transition-fast), border-color var(--transition-fast);
+    }
+    .bottom-nav .nav-menu { justify-content: space-around; width: 100%; }
+    .bottom-nav .nav-item { flex-direction: column; gap: 0.2rem; padding: 0.5rem; font-size: 0.75rem; }
+
+    /* =========================================
+       主内容区 & 页面路由
+       ========================================= */
+    .main-area {
+      flex: 1; position: relative; overflow-y: auto; padding: 2rem;
+      display: flex; flex-direction: column; align-items: center;
+    }
+
+    /* 页面视图切换控制 */
+    .page-view {
+      display: none; width: 100%; max-width: 960px;
+      flex-direction: column; align-items: center;
+      animation: fadeIn 0.3s ease;
+    }
+    .page-view.active { display: flex; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* 主题切换器 */
+    .theme-switcher {
+      position: absolute; top: 1.5rem; right: 1.5rem;
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      padding: 0.35rem; border-radius: var(--radius-full);
+      display: flex; gap: 0.25rem; box-shadow: var(--shadow-sm); z-index: 20;
+      transition: background-color var(--transition-fast), border-color var(--transition-fast);
+    }
+    .theme-btn {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: transparent; color: var(--nav-text);
+    }
+    .theme-btn.active { background: var(--btn-secondary); color: var(--text-main); }
+
+    /* =========================================
+       便当盒通用卡片样式
+       ========================================= */
+    .bento-card {
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg); padding: 1.5rem;
+      box-shadow: var(--shadow-sm); transition: transform var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
+      width: 100%;
+    }
+    .card-title {
+      display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem;
+      font-weight: 700; color: var(--text-muted); margin-bottom: 1rem;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .card-title i { color: var(--accent-main); }
+
+    /* 通用按钮 */
+    .btn-primary, .btn-secondary {
+      padding: 0.8rem 1.2rem; border-radius: var(--radius-full);
+      font-weight: 700; display: inline-flex; align-items: center; gap: 0.5rem;
+      justify-content: center; font-size: 0.95rem; transition: all var(--transition-fast);
+    }
+    .btn-primary { background: var(--accent-main); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.1); transform: scale(0.98); }
+    .btn-secondary { background: var(--btn-secondary); color: var(--btn-secondary-text); }
+    .btn-secondary:hover { filter: brightness(1.1); }
+
+    /* =========================================
+       页面 1：查词探索 (Search / Explore)
+       ========================================= */
+    .search-wrapper {
+      width: 100%; max-width: 680px; margin-top: 25vh; 
+      transition: var(--transition-smooth); z-index: 5; position: relative;
+    }
+    #page-search.is-searching .search-wrapper { margin-top: 0; }
+
+    .search-box {
+      background: var(--card-bg); border: 1px solid var(--border-color);
+      border-radius: var(--radius-full); padding: 0.5rem 0.5rem 0.5rem 1.5rem;
+      display: flex; align-items: center; gap: 1rem;
+      box-shadow: var(--shadow-sm); transition: var(--transition-smooth);
+      position: relative; overflow: hidden;
+    }
+    .search-box:focus-within { border-color: var(--accent-main); box-shadow: var(--shadow-hover); }
+    .search-box i.ph-magnifying-glass { font-size: 1.5rem; color: var(--text-muted); }
+    .search-input { flex: 1; background: transparent; color: var(--text-main); font-size: 1.15rem; }
+    .search-input::placeholder { color: var(--text-muted); }
+    
+    /* Siri 风格呼吸发光效果 */
+    @keyframes siri-breathe {
+      0% { box-shadow: 0 0 10px var(--accent-glow), inset 0 0 5px var(--accent-glow); border-color: var(--accent-main); }
+      50% { box-shadow: 0 0 25px var(--accent-glow), inset 0 0 10px var(--accent-glow); border-color: var(--accent-main); }
+      100% { box-shadow: 0 0 10px var(--accent-glow), inset 0 0 5px var(--accent-glow); border-color: var(--accent-main); }
+    }
+    #page-search.is-generating .search-box {
+      animation: siri-breathe 2.5s ease-in-out infinite;
+    }
+    #page-search.is-generating .search-btn {
+      opacity: 0.8; 
+      cursor: wait;
+    }
+
+    /* 查词结果网格 */
+    .result-wrapper {
+      width: 100%; margin-top: 2rem;
+      opacity: 0; transform: translateY(20px); pointer-events: none;
+      transition: var(--transition-smooth); display: none;
+    }
+    #page-search.is-searching .result-wrapper {
+      display: block; opacity: 1; transform: translateY(0); pointer-events: auto; padding-bottom: 2rem;
+    }
+    
+    .bento-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; grid-auto-flow: dense; }
+    .bento-card:hover { transform: translateY(-2px); }
+    
+    .card-header { grid-column: span 3; display: flex; justify-content: space-between; align-items: center; }
+    .card-main { grid-column: span 2; }
+    .card-side { grid-column: span 1; }
+    .card-full { grid-column: span 3; }
+
+    .word-title { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.2rem; }
+    .word-phonetic { font-family: var(--font-serif); color: var(--text-muted); font-size: 1.1rem; }
+    
+    .tag { display: inline-block; padding: 0.3rem 0.6rem; border-radius: 8px; background: var(--bg-color); font-size: 0.85rem; font-weight: 600; margin-right: 0.5rem; margin-bottom: 0.5rem; transition: background-color var(--transition-fast);}
+    .grammar-row { display: flex; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; transition: border-color var(--transition-fast);}
+    .grammar-row:last-child { border-bottom: none; }
+    .grammar-row .g-val { font-weight: 600; }
+
+    /* =========================================
+       页面 2：知识词库 (Library)
+       ========================================= */
+    .page-header { width: 100%; margin-bottom: 2rem; }
+    .page-header h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+    .page-header p { color: var(--text-muted); }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; width: 100%; }
+    .stat-card { padding: 1.25rem; border-radius: var(--radius-md); text-align: center; }
+    .stat-card .num { font-size: 2rem; font-weight: 800; margin-top: 0.5rem; color: var(--accent-main); }
+    .stat-card .label { font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+
+    .library-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; width: 100%; }
+    .lib-item { padding: 1.25rem; border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 0.5rem; }
+    .lib-item h3 { font-size: 1.25rem; margin: 0; }
+    .lib-item p { color: var(--text-muted); font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .status-badge { align-self: flex-start; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
+    .status-review { background: var(--warning-bg); color: var(--warning-text); }
+    .status-learning { background: var(--success-bg); color: var(--success-text); }
+
+    /* =========================================
+       页面 3：沉浸复习 (Learn)
+       ========================================= */
+    .flashcard-wrapper { width: 100%; max-width: 600px; margin: 2rem auto; }
+    .progress-bar { width: 100%; height: 6px; background: var(--bg-color); border-radius: 999px; overflow: hidden; margin-bottom: 1.5rem; transition: background-color var(--transition-fast);}
+    .progress-fill { height: 100%; width: 35%; background: var(--accent-main); border-radius: 999px; }
+    
+    .flashcard { min-height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; position: relative; }
+    .flashcard h2 { font-size: 3rem; margin-bottom: 1rem; }
+    .flashcard-meta { position: absolute; top: 1.5rem; left: 1.5rem; right: 1.5rem; display: flex; justify-content: space-between; color: var(--text-muted); font-size: 0.85rem; font-weight: 600; }
+    
+    /* 背面内容 */
+    .flashcard-back { display: none; width: 100%; text-align: left; border-top: 1px solid var(--border-color); margin-top: 2rem; padding-top: 1.5rem; animation: fadeIn 0.3s; transition: border-color var(--transition-fast);}
+    #page-learn.show-answer .flashcard-back { display: block; }
+    #page-learn.show-answer .show-answer-btn { display: none; }
+
+    .rating-buttons { display: none; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; width: 100%; margin-top: 1.5rem; }
+    #page-learn.show-answer .rating-buttons { display: grid; }
+    .rate-btn { padding: 1rem; border-radius: var(--radius-md); font-weight: 700; font-size: 0.9rem; background: var(--btn-secondary); color: var(--text-main); }
+    .rate-btn:hover { filter: brightness(0.9); transform: translateY(-2px); }
+    .rate-btn.easy { background: var(--success-bg); color: var(--success-text); }
+    .rate-btn.hard { background: var(--warning-bg); color: var(--warning-text); }
+
+    /* =========================================
+       页面 4：数据设置 (Settings)
+       ========================================= */
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; width: 100%; }
+    .setting-card { padding: 1.5rem; border-radius: var(--radius-lg); }
+    .setting-card h3 { margin-bottom: 1rem; font-size: 1.1rem; }
+    .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color); transition: border-color var(--transition-fast);}
+    .setting-row:last-child { border-bottom: none; }
+
+    /* =========================================
+       移动端适配
+       ========================================= */
+    @media (max-width: 900px) {
+      .bento-grid, .settings-grid { grid-template-columns: 1fr; }
+      .card-header, .card-main, .card-side, .card-full { grid-column: span 1; }
+      .card-header { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .rating-buttons { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .bottom-nav { display: block; }
+      .main-area { padding: 1.5rem 1rem calc(4rem + env(safe-area-inset-bottom)); }
+      #page-search .search-wrapper { margin-top: 15vh; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-layout" id="app">
+    
+    <!-- ================= 导航栏 (Sidebar & Bottom) ================= -->
+    <aside class="sidebar">
+      <div class="logo"><i class="ph-fill ph-translate"></i> De-AI-Hilfer</div>
+      <nav class="nav-menu">
+        <button class="nav-item active" data-target="page-search"><i class="ph ph-magnifying-glass"></i> 查词探索</button>
+        <button class="nav-item" data-target="page-library"><i class="ph ph-books"></i> 知识词库</button>
+        <button class="nav-item" data-target="page-learn"><i class="ph ph-target"></i> 沉浸复习</button>
+        <button class="nav-item" data-target="page-settings"><i class="ph ph-gear"></i> 数据设置</button>
+      </nav>
+    </aside>
+
+    <nav class="bottom-nav">
+      <div class="nav-menu">
+        <button class="nav-item active" data-target="page-search"><i class="ph-fill ph-magnifying-glass"></i><span>查词</span></button>
+        <button class="nav-item" data-target="page-library"><i class="ph ph-books"></i><span>词库</span></button>
+        <button class="nav-item" data-target="page-learn"><i class="ph ph-target"></i><span>复习</span></button>
+        <button class="nav-item" data-target="page-settings"><i class="ph ph-gear"></i><span>设置</span></button>
+      </div>
+    </nav>
+
+    <!-- ================= 主内容区域 ================= -->
+    <main class="main-area">
+      
+      <!-- 主题切换器 -->
+      <div class="theme-switcher">
+        <button class="theme-btn active" data-theme-set="canvas" title="浅色模式 (Light)"><i class="ph-fill ph-sun"></i></button>
+        <button class="theme-btn" data-theme-set="canvas-dark" title="深色模式 (Dark)"><i class="ph-fill ph-moon"></i></button>
+      </div>
+
+      <!-- PAGE 1: 查词探索 (Search) -->
+      <div id="page-search" class="page-view active">
+        <div class="search-wrapper">
+          <div class="search-box">
+            <i class="ph ph-magnifying-glass"></i>
+            <input type="text" class="search-input" id="searchInput" placeholder="输入德语单词、短语或句子..." value="Anfang">
+            <button class="btn-primary" id="searchBtn">分析</button>
+          </div>
+        </div>
+
+        <div class="result-wrapper">
+          <div class="bento-grid">
+            <div class="bento-card card-header">
+              <div>
+                <div class="word-title">Anfang</div>
+                <div class="word-phonetic">/ˈʔanfaŋ/ · [名词] 开始，开头</div>
+              </div>
+              <div style="display:flex; gap:0.5rem; width:100%;">
+                <button class="btn-secondary" style="flex:1;"><i class="ph ph-speaker-high"></i> 发音</button>
+                <button class="btn-primary" style="flex:1;"><i class="ph-fill ph-star"></i> 加入学习</button>
+              </div>
+            </div>
+            <div class="bento-card card-main">
+              <div class="card-title"><i class="ph-fill ph-lightbulb"></i> 应用与例句</div>
+              <div style="margin-bottom: 1.5rem;">
+                <span class="tag">von Anfang an (从一开始)</span>
+                <span class="tag">am Anfang (在开始时)</span>
+              </div>
+              <div style="margin-bottom:1rem;">
+                <div style="font-weight:600; font-size:1.05rem;">Aller Anfang ist schwer.</div>
+                <div style="color:var(--text-muted); font-size:0.95rem;">万事开头难。</div>
+              </div>
+            </div>
+            <div class="bento-card card-side">
+              <div class="card-title"><i class="ph-fill ph-text-aa"></i> 语法特性</div>
+              <div class="grammar-row"><span class="g-key">词性与冠词</span><span class="g-val">名词 / der</span></div>
+              <div class="grammar-row"><span class="g-key">第二格</span><span class="g-val">des Anfangs</span></div>
+              <div class="grammar-row"><span class="g-key">复数</span><span class="g-val">die Anfänge</span></div>
+            </div>
+            <div class="bento-card card-full">
+              <div class="card-title"><i class="ph-fill ph-brain"></i> 深度解析与避坑</div>
+              <div style="font-family:var(--font-serif); font-size:1.05rem; line-height:1.6;">
+                <strong>多维解释：</strong> Anfang 既可指时间上的“开始”，也可指空间上的“前端”。<br><br>
+                <strong>常见错误：</strong> 介词误用。表示“在开始时”应使用 <em>am Anfang</em>。错误示范：<s>In Anfang</s>。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAGE 2: 知识词库 (Library) -->
+      <div id="page-library" class="page-view">
+        <header class="page-header">
+          <h1>知识词库</h1>
+          <p>浏览已经写入知识库的词条，按学习状态筛选。</p>
+        </header>
+        
+        <div class="stats-grid">
+          <div class="bento-card stat-card">
+            <div class="label">总词条数</div>
+            <div class="num">128</div>
+          </div>
+          <div class="bento-card stat-card">
+            <div class="label">学习中</div>
+            <div class="num">45</div>
+          </div>
+          <div class="bento-card stat-card">
+            <div class="label">今日待复习</div>
+            <div class="num">12</div>
+          </div>
+          <div class="bento-card stat-card">
+            <div class="label">平均稳定性</div>
+            <div class="num">82%</div>
+          </div>
+        </div>
+
+        <div class="library-list">
+          <div class="bento-card lib-item">
+            <span class="status-badge status-review">待复习</span>
+            <h3>gefallen</h3>
+            <p>[动词] 喜欢，中意 (支配第三格)</p>
+          </div>
+          <div class="bento-card lib-item">
+            <span class="status-badge status-learning">学习中</span>
+            <h3>wichtig</h3>
+            <p>[形容词] 重要的，重大的</p>
+          </div>
+          <div class="bento-card lib-item">
+            <span class="status-badge status-learning">学习中</span>
+            <h3>Entscheidung</h3>
+            <p>[名词] 决定，抉择 (die)</p>
+          </div>
+          <div class="bento-card lib-item">
+            <span class="status-badge" style="background:var(--bg-color);">未开始</span>
+            <h3>verstehen</h3>
+            <p>[动词] 理解，懂</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAGE 3: 沉浸复习 (Learn) -->
+      <div id="page-learn" class="page-view">
+        <header class="page-header">
+          <h1>沉浸复习</h1>
+          <p>先回忆，再揭晓答案。把节奏压回到主动提取。</p>
+        </header>
+
+        <div class="flashcard-wrapper">
+          <div class="progress-bar"><div class="progress-fill"></div></div>
+          
+          <div class="bento-card flashcard">
+            <div class="flashcard-meta">
+              <span>今日复习: 4 / 12</span>
+              <span>上次复习: 昨天</span>
+            </div>
+            
+            <h2>gefallen</h2>
+            
+            <button class="btn-primary show-answer-btn" onclick="document.getElementById('page-learn').classList.add('show-answer')">
+              查看答案
+            </button>
+
+            <!-- 背面内容 -->
+            <div class="flashcard-back">
+              <div style="margin-bottom: 1rem;">
+                <span class="tag">动词</span> <span class="tag">支配 Dativ</span>
+              </div>
+              <p style="font-size:1.1rem; line-height:1.6; margin-bottom:1rem;">
+                <strong>核心释义：</strong> 喜欢，使...中意。<br>
+                <em>注意：主语是“被喜欢的事物”，宾语（第三格）是“喜欢的人”。</em>
+              </p>
+              <div style="background:var(--bg-color); padding:1rem; border-radius:var(--radius-sm);">
+                <strong>例句：</strong> Das Buch gefällt mir sehr. (我很喜欢这本书。)
+              </div>
+            </div>
+          </div>
+
+          <!-- 打分按钮 -->
+          <div class="rating-buttons">
+            <button class="rate-btn hard">完全忘记</button>
+            <button class="rate-btn">提示后记起</button>
+            <button class="rate-btn">犹豫但正确</button>
+            <button class="rate-btn easy">完美回忆</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAGE 4: 数据设置 (Settings) -->
+      <div id="page-settings" class="page-view">
+        <header class="page-header">
+          <h1>数据与设置</h1>
+          <p>管理后端服务状态与知识库备份。</p>
+        </header>
+
+        <div class="settings-grid">
+          <div class="bento-card setting-card">
+            <h3><i class="ph-fill ph-hard-drives"></i> 服务器状态</h3>
+            <div class="setting-row">
+              <span style="color:var(--text-muted);">核心 API</span>
+              <span style="color:var(--success-text); font-weight:700;"><i class="ph-fill ph-check-circle"></i> 在线</span>
+            </div>
+            <div class="setting-row">
+              <span style="color:var(--text-muted);">数据库连接</span>
+              <span style="color:var(--success-text); font-weight:700;"><i class="ph-fill ph-check-circle"></i> 正常</span>
+            </div>
+            <div class="setting-row">
+              <span style="color:var(--text-muted);">当前版本</span>
+              <span style="font-weight:600;">v2.1.0</span>
+            </div>
+          </div>
+
+          <div class="bento-card setting-card">
+            <h3><i class="ph-fill ph-database"></i> 数据管理</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1rem;">
+              导出或恢复当前知识库、追问记录和学习进度。
+            </p>
+            <button class="btn-secondary" style="width:100%; margin-bottom:0.75rem;"><i class="ph-fill ph-download-simple"></i> 导出备份 (JSON)</button>
+            <button class="btn-secondary" style="width:100%;"><i class="ph-fill ph-upload-simple"></i> 导入备份覆盖</button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    // ==========================================
+    // 页面路由 (Tab 切换)
+    // ==========================================
+    const navItems = document.querySelectorAll('.nav-item');
+    const pageViews = document.querySelectorAll('.page-view');
+
+    navItems.forEach(item => {
+      item.addEventListener('click', (e) => {
+        // 清除所有高亮
+        navItems.forEach(nav => nav.classList.remove('active'));
+        // 激活当前点击的
+        const targetId = item.getAttribute('data-target');
+        document.querySelectorAll(`[data-target="${targetId}"]`).forEach(nav => nav.classList.add('active'));
+        
+        // 切换页面视图
+        pageViews.forEach(page => page.classList.remove('active'));
+        document.getElementById(targetId).classList.add('active');
+
+        // 如果切出 Learn 页面，重置背卡状态
+        if (targetId !== 'page-learn') {
+          document.getElementById('page-learn').classList.remove('show-answer');
+        }
+      });
+    });
+
+    // ==========================================
+    // 查词交互 (Siri呼吸效果)
+    // ==========================================
+    const searchBtn = document.getElementById('searchBtn');
+    const searchInput = document.getElementById('searchInput');
+    const pageSearch = document.getElementById('page-search');
+
+    function executeSearch() {
+      if(searchInput.value.trim() === '') return;
+      
+      // 进入“思考中”状态 (只保留框的呼吸发光，按钮文字变灰)
+      pageSearch.classList.remove('is-searching');
+      pageSearch.classList.add('is-generating');
+      searchBtn.innerText = '思考中...';
+      
+      setTimeout(() => {
+        pageSearch.classList.remove('is-generating');
+        pageSearch.classList.add('is-searching');
+        searchBtn.innerText = '分析';
+      }, 2000);
+    }
+
+    searchBtn.addEventListener('click', executeSearch);
+    searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') executeSearch(); });
+
+    // ==========================================
+    // 主题切换逻辑
+    // ==========================================
+    const themeBtns = document.querySelectorAll('.theme-btn');
+    const htmlElement = document.documentElement;
+
+    themeBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        themeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        htmlElement.setAttribute('data-theme', btn.getAttribute('data-theme-set'));
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            id,\n            query_text,\n            prototype,\n            entry_type,\n            analysis,\n            tags,\n            aliases,\n            created_at,\n            updated_at,\n            alias_text\n        FROM (\n            SELECT\n                ke.id,\n                ke.query_text,\n                ke.prototype,\n                ke.entry_type,\n                ke.analysis,\n                ke.tags,\n                ke.aliases,\n                ke.created_at,\n                ke.updated_at,\n                alias_text\n            FROM knowledge_entries ke\n            CROSS JOIN LATERAL unnest(COALESCE(ke.aliases, ARRAY[]::TEXT[])) AS alias_text\n            WHERE alias_text ILIKE $1\n            ORDER BY alias_text ASC\n            LIMIT $2\n        ) matched_aliases\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "query_text",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "prototype",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "entry_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "analysis",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "tags",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 6,
+        "name": "aliases",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "alias_text",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "38cf507a9590ea31778e3295c49f507f8d2a17851a81608c9f1406af93408ecd"
+}

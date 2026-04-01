@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            lp.entry_id as \"lp_entry_id!\",\n            lp.stability as \"lp_stability!\",\n            lp.difficulty as \"lp_difficulty!\",\n            lp.elapsed_days as \"lp_elapsed_days!\",\n            lp.scheduled_days as \"lp_scheduled_days!\",\n            lp.state as \"lp_state!\",\n            lp.last_review_at as \"lp_last_review_at?\",\n            lp.due_date as \"lp_due_date!\",\n            lp.review_count as \"lp_review_count!\",\n            ke.id as \"ke_id!\",\n            ke.query_text as \"ke_query_text!\",\n            ke.prototype as \"ke_prototype?\",\n            ke.entry_type as \"ke_entry_type!\",\n            ke.analysis as \"ke_analysis!\",\n            ke.tags as \"ke_tags?\",\n            ke.aliases as \"ke_aliases?\",\n            ke.created_at as \"ke_created_at!\",\n            ke.updated_at as \"ke_updated_at!\"\n        FROM learning_progress lp\n        JOIN knowledge_entries ke ON ke.id = lp.entry_id\n        WHERE lp.due_date <= $1\n        ORDER BY lp.due_date ASC, ke.updated_at DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "lp_entry_id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "lp_stability!",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 2,
+        "name": "lp_difficulty!",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 3,
+        "name": "lp_elapsed_days!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "lp_scheduled_days!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "lp_state!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "lp_last_review_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "lp_due_date!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "lp_review_count!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "ke_id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "ke_query_text!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "ke_prototype?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "ke_entry_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "ke_analysis!",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 14,
+        "name": "ke_tags?",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 15,
+        "name": "ke_aliases?",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 16,
+        "name": "ke_created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 17,
+        "name": "ke_updated_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "62599d59344c0a0f826ae59d7295b8f5e3a127486c4e5024e9ea301202578e34"
+}

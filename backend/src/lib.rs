@@ -1,0 +1,13 @@
+pub mod ai;
+pub mod config;
+pub mod db;
+pub mod dictionary_lexeme_models;
+pub mod embedding;
+mod embedding_frequency;
+mod embedding_rate_limiter;
+pub mod handlers;
+pub mod models;
+pub mod prompts;
+pub mod repositories;
+pub mod services;
+pub mod state;
