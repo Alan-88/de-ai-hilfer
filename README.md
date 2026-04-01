@@ -4,6 +4,10 @@ A German-learning retrieval system built with Rust, SvelteKit, PostgreSQL, and `
 
 The project focuses on dictionary-centered query resolution rather than free-form generation. It combines lexeme/surface-form modeling, vector retrieval, cached analysis, and AI-assisted explanation to support word lookup, phrase attachment, and a lightweight review workflow.
 
+![Dictionary-grounded streaming analysis](./assets/demo-streaming-analysis.gif)
+
+*Search -> lexical resolution -> streamed analysis. The generation segment in the demo is sped up for readability.*
+
 ## Stack
 
 | Layer | Choice |
