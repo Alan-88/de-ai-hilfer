@@ -1,7 +1,7 @@
 use crate::models::{
     AnalysisDocument, AnalyzeRequest, AnalyzeResponse, FollowUpItem, NewKnowledgeEntry, QualityMode,
 };
-use crate::repositories::{dictionary, knowledge};
+use crate::repositories::{dictionary, dictionary_lexemes, knowledge};
 use crate::services::analysis_preview::analysis_markdown;
 use crate::services::analyze_runtime::generate_analysis_with_model;
 use crate::services::analyze_support::{
@@ -329,8 +329,12 @@ async fn analyze_with_mode(
         });
     }
 
+    let lexeme_id = dictionary_lexemes::find_unique_lexeme_id_by_surface(&state.pool, &prototype)
+        .await?;
+
     let new_entry = NewKnowledgeEntry {
         query_text: prototype.clone(),
+        lexeme_id,
         prototype: dictionary_entry
             .as_ref()
             .map(|entry| entry.headword.clone()),
@@ -348,6 +352,7 @@ async fn analyze_with_mode(
             knowledge::update_analysis(
                 &state.pool,
                 existing.id,
+                new_entry.lexeme_id,
                 &new_entry.analysis,
                 &new_entry.tags,
                 &new_entry.aliases,

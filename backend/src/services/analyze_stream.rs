@@ -1,7 +1,7 @@
 use crate::models::{
     AnalyzeRequest, AnalyzeResponse, FollowUpItem, NewKnowledgeEntry, QualityMode,
 };
-use crate::repositories::{dictionary, knowledge};
+use crate::repositories::{dictionary, dictionary_lexemes, knowledge};
 use crate::services::analyze_runtime::{fallback_model_for, primary_model_for};
 use crate::services::analyze_support::build_stream_analysis_prompt;
 use crate::services::dictionary_render::{
@@ -322,8 +322,13 @@ pub async fn stream_analyze(
                 follow_ups: Vec::new(),
             }
         } else {
+            let lexeme_id =
+                dictionary_lexemes::find_unique_lexeme_id_by_surface(&state.pool, &prototype)
+                    .await?;
+
             let new_entry = NewKnowledgeEntry {
                 query_text: prototype.clone(),
+                lexeme_id,
                 prototype: dictionary_entry
                     .as_ref()
                     .map(|entry| entry.headword.clone()),
@@ -338,6 +343,7 @@ pub async fn stream_analyze(
                     knowledge::update_analysis(
                         &state.pool,
                         existing.id,
+                        new_entry.lexeme_id,
                         &new_entry.analysis,
                         &new_entry.tags,
                         &new_entry.aliases,

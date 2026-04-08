@@ -7,19 +7,21 @@ pub async fn insert(
 ) -> Result<KnowledgeEntry, sqlx::Error> {
     sqlx::query_as::<_, KnowledgeEntry>(
         r#"
-        INSERT INTO knowledge_entries (query_text, prototype, entry_type, analysis, tags, aliases)
+        INSERT INTO knowledge_entries (query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases)
         VALUES (
             $1,
-            (SELECT headword FROM dictionary_raw WHERE headword = $2),
-            $3,
+            $2,
+            (SELECT headword FROM dictionary_raw WHERE headword = $3),
             $4,
             $5,
-            $6
+            $6,
+            $7
         )
-        RETURNING id, query_text, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
+        RETURNING id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
         "#,
     )
     .bind(&entry.query_text)
+    .bind(&entry.lexeme_id)
     .bind(&entry.prototype)
     .bind(&entry.entry_type)
     .bind(&entry.analysis)
@@ -32,6 +34,7 @@ pub async fn insert(
 pub async fn update_analysis(
     pool: &DbPool,
     entry_id: i64,
+    lexeme_id: Option<i64>,
     analysis: &serde_json::Value,
     tags: &Option<Vec<String>>,
     aliases: &Option<Vec<String>>,
@@ -39,14 +42,16 @@ pub async fn update_analysis(
     sqlx::query_as::<_, KnowledgeEntry>(
         r#"
         UPDATE knowledge_entries
-        SET analysis = $2,
-            tags = $3,
-            aliases = $4
+        SET lexeme_id = COALESCE($2, lexeme_id),
+            analysis = $3,
+            tags = $4,
+            aliases = $5
         WHERE id = $1
-        RETURNING id, query_text, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
+        RETURNING id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
         "#,
     )
     .bind(entry_id)
+    .bind(lexeme_id)
     .bind(analysis)
     .bind(tags)
     .bind(aliases)

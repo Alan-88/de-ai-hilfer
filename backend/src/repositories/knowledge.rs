@@ -8,6 +8,7 @@ pub use super::knowledge_write::{add_alias, insert, update_analysis};
 struct AliasMatchRow {
     id: i64,
     query_text: String,
+    lexeme_id: Option<i64>,
     prototype: Option<String>,
     entry_type: String,
     analysis: serde_json::Value,
@@ -33,7 +34,7 @@ pub async fn find_by_query(
 ) -> Result<Option<KnowledgeEntry>, sqlx::Error> {
     sqlx::query_as::<_, KnowledgeEntry>(
         r#"
-        SELECT id, query_text, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
+        SELECT id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
         FROM knowledge_entries
         WHERE query_text = $1 OR $1 = ANY(COALESCE(aliases, ARRAY[]::TEXT[]))
         ORDER BY created_at ASC
@@ -51,7 +52,7 @@ pub async fn find_by_query_text_exact(
 ) -> Result<Option<KnowledgeEntry>, sqlx::Error> {
     sqlx::query_as::<_, KnowledgeEntry>(
         r#"
-        SELECT id, query_text, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
+        SELECT id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
         FROM knowledge_entries
         WHERE query_text = $1
         ORDER BY created_at ASC
@@ -69,7 +70,7 @@ pub async fn find_by_id(
 ) -> Result<Option<KnowledgeEntry>, sqlx::Error> {
     sqlx::query_as::<_, KnowledgeEntry>(
         r#"
-        SELECT id, query_text, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
+        SELECT id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
         FROM knowledge_entries
         WHERE id = $1
         "#,
@@ -114,7 +115,7 @@ pub async fn list_by_query_texts(
 ) -> Result<Vec<KnowledgeEntry>, sqlx::Error> {
     sqlx::query_as::<_, KnowledgeEntry>(
         r#"
-        SELECT id, query_text, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
+        SELECT id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
         FROM knowledge_entries
         WHERE query_text = ANY($1)
           AND entry_type <> 'PHRASE'
@@ -128,7 +129,7 @@ pub async fn list_by_query_texts(
 pub async fn list_all(pool: &DbPool) -> Result<Vec<KnowledgeEntry>, sqlx::Error> {
     sqlx::query_as::<_, KnowledgeEntry>(
         r#"
-        SELECT id, query_text, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
+        SELECT id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
         FROM knowledge_entries
         WHERE entry_type <> 'PHRASE'
         ORDER BY query_text ASC
@@ -158,7 +159,7 @@ pub async fn list_page(
         .await?;
 
     let mut list_query = QueryBuilder::<Postgres>::new(
-        "SELECT ke.id, ke.query_text, ke.prototype, ke.entry_type, ke.analysis, ke.tags, ke.aliases, ke.created_at, ke.updated_at",
+        "SELECT ke.id, ke.query_text, ke.lexeme_id, ke.prototype, ke.entry_type, ke.analysis, ke.tags, ke.aliases, ke.created_at, ke.updated_at",
     );
     push_library_filters(&mut list_query, &query_lower, &normalized_query, tab);
     push_library_ordering(&mut list_query, &query_lower, &normalized_query);
@@ -191,7 +192,7 @@ pub async fn find_prefix_matches(
 ) -> Result<Vec<KnowledgeEntry>, sqlx::Error> {
     sqlx::query_as::<_, KnowledgeEntry>(
         r#"
-        SELECT id, query_text, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
+        SELECT id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
         FROM knowledge_entries
         WHERE replace(translate(lower(query_text), 'äöü', 'aou'), 'ß', 'ss') LIKE $1
         ORDER BY query_text ASC
@@ -214,6 +215,7 @@ pub async fn find_alias_prefix_matches(
         SELECT
             id,
             query_text,
+            lexeme_id,
             prototype,
             entry_type,
             analysis,
@@ -226,6 +228,7 @@ pub async fn find_alias_prefix_matches(
             SELECT
                 ke.id,
                 ke.query_text,
+                ke.lexeme_id,
                 ke.prototype,
                 ke.entry_type,
                 ke.analysis,
@@ -254,6 +257,7 @@ pub async fn find_alias_prefix_matches(
                 KnowledgeEntry {
                     id: row.id,
                     query_text: row.query_text,
+                    lexeme_id: row.lexeme_id,
                     prototype: row.prototype,
                     entry_type: row.entry_type,
                     analysis: row.analysis,
@@ -283,7 +287,7 @@ pub async fn list_fuzzy_matches(
 
     sqlx::query_as::<_, KnowledgeEntry>(
         r#"
-        SELECT id, query_text, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
+        SELECT id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
         FROM knowledge_entries
         WHERE replace(translate(lower(query_text), 'äöü', 'aou'), 'ß', 'ss') LIKE $1
           AND abs(char_length(query_text) - $2) <= 3
@@ -316,6 +320,7 @@ pub async fn list_alias_fuzzy_matches(
         SELECT
             id,
             query_text,
+            lexeme_id,
             prototype,
             entry_type,
             analysis,
@@ -328,6 +333,7 @@ pub async fn list_alias_fuzzy_matches(
             SELECT
                 ke.id,
                 ke.query_text,
+                ke.lexeme_id,
                 ke.prototype,
                 ke.entry_type,
                 ke.analysis,
@@ -358,6 +364,7 @@ pub async fn list_alias_fuzzy_matches(
                 KnowledgeEntry {
                     id: row.id,
                     query_text: row.query_text,
+                    lexeme_id: row.lexeme_id,
                     prototype: row.prototype,
                     entry_type: row.entry_type,
                     analysis: row.analysis,
