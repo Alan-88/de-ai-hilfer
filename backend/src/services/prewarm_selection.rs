@@ -116,14 +116,14 @@ async fn select_from_frequency(
         })?;
     let headword_rows = sqlx::query_scalar::<_, String>(
         r#"
-        SELECT headword
-        FROM dictionary_raw
-        ORDER BY headword ASC
+        SELECT DISTINCT surface
+        FROM dictionary_lexemes
+        ORDER BY surface ASC
         "#,
     )
     .fetch_all(pool)
     .await
-    .context("failed to load dictionary headwords for prewarm selection")?;
+    .context("failed to load lexeme surfaces for prewarm selection")?;
     let exact_headwords = headword_rows
         .iter()
         .cloned()
