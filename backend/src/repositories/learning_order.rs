@@ -20,15 +20,54 @@ pub async fn upsert_many(
             r#"
             INSERT INTO dictionary_learning_order (
                 headword,
+                lexeme_id,
                 cefr_level,
                 cefr_rank,
                 frequency_rank,
                 learning_order,
                 source
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES (
+                $1,
+                COALESCE(
+                    (
+                        SELECT lexeme_id
+                        FROM (
+                            SELECT
+                                dl.id AS lexeme_id,
+                                count(*) OVER () AS candidate_count
+                            FROM dictionary_lexemes dl
+                            WHERE dl.surface = $1
+                            ORDER BY dl.id ASC
+                        ) exact_ranked
+                        WHERE candidate_count = 1
+                        LIMIT 1
+                    ),
+                    (
+                        SELECT lexeme_id
+                        FROM (
+                            SELECT
+                                dl.id AS lexeme_id,
+                                count(*) OVER () AS candidate_count
+                            FROM dictionary_lexemes dl
+                            WHERE lower(dl.surface) = lower($1)
+                            ORDER BY
+                                CASE WHEN dl.surface = $1 THEN 0 ELSE 1 END,
+                                dl.id ASC
+                        ) ci_ranked
+                        WHERE candidate_count = 1
+                        LIMIT 1
+                    )
+                ),
+                $2,
+                $3,
+                $4,
+                $5,
+                $6
+            )
             ON CONFLICT (headword)
             DO UPDATE SET
+                lexeme_id = EXCLUDED.lexeme_id,
                 cefr_level = EXCLUDED.cefr_level,
                 cefr_rank = EXCLUDED.cefr_rank,
                 frequency_rank = EXCLUDED.frequency_rank,
@@ -77,6 +116,11 @@ pub async fn list_preview(
                 dlo.frequency_rank,
                 (
                     SELECT MIN(dle.frequency_rank)
+                    FROM dictionary_lexeme_embeddings dle
+                    WHERE dle.lexeme_id = dlo.lexeme_id
+                ),
+                (
+                    SELECT MIN(dle.frequency_rank)
                     FROM dictionary_lexemes dl
                     JOIN dictionary_lexeme_embeddings dle
                       ON dle.lexeme_id = dl.id
@@ -108,16 +152,26 @@ pub async fn list_headwords_for_prewarm(
         r#"
         SELECT dlo.headword
         FROM dictionary_learning_order dlo
-        LEFT JOIN knowledge_entries ke
-            ON ke.query_text = dlo.headword
-           AND ke.entry_type = 'WORD'
         WHERE ($2::INT IS NULL OR dlo.cefr_rank <= $2)
-          AND ke.id IS NULL
+          AND NOT EXISTS (
+              SELECT 1
+              FROM knowledge_entries ke
+              WHERE ke.entry_type = 'WORD'
+                AND (
+                    (dlo.lexeme_id IS NOT NULL AND ke.lexeme_id = dlo.lexeme_id)
+                    OR (dlo.lexeme_id IS NULL AND ke.query_text = dlo.headword)
+                )
+          )
         ORDER BY
             dlo.cefr_rank ASC NULLS LAST,
             dlo.learning_order ASC NULLS LAST,
             COALESCE(
                 dlo.frequency_rank,
+                (
+                    SELECT MIN(dle.frequency_rank)
+                    FROM dictionary_lexeme_embeddings dle
+                    WHERE dle.lexeme_id = dlo.lexeme_id
+                ),
                 (
                     SELECT MIN(dle.frequency_rank)
                     FROM dictionary_lexemes dl
