@@ -17,15 +17,16 @@ pub async fn replace_database_snapshot(
         sqlx::query(
             r#"
             INSERT INTO knowledge_entries (
-                id, query_text, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
+                id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
             )
             VALUES (
-                $1, $2, (SELECT headword FROM dictionary_raw WHERE headword = $3), $4, $5, $6, $7, $8, $9
+                $1, $2, $3, (SELECT headword FROM dictionary_raw WHERE headword = $4), $5, $6, $7, $8, $9, $10
             )
             "#,
         )
         .bind(entry.id)
         .bind(&entry.query_text)
+        .bind(&entry.lexeme_id)
         .bind(&entry.prototype)
         .bind(&entry.entry_type)
         .bind(&entry.analysis)

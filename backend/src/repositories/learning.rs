@@ -84,6 +84,7 @@ pub async fn list_due_entries(
             lp.review_count as "lp_review_count!",
             ke.id as "ke_id!",
             ke.query_text as "ke_query_text!",
+            ke.lexeme_id as "ke_lexeme_id?",
             ke.prototype as "ke_prototype?",
             ke.entry_type as "ke_entry_type!",
             ke.analysis as "ke_analysis!",
@@ -119,6 +120,7 @@ pub async fn list_due_entries(
                 KnowledgeEntry {
                     id: row.ke_id,
                     query_text: row.ke_query_text,
+                    lexeme_id: row.ke_lexeme_id,
                     prototype: row.ke_prototype,
                     entry_type: row.ke_entry_type,
                     analysis: row.ke_analysis,

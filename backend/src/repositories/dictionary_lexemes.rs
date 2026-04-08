@@ -319,6 +319,60 @@ pub async fn find_lexeme_candidates_by_surface(
     .await
 }
 
+pub async fn find_unique_lexeme_id_by_surface(
+    pool: &DbPool,
+    surface: &str,
+) -> Result<Option<i64>, sqlx::Error> {
+    let trimmed = surface.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let exact = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT lexeme_id
+        FROM (
+            SELECT
+                dl.id AS lexeme_id,
+                count(*) OVER () AS candidate_count
+            FROM dictionary_lexemes dl
+            WHERE dl.surface = $1
+            ORDER BY dl.id ASC
+        ) ranked
+        WHERE candidate_count = 1
+        LIMIT 1
+        "#,
+    )
+    .bind(trimmed)
+    .fetch_optional(pool)
+    .await?;
+
+    if exact.is_some() {
+        return Ok(exact);
+    }
+
+    sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT lexeme_id
+        FROM (
+            SELECT
+                dl.id AS lexeme_id,
+                count(*) OVER () AS candidate_count
+            FROM dictionary_lexemes dl
+            WHERE lower(dl.surface) = lower($1)
+            ORDER BY
+                CASE WHEN dl.surface = $1 THEN 0 ELSE 1 END,
+                dl.id ASC
+        ) ranked
+        WHERE candidate_count = 1
+        LIMIT 1
+        "#,
+    )
+    .bind(trimmed)
+    .fetch_optional(pool)
+    .await
+}
+
 fn normalize_candidate_surface(value: &str) -> String {
     value
         .trim()

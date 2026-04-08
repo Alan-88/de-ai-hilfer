@@ -53,6 +53,9 @@ pub struct NewDictionaryLearningOrder {
 pub struct KnowledgeEntry {
     pub id: i64,
     pub query_text: String,
+    #[serde(default)]
+    #[sqlx(default)]
+    pub lexeme_id: Option<i64>,
     pub prototype: Option<String>,
     pub entry_type: String,
     pub analysis: serde_json::Value,
@@ -65,6 +68,8 @@ pub struct KnowledgeEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewKnowledgeEntry {
     pub query_text: String,
+    #[serde(default)]
+    pub lexeme_id: Option<i64>,
     pub prototype: Option<String>,
     pub entry_type: String,
     pub analysis: serde_json::Value,

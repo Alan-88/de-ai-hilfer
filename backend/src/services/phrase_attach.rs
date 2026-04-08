@@ -176,6 +176,7 @@ pub async fn attach_phrase_to_host(
     let updated_entry = knowledge::update_analysis(
         &state.pool,
         host_entry.id,
+        host_entry.lexeme_id,
         &updated_analysis,
         &host_entry.tags,
         &host_entry.aliases,
@@ -218,6 +219,7 @@ pub async fn detach_phrase_from_host(
     let updated_entry = knowledge::update_analysis(
         &state.pool,
         host_entry.id,
+        host_entry.lexeme_id,
         &updated_analysis,
         &host_entry.tags,
         &host_entry.aliases,
