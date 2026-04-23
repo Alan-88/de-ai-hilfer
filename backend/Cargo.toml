@@ -65,3 +65,15 @@ path = "src/bin/check_db.rs"
 [[bin]]
 name = "rebuild_dictionary_lexemes"
 path = "src/bin/rebuild_dictionary_lexemes.rs"
+
+[[bin]]
+name = "export_knowledge_snapshot"
+path = "src/bin/export_knowledge_snapshot.rs"
+
+[[bin]]
+name = "dry_run_restore_knowledge_snapshot"
+path = "src/bin/dry_run_restore_knowledge_snapshot.rs"
+
+[[bin]]
+name = "restore_knowledge_snapshot"
+path = "src/bin/restore_knowledge_snapshot.rs"
