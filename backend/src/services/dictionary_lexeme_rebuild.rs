@@ -8,7 +8,9 @@ use std::path::Path;
 
 use crate::services::dictionary_lexeme_extract::{
     build_gloss_preview, clean_entry, extract_form_of_words, extract_forms, normalize_surface,
-    sense_has_tag,
+};
+use crate::services::dictionary_entry_form::{
+    classify_form_status, strip_form_of_senses, EntryFormStatus,
 };
 
 #[derive(Debug, Clone)]
@@ -122,13 +124,21 @@ async fn import_raw_entries(pool: &PgPool, dict_path: &Path) -> Result<()> {
         };
 
         let cleaned_entry = clean_entry(entry);
-        let pos = cleaned_entry
+        let form_status = classify_form_status(&cleaned_entry);
+        let stored_entry = match form_status {
+            EntryFormStatus::Mixed => strip_form_of_senses(cleaned_entry.clone()),
+            _ => cleaned_entry.clone(),
+        };
+        let pos = stored_entry
             .get("pos")
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_string();
-        let form_of_words = extract_form_of_words(&cleaned_entry);
-        let is_form_of = !form_of_words.is_empty() || sense_has_tag(&cleaned_entry, "form-of");
+        let form_of_words = match form_status {
+            EntryFormStatus::PureForm => extract_form_of_words(&cleaned_entry),
+            EntryFormStatus::Independent | EntryFormStatus::Mixed => Vec::new(),
+        };
+        let is_form_of = matches!(form_status, EntryFormStatus::PureForm);
         let source_key = format!("de-line-{}", line_idx + 1);
 
         sqlx::query(
@@ -154,7 +164,7 @@ async fn import_raw_entries(pool: &PgPool, dict_path: &Path) -> Result<()> {
         .bind(pos)
         .bind(is_form_of)
         .bind(&form_of_words)
-        .bind(cleaned_entry)
+        .bind(stored_entry)
         .bind(false)
         .execute(pool)
         .await
