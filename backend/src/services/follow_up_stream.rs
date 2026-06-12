@@ -63,7 +63,7 @@ pub async fn stream_follow_up(
             question,
             AiChatOptions {
                 temperature: 0.1,
-                max_tokens: 220,
+                max_tokens: Some(220),
                 timeout: Duration::from_secs(20),
             },
         )
@@ -104,7 +104,7 @@ pub async fn stream_follow_up(
                     question,
                     AiChatOptions {
                         temperature: 0.1,
-                        max_tokens: 220,
+                        max_tokens: Some(220),
                         timeout: Duration::from_secs(20),
                     },
                 )

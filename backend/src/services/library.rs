@@ -1,6 +1,6 @@
 use crate::models::{EntryDeleteResponse, EntryDetailResponse, FollowUpItem};
 use crate::repositories::{follow_up, knowledge};
-use crate::services::analysis_preview::analysis_markdown;
+use crate::services::analysis_preview::{analysis_markdown, structured_analysis};
 use crate::services::query_resolution::phrase_usage_preview_from_analysis;
 use crate::state::AppState;
 use anyhow::{anyhow, Result};
@@ -27,6 +27,7 @@ pub async fn get_entry_detail(state: &AppState, entry_id: i64) -> Result<EntryDe
         entry_type: entry.entry_type,
         prototype: entry.prototype,
         analysis_markdown: analysis_markdown(&entry.analysis),
+        structured_analysis: structured_analysis(&entry.analysis),
         phrase_lookup: entry
             .analysis
             .get("phrase_lookup")

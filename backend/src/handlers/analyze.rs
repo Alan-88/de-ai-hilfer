@@ -23,7 +23,7 @@ pub async fn analyze_word(
         .map(Json)
         .map_err(|err| {
             tracing::error!("analyze failed: {err:#}");
-            (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("{err:#}"))
         })
 }
 
@@ -34,7 +34,10 @@ pub async fn stream_analyze_word(
     let (tx, rx) = mpsc::unbounded_channel::<String>();
     tokio::spawn(async move {
         if let Err(err) = analyze_stream::stream_analyze(state, request, tx.clone()).await {
-            let _ = tx.send(crate::services::stream_response::sse_error(err.to_string()));
+            tracing::error!("stream analyze failed: {err:#}");
+            let _ = tx.send(crate::services::stream_response::sse_error(format!(
+                "{err:#}"
+            )));
         }
     });
 

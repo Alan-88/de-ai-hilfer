@@ -95,7 +95,11 @@ pub fn merge_raw_rows(rows: Vec<DictionaryRawLookupRow>) -> Option<DictionaryRaw
     Some(DictionaryRaw {
         headword: first.headword,
         raw_data,
-        has_audio: Some(preferred_rows.iter().any(|row| row.has_audio.unwrap_or(false))),
+        has_audio: Some(
+            preferred_rows
+                .iter()
+                .any(|row| row.has_audio.unwrap_or(false)),
+        ),
         created_at: preferred_rows
             .iter()
             .map(|row| row.created_at)

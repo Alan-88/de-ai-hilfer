@@ -7,7 +7,7 @@ use std::time::Duration;
 #[derive(Debug, Clone, Copy)]
 pub struct AiChatOptions {
     pub temperature: f32,
-    pub max_tokens: u32,
+    pub max_tokens: Option<u32>,
     pub timeout: Duration,
 }
 
@@ -15,7 +15,7 @@ impl Default for AiChatOptions {
     fn default() -> Self {
         Self {
             temperature: 0.2,
-            max_tokens: 1200,
+            max_tokens: Some(1200),
             timeout: Duration::from_secs(45),
         }
     }
@@ -94,11 +94,11 @@ impl AiClient {
             .json(&ChatCompletionRequest {
                 model: model.to_string(),
                 messages: vec![
-                    ChatMessage {
+                    ChatRequestMessage {
                         role: "system".to_string(),
                         content: system_prompt.to_string(),
                     },
-                    ChatMessage {
+                    ChatRequestMessage {
                         role: "user".to_string(),
                         content: user_message.to_string(),
                     },
@@ -111,16 +111,19 @@ impl AiClient {
             .await
             .context("failed to call AI endpoint")?
             .error_for_status()
-            .context("AI endpoint returned error status")?
-            .json::<ChatCompletionResponse>()
+            .context("AI endpoint returned error status")?;
+
+        let body = response
+            .text()
             .await
-            .context("failed to decode AI response")?;
+            .context("failed to read AI response body")?;
+        let response = parse_chat_completion_response(&body)?;
 
         response
             .choices
             .into_iter()
             .next()
-            .map(|choice| choice.message.content)
+            .and_then(|choice| choice.message.extract_text())
             .filter(|content| !content.trim().is_empty())
             .ok_or_else(|| anyhow!("AI response did not contain message content"))
     }
@@ -140,11 +143,11 @@ impl AiClient {
             .json(&ChatCompletionRequest {
                 model: model.to_string(),
                 messages: vec![
-                    ChatMessage {
+                    ChatRequestMessage {
                         role: "system".to_string(),
                         content: system_prompt.to_string(),
                     },
-                    ChatMessage {
+                    ChatRequestMessage {
                         role: "user".to_string(),
                         content: user_message.to_string(),
                     },
@@ -216,10 +219,10 @@ impl AiClient {
     }
 
     fn chat_max_tokens(&self, model: &str, options: AiChatOptions) -> Option<u32> {
-        if should_omit_max_tokens(&self.base_url, model) {
+        if options.max_tokens.is_none() || should_omit_max_tokens(&self.base_url, model) {
             None
         } else {
-            Some(options.max_tokens)
+            options.max_tokens
         }
     }
 }
@@ -234,7 +237,7 @@ fn should_omit_max_tokens(base_url: &str, model: &str) -> bool {
 #[derive(Serialize)]
 struct ChatCompletionRequest {
     model: String,
-    messages: Vec<ChatMessage>,
+    messages: Vec<ChatRequestMessage>,
     temperature: f32,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
@@ -242,8 +245,8 @@ struct ChatCompletionRequest {
     stream: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct ChatMessage {
+#[derive(Serialize)]
+struct ChatRequestMessage {
     role: String,
     content: String,
 }
@@ -255,7 +258,69 @@ struct ChatCompletionResponse {
 
 #[derive(Deserialize)]
 struct ChatChoice {
-    message: ChatMessage,
+    message: ChatResponseMessage,
+}
+
+#[derive(Deserialize)]
+struct ChatResponseMessage {
+    #[serde(default)]
+    content: Option<ChatResponseContent>,
+}
+
+impl ChatResponseMessage {
+    fn extract_text(self) -> Option<String> {
+        self.content.and_then(ChatResponseContent::into_text)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ChatResponseContent {
+    Text(String),
+    Parts(Vec<ChatResponseContentPart>),
+}
+
+impl ChatResponseContent {
+    fn into_text(self) -> Option<String> {
+        match self {
+            Self::Text(text) => Some(text),
+            Self::Parts(parts) => {
+                let combined = parts
+                    .into_iter()
+                    .filter_map(ChatResponseContentPart::into_text)
+                    .collect::<String>();
+
+                if combined.trim().is_empty() {
+                    None
+                } else {
+                    Some(combined)
+                }
+            }
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ChatResponseContentPart {
+    Text(String),
+    Object { text: Option<String> },
+}
+
+impl ChatResponseContentPart {
+    fn into_text(self) -> Option<String> {
+        match self {
+            Self::Text(text) => Some(text),
+            Self::Object { text } => text,
+        }
+    }
+}
+
+fn parse_chat_completion_response(body: &str) -> Result<ChatCompletionResponse> {
+    serde_json::from_str(body).with_context(|| {
+        let preview: String = body.chars().take(600).collect();
+        format!("failed to decode AI response body: preview={preview}")
+    })
 }
 
 #[derive(Serialize)]

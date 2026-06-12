@@ -1,6 +1,6 @@
 <script lang="ts">
   import {
-    parseAnalysisMarkdown,
+    resolveStructuredAnalysis,
     renderMarkdownHtml,
   } from "$lib/analysis/structuredAnalysis";
   import type { EntryDetailResponse } from "$lib/types";
@@ -23,7 +23,13 @@
     }).format(new Date(value));
   }
 
-  $: structured = detail ? parseAnalysisMarkdown(detail.analysis_markdown, detail.query_text) : null;
+  $: structured = detail
+    ? resolveStructuredAnalysis(
+        detail.analysis_markdown,
+        detail.structured_analysis,
+        detail.query_text
+      )
+    : null;
   $: primaryMeaning = structured?.meanings[0] ?? null;
   let showRawMarkdown = false;
   $: if (detail) {
@@ -135,11 +141,20 @@
             <p class="small-copy">当前词条没有结构化语法表。</p>
           {/if}
 
-          {#if structured?.family.length || structured?.synonyms.length || structured?.antonyms.length}
+          {#if structured?.wordNetwork.family.length || structured?.wordNetwork.synonyms.length || structured?.wordNetwork.antonyms.length}
             <div class="card-title" style="margin-top:1.25rem;"><i class="ph-fill ph-share-network"></i> 词汇网络</div>
             <div>
-              {#each [...(structured?.family ?? []), ...(structured?.synonyms ?? []), ...(structured?.antonyms ?? [])] as item}
-                <span class="tag">{item}</span>
+              {#each [
+                ...(structured?.wordNetwork.family ?? []),
+                ...(structured?.wordNetwork.synonyms ?? []),
+                ...(structured?.wordNetwork.antonyms ?? [])
+              ] as item}
+                <span
+                  class="tag"
+                  title="{item.partOfSpeech ? `[${item.partOfSpeech}] ` : ''}${item.chinese || item.english || ''}"
+                >
+                  {item.term}
+                </span>
               {/each}
             </div>
           {/if}

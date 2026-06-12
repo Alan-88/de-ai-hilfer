@@ -18,7 +18,8 @@ async fn main() -> Result<()> {
 
     let snapshot = export_snapshot(&pool).await?;
     let summary = validate_snapshot(&snapshot);
-    let content = serde_json::to_string_pretty(&snapshot).context("failed to serialize snapshot")?;
+    let content =
+        serde_json::to_string_pretty(&snapshot).context("failed to serialize snapshot")?;
     std::fs::write(&output_path, content)
         .with_context(|| format!("failed to write {}", output_path.display()))?;
 

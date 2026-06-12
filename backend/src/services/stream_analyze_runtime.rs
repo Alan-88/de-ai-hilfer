@@ -6,7 +6,7 @@ use crate::services::analysis_preview::analysis_markdown;
 use crate::services::analyze_runtime::{fallback_model_for, primary_model_for};
 use crate::services::analyze_support::{
     analysis_chat_options, build_analysis_prompt, build_phrase_preview_analysis,
-    parse_phrase_usage_preview, stream_analysis_chat_options, AnalysisMode,
+    parse_phrase_usage_preview, AnalysisMode,
 };
 use crate::services::dictionary_render::build_dictionary_excerpt;
 use crate::services::stream_generation::{
@@ -55,6 +55,7 @@ pub fn build_stream_analysis_document(
 ) -> AnalysisDocument {
     AnalysisDocument {
         markdown: markdown.trim().to_string(),
+        structured: None,
         tags: Vec::new(),
         aliases: Vec::new(),
         prototype: dictionary_entry.map(|entry| entry.headword.clone()),
@@ -200,7 +201,7 @@ pub async fn stream_model_markdown(
             primary_model,
             system_prompt,
             user_message,
-            stream_analysis_chat_options(),
+            analysis_chat_options(AnalysisMode::Full),
             tx,
         )
         .await
@@ -210,6 +211,9 @@ pub async fn stream_model_markdown(
                     markdown,
                     model: primary_model.to_string(),
                 });
+            }
+            StreamModelOutcome::Canceled => {
+                return Err(anyhow::anyhow!("stream analyze canceled by client"));
             }
             StreamModelOutcome::Retriable(err)
                 if !fallback_model.is_empty() && fallback_model != primary_model =>
@@ -223,11 +227,14 @@ pub async fn stream_model_markdown(
                     fallback_model,
                     system_prompt,
                     user_message,
-                    stream_analysis_chat_options(),
+                    analysis_chat_options(AnalysisMode::Full),
                     tx,
                 )
                 .await
                 {
+                    StreamModelOutcome::Canceled => {
+                        return Err(anyhow::anyhow!("stream analyze canceled by client"));
+                    }
                     StreamModelOutcome::Success(markdown) => {
                         return Ok(StreamedMarkdown {
                             markdown,

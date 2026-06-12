@@ -1,0 +1,457 @@
+use crate::ai::{is_hard_failure, AiChatOptions, AiClient};
+use crate::models::{AnalysisDocument, DictionaryRaw, QualityMode, StructuredAnalysisDocument};
+use crate::services::analysis_grounded_assembly::assemble_grounded_structured_document;
+use crate::services::analysis_grounded_facts::{
+    build_light_dictionary_facts_payload, load_raw_rows_by_headword,
+};
+use crate::services::analysis_grounded_model_a::{normalize_model_a_output, ModelAOutput};
+use crate::services::analysis_grounded_prompt::{
+    build_model_a_prompt, build_model_a_user_payload, build_stage2_prompt,
+    build_stage2_user_payload,
+};
+use crate::services::analysis_grounded_stage2_quality::validate_stage2_markdown_completeness;
+use crate::services::analysis_structure_quality::validate_structured_capture;
+use crate::services::analysis_structure_retry::{
+    generate_structure_with_retry_policy, StructureRetryPolicy,
+};
+use crate::services::analysis_structure_seed::build_structure_seed;
+use crate::services::analysis_structure_transform::{
+    merge_structured_with_seed, normalize_structured_analysis,
+};
+use crate::services::analyze_runtime::{fallback_model_for, primary_model_for};
+use crate::services::analyze_support::{extract_json, extract_json_with_report};
+use crate::services::dictionary_render::build_dictionary_excerpt;
+use crate::services::stream_analyze_runtime::StreamedMarkdown;
+use crate::services::stream_generation::{
+    request_and_stream_model, StreamModelOutcome, HARD_FAILURE_RETRY_CYCLES,
+    HARD_FAILURE_RETRY_DELAY_MS,
+};
+use crate::state::AppState;
+use anyhow::{anyhow, Result};
+use std::time::Duration;
+use tokio::sync::mpsc::UnboundedSender;
+
+pub struct GroundedAnalysis {
+    pub analysis: AnalysisDocument,
+    pub model: String,
+}
+
+pub async fn generate_grounded_analysis(
+    state: &AppState,
+    target_query: &str,
+    dictionary_entry: Option<&DictionaryRaw>,
+    quality_mode: QualityMode,
+) -> Result<GroundedAnalysis> {
+    generate_grounded_analysis_with_stage2_fallback(
+        state,
+        target_query,
+        dictionary_entry,
+        quality_mode,
+        true,
+    )
+    .await
+}
+
+pub async fn generate_grounded_analysis_strict_primary(
+    state: &AppState,
+    target_query: &str,
+    dictionary_entry: Option<&DictionaryRaw>,
+    quality_mode: QualityMode,
+) -> Result<GroundedAnalysis> {
+    generate_grounded_analysis_with_stage2_fallback(
+        state,
+        target_query,
+        dictionary_entry,
+        quality_mode,
+        false,
+    )
+    .await
+}
+
+async fn generate_grounded_analysis_with_stage2_fallback(
+    state: &AppState,
+    target_query: &str,
+    dictionary_entry: Option<&DictionaryRaw>,
+    quality_mode: QualityMode,
+    allow_stage2_fallback: bool,
+) -> Result<GroundedAnalysis> {
+    let stage1 = generate_model_a(state, target_query, quality_mode).await?;
+    let dictionary_facts = stage1.dictionary_facts.as_deref();
+    let fallback_model = allow_stage2_fallback
+        .then(|| fallback_model_for(state, quality_mode))
+        .unwrap_or_default();
+    let stage2 = generate_stage2_markdown(
+        &state.ai_client,
+        &state.prompts,
+        target_query,
+        dictionary_facts,
+        &stage1.output,
+        primary_model_for(state, quality_mode),
+        fallback_model,
+        quality_mode,
+    )
+    .await?;
+    let (structured, _structure_model) = structure_and_assemble(
+        state,
+        target_query,
+        dictionary_facts,
+        &stage1.output,
+        &stage2.markdown,
+        StructureRetryPolicy::runtime_default(),
+        None,
+    )
+    .await?;
+
+    Ok(GroundedAnalysis {
+        analysis: build_grounded_document(
+            target_query,
+            stage2.markdown,
+            structured,
+            dictionary_entry,
+            quality_mode,
+            &stage2.model,
+            &_structure_model,
+        ),
+        model: stage2.model,
+    })
+}
+
+pub async fn stream_grounded_analysis(
+    state: &AppState,
+    tx: &UnboundedSender<String>,
+    target_query: &str,
+    dictionary_entry: Option<&DictionaryRaw>,
+    quality_mode: QualityMode,
+) -> Result<GroundedAnalysis> {
+    let stage1 = generate_model_a(state, target_query, quality_mode).await?;
+    if tx.is_closed() {
+        return Err(anyhow!("stream analyze canceled by client"));
+    }
+
+    let dictionary_facts = stage1.dictionary_facts.as_deref();
+    let stage2 = stream_stage2_markdown(
+        &state.ai_client,
+        tx,
+        &state.prompts,
+        target_query,
+        dictionary_facts,
+        &stage1.output,
+        primary_model_for(state, quality_mode),
+        fallback_model_for(state, quality_mode),
+        quality_mode,
+    )
+    .await?;
+    if tx.is_closed() {
+        return Err(anyhow!("stream analyze canceled by client"));
+    }
+
+    let (structured, structure_model) = structure_and_assemble(
+        state,
+        target_query,
+        dictionary_facts,
+        &stage1.output,
+        &stage2.markdown,
+        StructureRetryPolicy::runtime_default(),
+        None,
+    )
+    .await?;
+
+    Ok(GroundedAnalysis {
+        analysis: build_grounded_document(
+            target_query,
+            stage2.markdown,
+            structured,
+            dictionary_entry,
+            quality_mode,
+            &stage2.model,
+            &structure_model,
+        ),
+        model: stage2.model,
+    })
+}
+
+pub(crate) async fn generate_model_a(
+    state: &AppState,
+    target_query: &str,
+    quality_mode: QualityMode,
+) -> Result<GroundedStage1> {
+    let raw_rows = load_raw_rows_by_headword(&state.pool, target_query).await?;
+    let dictionary_facts = (!raw_rows.is_empty())
+        .then(|| build_light_dictionary_facts_payload(target_query, &raw_rows));
+    let prompt = build_model_a_prompt(&state.prompts);
+    let user_payload = build_model_a_user_payload(target_query, dictionary_facts.as_deref());
+    let model = primary_model_for(state, quality_mode);
+    let raw = state
+        .ai_client
+        .chat_model_with_options(model, &prompt, &user_payload, model_a_chat_options())
+        .await?;
+    let output = extract_json::<ModelAOutput>(&raw).map(normalize_model_a_output)?;
+    if output.entries.is_empty() {
+        return Err(anyhow!("model A returned no lexical branches"));
+    }
+    Ok(GroundedStage1 {
+        dictionary_facts,
+        output,
+    })
+}
+
+pub(crate) async fn generate_stage2_markdown(
+    ai_client: &AiClient,
+    prompts: &crate::prompts::PromptConfig,
+    target_query: &str,
+    dictionary_facts: Option<&str>,
+    stage1_output: &ModelAOutput,
+    primary_model: &str,
+    fallback_model: &str,
+    quality_mode: QualityMode,
+) -> Result<StreamedMarkdown> {
+    let prompt = build_stage2_prompt(prompts);
+    let user_payload = build_stage2_user_payload(target_query, dictionary_facts, stage1_output);
+    let options = stage2_chat_options(quality_mode);
+
+    for cycle in 1..=HARD_FAILURE_RETRY_CYCLES {
+        match ai_client
+            .chat_model_with_options(primary_model, &prompt, &user_payload, options)
+            .await
+        {
+            Ok(markdown) => {
+                return Ok(StreamedMarkdown {
+                    markdown,
+                    model: primary_model.to_string(),
+                });
+            }
+            Err(primary_err)
+                if cycle < HARD_FAILURE_RETRY_CYCLES && is_hard_failure(&primary_err) =>
+            {
+                tracing::warn!(
+                    "grounded stage2 retrying after primary hard failure: cycle={cycle}/{HARD_FAILURE_RETRY_CYCLES}, primary={primary_model}, target={target_query}, err={primary_err:#}"
+                );
+                tokio::time::sleep(Duration::from_millis(HARD_FAILURE_RETRY_DELAY_MS)).await;
+            }
+            Err(primary_err)
+                if is_hard_failure(&primary_err)
+                    && !fallback_model.is_empty()
+                    && fallback_model != primary_model =>
+            {
+                tracing::warn!(
+                    "grounded stage2 switching to fallback: primary={primary_model}, fallback={fallback_model}, target={target_query}, err={primary_err:#}"
+                );
+                match ai_client
+                    .chat_model_with_options(fallback_model, &prompt, &user_payload, options)
+                    .await
+                {
+                    Ok(markdown) => {
+                        return Ok(StreamedMarkdown {
+                            markdown,
+                            model: fallback_model.to_string(),
+                        });
+                    }
+                    Err(fallback_err) => return Err(fallback_err),
+                }
+            }
+            Err(primary_err) => return Err(primary_err),
+        }
+    }
+
+    unreachable!("grounded stage2 retry loop should always return or error");
+}
+
+async fn stream_stage2_markdown(
+    ai_client: &AiClient,
+    tx: &UnboundedSender<String>,
+    prompts: &crate::prompts::PromptConfig,
+    target_query: &str,
+    dictionary_facts: Option<&str>,
+    stage1_output: &ModelAOutput,
+    primary_model: &str,
+    fallback_model: &str,
+    quality_mode: QualityMode,
+) -> Result<StreamedMarkdown> {
+    let prompt = build_stage2_prompt(prompts);
+    let user_payload = build_stage2_user_payload(target_query, dictionary_facts, stage1_output);
+    let options = stage2_chat_options(quality_mode);
+
+    for cycle in 1..=HARD_FAILURE_RETRY_CYCLES {
+        match request_and_stream_model(
+            ai_client,
+            primary_model,
+            &prompt,
+            &user_payload,
+            options,
+            tx,
+        )
+        .await
+        {
+            StreamModelOutcome::Success(markdown) => {
+                return Ok(StreamedMarkdown {
+                    markdown,
+                    model: primary_model.to_string(),
+                });
+            }
+            StreamModelOutcome::Canceled => {
+                return Err(anyhow!("stream analyze canceled by client"));
+            }
+            StreamModelOutcome::Retriable(err)
+                if !fallback_model.is_empty() && fallback_model != primary_model =>
+            {
+                tracing::warn!(
+                    "grounded stream stage2 primary failed before deltas; switching to fallback: cycle={cycle}/{HARD_FAILURE_RETRY_CYCLES}, primary={primary_model}, fallback={fallback_model}, target={target_query}, err={err:#}"
+                );
+                match request_and_stream_model(
+                    ai_client,
+                    fallback_model,
+                    &prompt,
+                    &user_payload,
+                    options,
+                    tx,
+                )
+                .await
+                {
+                    StreamModelOutcome::Canceled => {
+                        return Err(anyhow!("stream analyze canceled by client"));
+                    }
+                    StreamModelOutcome::Success(markdown) => {
+                        return Ok(StreamedMarkdown {
+                            markdown,
+                            model: fallback_model.to_string(),
+                        });
+                    }
+                    StreamModelOutcome::Retriable(fallback_err)
+                        if cycle < HARD_FAILURE_RETRY_CYCLES =>
+                    {
+                        tracing::warn!(
+                            "grounded stream stage2 retrying after fallback hard failure: cycle={cycle}/{HARD_FAILURE_RETRY_CYCLES}, target={target_query}, err={fallback_err:#}"
+                        );
+                        tokio::time::sleep(Duration::from_millis(HARD_FAILURE_RETRY_DELAY_MS))
+                            .await;
+                    }
+                    StreamModelOutcome::Retriable(fallback_err)
+                    | StreamModelOutcome::Fatal(fallback_err) => return Err(fallback_err),
+                }
+            }
+            StreamModelOutcome::Retriable(err) if cycle < HARD_FAILURE_RETRY_CYCLES => {
+                tracing::warn!(
+                    "grounded stream stage2 retrying after primary hard failure: cycle={cycle}/{HARD_FAILURE_RETRY_CYCLES}, primary={primary_model}, target={target_query}, err={err:#}"
+                );
+                tokio::time::sleep(Duration::from_millis(HARD_FAILURE_RETRY_DELAY_MS)).await;
+            }
+            StreamModelOutcome::Retriable(err) | StreamModelOutcome::Fatal(err) => return Err(err),
+        }
+    }
+
+    unreachable!("grounded stream stage2 retry loop should always return or error");
+}
+
+pub(crate) async fn structure_and_assemble(
+    state: &AppState,
+    target_query: &str,
+    dictionary_facts: Option<&str>,
+    stage1_output: &ModelAOutput,
+    markdown: &str,
+    retry_policy: StructureRetryPolicy,
+    structure_model_override: Option<&str>,
+) -> Result<(StructuredAnalysisDocument, String)> {
+    validate_stage2_markdown_completeness(markdown)?;
+
+    let structure_prompt =
+        crate::services::analysis_structure_prompt::build_structure_prompt(&state.prompts);
+    let preliminary_parse = build_structure_seed(target_query, markdown);
+    let structure_user_payload = serde_json::json!({
+        "query": target_query,
+        "markdown": markdown,
+        "preliminary_parse": preliminary_parse,
+    })
+    .to_string();
+
+    let structure_model = structure_model_override
+        .map(ToString::to_string)
+        .or_else(|| {
+            std::env::var("AI_MODEL_STRUCTURE")
+                .ok()
+                .map(|value| value.trim().to_string())
+        })
+        .or_else(|| {
+            std::env::var("STRUCTURE_ARCHIVE_MODEL")
+                .ok()
+                .map(|value| value.trim().to_string())
+        })
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "minimax-m2.5".to_string());
+    let raw = generate_structure_with_retry_policy(
+        &state.ai_client,
+        target_query,
+        &structure_model,
+        &structure_prompt,
+        &structure_user_payload,
+        structure_chat_options(),
+        retry_policy,
+    )
+    .await?;
+    let extracted = extract_json_with_report::<StructuredAnalysisDocument>(&raw)?;
+    let module_document = normalize_structured_analysis(Some(extracted.value), target_query)
+        .ok_or_else(|| anyhow!("structure extraction returned empty document"))?;
+    let module_document = merge_structured_with_seed(module_document, &preliminary_parse);
+    validate_structured_capture(markdown, &module_document)
+        .map_err(|reason| anyhow!("structure quality gate rejected payload: {reason}"))?;
+
+    let assembled = assemble_grounded_structured_document(
+        target_query,
+        dictionary_facts,
+        stage1_output,
+        module_document,
+    );
+    Ok((assembled, structure_model))
+}
+
+pub(crate) fn build_grounded_document(
+    target_query: &str,
+    markdown: String,
+    structured: StructuredAnalysisDocument,
+    dictionary_entry: Option<&DictionaryRaw>,
+    quality_mode: QualityMode,
+    model: &str,
+    _structure_model: &str,
+) -> AnalysisDocument {
+    AnalysisDocument {
+        markdown: markdown.trim().to_string(),
+        structured: Some(structured),
+        tags: Vec::new(),
+        aliases: Vec::new(),
+        prototype: Some(target_query.to_string()),
+        phrase_lookup: None,
+        phrase_usage_preview: None,
+        attached_phrase_modules: Vec::new(),
+        dictionary_excerpt: dictionary_entry.map(|entry| build_dictionary_excerpt(&entry.raw_data)),
+        model: Some(model.to_string()),
+        quality_mode: Some(quality_mode),
+    }
+}
+
+pub(crate) fn model_a_chat_options() -> AiChatOptions {
+    AiChatOptions {
+        temperature: 0.1,
+        max_tokens: Some(2200),
+        timeout: Duration::from_secs(90),
+    }
+}
+
+pub(crate) fn stage2_chat_options(_quality_mode: QualityMode) -> AiChatOptions {
+    AiChatOptions {
+        temperature: 0.2,
+        max_tokens: Some(1800),
+        timeout: Duration::from_secs(90),
+    }
+}
+
+pub(crate) fn structure_chat_options() -> AiChatOptions {
+    AiChatOptions {
+        temperature: 0.0,
+        max_tokens: None,
+        timeout: Duration::from_secs(90),
+    }
+}
+
+pub(crate) struct GroundedStage1 {
+    pub dictionary_facts: Option<String>,
+    pub output: ModelAOutput,
+}

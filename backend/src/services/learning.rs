@@ -3,7 +3,7 @@ use crate::models::{
     LearningSessionWord, LearningStatsResponse, NewLearningProgress,
 };
 use crate::repositories::{knowledge, learning};
-use crate::services::analysis_preview::analysis_markdown;
+use crate::services::analysis_preview::{analysis_markdown, structured_analysis};
 use crate::state::AppState;
 use anyhow::{anyhow, Result};
 use chrono::{Duration, Utc};
@@ -35,6 +35,7 @@ pub async fn get_session(
         entry_id: entry.id,
         query_text: entry.query_text,
         analysis_markdown: analysis_markdown(&entry.analysis),
+        structured_analysis: structured_analysis(&entry.analysis),
         repetitions_left: estimate_repetitions_left(&progress),
         progress: Some(progress_to_view(&progress)),
     };

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { parseAnalysisMarkdown } from "$lib/analysis/structuredAnalysis";
+  import { resolveStructuredAnalysis } from "$lib/analysis/structuredAnalysis";
   import { buildLearningEnhancements } from "$lib/learningEnhance";
   import type { LearningSessionWord, ReviewQuality } from "$lib/types";
 
@@ -33,7 +33,13 @@
     }).format(new Date(value));
   }
 
-  const structured = $derived(parseAnalysisMarkdown(wordData.analysis_markdown, wordData.query_text));
+  const structured = $derived(
+    resolveStructuredAnalysis(
+      wordData.analysis_markdown,
+      wordData.structured_analysis,
+      wordData.query_text
+    )
+  );
   const enhancement = $derived(buildLearningEnhancements(wordData.analysis_markdown, wordData.query_text));
   const primaryMeaning = $derived(structured.meanings[0]);
   const primaryExample = $derived(structured.examples[0] ?? enhancement.examples[0] ?? null);

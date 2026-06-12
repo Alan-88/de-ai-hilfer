@@ -43,10 +43,96 @@ export interface AttachedPhraseModule {
   attached_at: string;
 }
 
+export interface StructuredAnalysisMeaning {
+  part_of_speech: string;
+  chinese: string;
+  english: string;
+}
+
+export interface StructuredAnalysisUsageModule {
+  title: string;
+  explanation: string;
+  example_de: string;
+  example_zh: string;
+}
+
+export interface StructuredAnalysisExample {
+  de: string;
+  zh: string;
+}
+
+export interface StructuredAnalysisGrammarRow {
+  key: string;
+  value: string;
+}
+
+export interface StructuredAnalysisWordNetworkItem {
+  term: string;
+  part_of_speech: string;
+  chinese: string;
+  english: string;
+  note: string;
+}
+
+export interface StructuredAnalysisWordNetwork {
+  family: StructuredAnalysisWordNetworkItem[];
+  synonyms: StructuredAnalysisWordNetworkItem[];
+  antonyms: StructuredAnalysisWordNetworkItem[];
+}
+
+export interface StructuredAnalysisDeepInsight {
+  title: string;
+  content_markdown: string;
+}
+
+export interface ModelAGrammar {
+  genders: string[];
+  noun_class: string;
+  plural_forms: string[];
+  genitive_forms: string[];
+  separable: string;
+  transitivity: string;
+  reflexive: string;
+  auxiliaries: string[];
+  present_3sg: string;
+  preterite_3sg: string;
+  partizip_ii: string;
+  comparative: string;
+  superlative: string;
+  governs_cases: string[];
+  word_order: string;
+}
+
+export interface ModelAMeaning {
+  zh: string;
+  en: string;
+}
+
+export interface GrammarBranch {
+  selector: string;
+  pos: string;
+  meanings: ModelAMeaning[];
+  grammar: ModelAGrammar;
+}
+
+export interface StructuredAnalysisDocument {
+  headword: string;
+  phonetic: string;
+  meanings: StructuredAnalysisMeaning[];
+  usage_modules: StructuredAnalysisUsageModule[];
+  collocations: string[];
+  examples: StructuredAnalysisExample[];
+  grammar_rows: StructuredAnalysisGrammarRow[];
+  grammar_branches?: GrammarBranch[];
+  word_network?: StructuredAnalysisWordNetwork | null;
+  deep_insights: StructuredAnalysisDeepInsight[];
+}
+
 export interface AnalyzeResponse {
   entry_id: number;
   query_text: string;
   analysis_markdown: string;
+  structured_analysis?: StructuredAnalysisDocument | null;
   phrase_lookup?: PhraseLookupInfo | null;
   phrase_usage_preview?: PhraseUsagePreview | null;
   attached_phrase_modules: AttachedPhraseModule[];
@@ -62,6 +148,7 @@ export interface EntryDetailResponse {
   entry_type: string;
   prototype?: string | null;
   analysis_markdown: string;
+  structured_analysis?: StructuredAnalysisDocument | null;
   phrase_lookup?: PhraseLookupInfo | null;
   phrase_usage_preview?: PhraseUsagePreview | null;
   attached_phrase_modules: AttachedPhraseModule[];
@@ -101,6 +188,7 @@ export interface DBSuggestion {
   query_text: string;
   preview: string;
   analysis_markdown: string;
+  structured_analysis?: StructuredAnalysisDocument | null;
   source: string;
   follow_ups: FollowUpItem[];
 }
@@ -171,6 +259,7 @@ export interface LearningSessionWord {
   entry_id: number;
   query_text: string;
   analysis_markdown: string;
+  structured_analysis?: StructuredAnalysisDocument | null;
   repetitions_left: number;
   progress: LearningProgressView | null;
 }

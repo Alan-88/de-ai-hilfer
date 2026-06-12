@@ -2,11 +2,10 @@ use crate::models::{
     AnalyzeRequest, AnalyzeResponse, FollowUpItem, NewKnowledgeEntry, QualityMode,
 };
 use crate::repositories::{dictionary, dictionary_lexemes, knowledge};
-use crate::services::analyze_runtime::{fallback_model_for, primary_model_for};
-use crate::services::analyze_support::build_stream_analysis_prompt;
-use crate::services::dictionary_render::{
-    build_full_analysis_from_dictionary, build_unavailable_analysis,
-};
+use crate::services::analysis_grounded_runtime::stream_grounded_analysis;
+use crate::services::analyze_runtime::primary_model_for;
+use crate::services::dictionary_facts::dictionary_pos;
+use crate::services::dictionary_tags::build_tags;
 use crate::services::query_inference::{
     infer_phrase_lookup, is_form_reference_entry, is_phrase_like_query,
 };
@@ -15,8 +14,7 @@ use crate::services::query_resolution::{
     maybe_correct_spelling, phrase_lookup_from_analysis, phrase_usage_preview_from_analysis,
 };
 use crate::services::stream_analyze_runtime::{
-    build_stream_analysis_document, cached_analysis_markdown, generate_phrase_preview_with_model,
-    send_meta, stream_model_markdown,
+    cached_analysis_markdown, generate_phrase_preview_with_model, send_meta,
 };
 use crate::services::stream_response::sse_complete;
 use crate::state::AppState;
@@ -62,6 +60,9 @@ pub async fn stream_analyze(
                     entry_id: entry.id,
                     query_text: entry.query_text.clone(),
                     analysis_markdown: cached_analysis_markdown(&entry.analysis),
+                    structured_analysis: crate::services::analysis_preview::structured_analysis(
+                        &entry.analysis,
+                    ),
                     phrase_lookup: phrase_lookup_from_analysis(&entry.analysis),
                     phrase_usage_preview: phrase_usage_preview_from_analysis(&entry.analysis),
                     attached_phrase_modules: attached_phrase_modules_from_analysis(&entry.analysis),
@@ -165,6 +166,9 @@ pub async fn stream_analyze(
                 entry_id: entry.id,
                 query_text: entry.query_text.clone(),
                 analysis_markdown: cached_analysis_markdown(&entry.analysis),
+                structured_analysis: crate::services::analysis_preview::structured_analysis(
+                    &entry.analysis,
+                ),
                 phrase_lookup: phrase_lookup_from_analysis(&entry.analysis),
                 phrase_usage_preview: phrase_usage_preview_from_analysis(&entry.analysis),
                 attached_phrase_modules: attached_phrase_modules_from_analysis(&entry.analysis),
@@ -186,7 +190,7 @@ pub async fn stream_analyze(
         }
     }
 
-    let (analysis, used_ai_generation, source, model) = if is_phrase_query {
+    let (mut analysis, used_ai_generation, source, model) = if is_phrase_query {
         match generate_phrase_preview_with_model(
             &state,
             query,
@@ -224,71 +228,60 @@ pub async fn stream_analyze(
             }
         }
     } else {
-        let primary_model = primary_model_for(&state, quality_mode);
-        let fallback_model = fallback_model_for(&state, quality_mode);
-        let system_prompt = build_stream_analysis_prompt(
-            &state.prompts,
-            dictionary_entry.as_ref(),
-            generation_hint,
-            phrase_lookup.as_ref(),
-        );
-
-        let generated = match stream_model_markdown(
-            &state.ai_client,
+        send_meta(
             &tx,
             "analyze",
-            primary_model,
-            fallback_model,
+            primary_model_for(&state, quality_mode),
             quality_mode,
-            &system_prompt,
-            &prototype,
             if quality_mode == QualityMode::Pro {
                 "Pro"
             } else {
                 "Flash"
             },
+            false,
+        );
+        match stream_grounded_analysis(
+            &state,
+            &tx,
+            &prototype,
+            dictionary_entry.as_ref(),
+            quality_mode,
         )
         .await
         {
-            Ok(result) => Some(result),
-            Err(err) => {
-                tracing::warn!(
-                    "stream analyze fallback to deterministic rendering: query={query}, prototype={prototype}, err={err:#}"
-                );
-                None
-            }
-        };
-
-        if let Some(markdown) = generated {
-            (
-                build_stream_analysis_document(
-                    markdown.markdown,
-                    dictionary_entry.as_ref(),
-                    quality_mode,
-                    &markdown.model,
-                    phrase_lookup.as_ref(),
-                ),
+            Ok(generated) => (
+                generated.analysis,
                 true,
                 if quality_mode == QualityMode::Pro {
                     "Pro".to_string()
                 } else {
                     "Flash".to_string()
                 },
-                Some(markdown.model),
-            )
-        } else {
-            let fallback = dictionary_entry
-                .as_ref()
-                .map(|entry| build_full_analysis_from_dictionary(&prototype, &entry.raw_data))
-                .unwrap_or_else(|| build_unavailable_analysis(&prototype));
-            let source = if dictionary_entry.is_some() {
-                "字典兜底"
-            } else {
-                "本地兜底"
-            };
-            (fallback, false, source.to_string(), None)
+                Some(generated.model),
+            ),
+            Err(err) => {
+                if is_stream_canceled(&err) {
+                    tracing::info!(
+                        "stream analyze canceled before persistence: query={query}, prototype={prototype}"
+                    );
+                    return Ok(());
+                }
+                return Err(err.context("grounded stream analysis generation failed"));
+            }
         }
     };
+
+    if tx.is_closed() {
+        tracing::info!(
+            "stream analyze canceled after generation before persistence: query={query}, prototype={prototype}"
+        );
+        return Ok(());
+    }
+    if analysis.tags.is_empty() {
+        if let Some(entry) = dictionary_entry.as_ref() {
+            analysis.tags = build_tags(&entry.raw_data, dictionary_pos(&entry.raw_data));
+        }
+    }
 
     let final_response = if dictionary_entry.is_none() && !used_ai_generation {
         AnalyzeResponse {
@@ -299,6 +292,7 @@ pub async fn stream_analyze(
                 prototype.clone()
             },
             analysis_markdown: analysis.markdown.clone(),
+            structured_analysis: analysis.structured.clone(),
             phrase_lookup: analysis.phrase_lookup.clone(),
             phrase_usage_preview: analysis.phrase_usage_preview.clone(),
             attached_phrase_modules: analysis.attached_phrase_modules.clone(),
@@ -313,6 +307,7 @@ pub async fn stream_analyze(
                 entry_id: 0,
                 query_text: query.to_string(),
                 analysis_markdown: analysis.markdown.clone(),
+                structured_analysis: analysis.structured.clone(),
                 phrase_lookup: analysis.phrase_lookup.clone(),
                 phrase_usage_preview: analysis.phrase_usage_preview.clone(),
                 attached_phrase_modules: analysis.attached_phrase_modules.clone(),
@@ -361,6 +356,7 @@ pub async fn stream_analyze(
                 entry_id: entry.id,
                 query_text: entry.query_text,
                 analysis_markdown: analysis.markdown.clone(),
+                structured_analysis: analysis.structured.clone(),
                 phrase_lookup: analysis.phrase_lookup.clone(),
                 phrase_usage_preview: analysis.phrase_usage_preview.clone(),
                 attached_phrase_modules: analysis.attached_phrase_modules.clone(),
@@ -374,4 +370,9 @@ pub async fn stream_analyze(
 
     tx.send(sse_complete(&final_response)).ok();
     Ok(())
+}
+
+fn is_stream_canceled(err: &anyhow::Error) -> bool {
+    err.to_string()
+        .contains("stream analyze canceled by client")
 }

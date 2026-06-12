@@ -13,7 +13,10 @@ async fn main() -> Result<()> {
         .next()
         .map(PathBuf::from)
         .context("usage: dry_run_restore_knowledge_snapshot <snapshot.json> [plan-output.json]")?;
-    let plan_output = args.next().map(PathBuf::from).unwrap_or_else(default_plan_output_path);
+    let plan_output = args
+        .next()
+        .map(PathBuf::from)
+        .unwrap_or_else(default_plan_output_path);
 
     let config = Config::from_env()?;
     let pool = db::create_pool(&config.database_url).await?;
@@ -34,7 +37,8 @@ async fn main() -> Result<()> {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("failed to create output directory {}", parent.display()))?;
     }
-    let content = serde_json::to_string_pretty(&plan).context("failed to serialize restore plan")?;
+    let content =
+        serde_json::to_string_pretty(&plan).context("failed to serialize restore plan")?;
     std::fs::write(&plan_output, content)
         .with_context(|| format!("failed to write {}", plan_output.display()))?;
 

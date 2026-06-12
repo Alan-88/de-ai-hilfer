@@ -34,7 +34,7 @@ pub async fn create(state: &AppState, request: FollowUpRequest) -> Result<Follow
             question,
             AiChatOptions {
                 temperature: 0.1,
-                max_tokens: 220,
+                max_tokens: Some(220),
                 timeout: Duration::from_secs(12),
             },
         )
@@ -54,7 +54,7 @@ pub async fn create(state: &AppState, request: FollowUpRequest) -> Result<Follow
                     question,
                     AiChatOptions {
                         temperature: 0.1,
-                        max_tokens: 220,
+                        max_tokens: Some(220),
                         timeout: Duration::from_secs(12),
                     },
                 )

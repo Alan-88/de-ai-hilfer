@@ -138,7 +138,8 @@ pub async fn run_embedding_backfill(
     }
 
     let mut ordered_lexemes = pending_lexemes;
-    ordered_lexemes.sort_by(|left, right| compare_headwords(&left.surface, &right.surface, &frequency_ranks));
+    ordered_lexemes
+        .sort_by(|left, right| compare_headwords(&left.surface, &right.surface, &frequency_ranks));
     if let Some(limit) = options.limit {
         ordered_lexemes.truncate(limit);
     }
@@ -296,7 +297,10 @@ async fn load_pending_lexemes(
     lexemes: &[dictionary_lexemes::PendingLexemeEmbeddingTarget],
     frequency_ranks: &HashMap<String, i32>,
 ) -> Result<Vec<PendingDictionaryLexeme>> {
-    let lexeme_ids = lexemes.iter().map(|entry| entry.lexeme_id).collect::<Vec<_>>();
+    let lexeme_ids = lexemes
+        .iter()
+        .map(|entry| entry.lexeme_id)
+        .collect::<Vec<_>>();
     let entries = dictionary_lexemes::list_lexemes_by_ids(pool, &lexeme_ids)
         .await
         .context("failed to load dictionary lexemes for embedding batch")?;
