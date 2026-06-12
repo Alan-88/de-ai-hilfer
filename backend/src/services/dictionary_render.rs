@@ -34,6 +34,7 @@ pub fn build_compact_analysis_from_dictionary(query: &str, raw_data: &Value) -> 
 
     AnalysisDocument {
         markdown: sections.join("\n\n"),
+        structured: None,
         tags: vec![pos.to_string()],
         aliases: Vec::new(),
         prototype: Some(query.to_string()),
@@ -89,6 +90,7 @@ pub fn build_full_analysis_from_dictionary(query: &str, raw_data: &Value) -> Ana
 
     AnalysisDocument {
         markdown: sections.join("\n\n"),
+        structured: None,
         tags: build_tags(raw_data, pos),
         aliases: Vec::new(),
         prototype: Some(query.to_string()),
@@ -106,6 +108,7 @@ pub fn build_unavailable_analysis(query: &str) -> AnalysisDocument {
         markdown: format!(
             "## {query}\n\n- 当前未命中本地字典，且模型暂时不可用，暂时无法生成完整分析。\n- 建议：检查拼写、尝试输入原形，或稍后重试。"
         ),
+        structured: None,
         tags: vec!["待确认".to_string()],
         aliases: Vec::new(),
         prototype: Some(query.to_string()),

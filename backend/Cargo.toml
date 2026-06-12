@@ -77,3 +77,11 @@ path = "src/bin/dry_run_restore_knowledge_snapshot.rs"
 [[bin]]
 name = "restore_knowledge_snapshot"
 path = "src/bin/restore_knowledge_snapshot.rs"
+
+[[bin]]
+name = "audit_structured_entries"
+path = "src/bin/audit_structured_entries.rs"
+
+[[bin]]
+name = "staged_structured_backfill"
+path = "src/bin/staged_structured_backfill.rs"

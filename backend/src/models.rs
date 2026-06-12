@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 pub use crate::dictionary_lexeme_models::*;
+pub use crate::structured_analysis_models::*;
 
 // ==========================================
 // 1. Dictionary Raw (权威数据层)
@@ -162,6 +163,8 @@ pub struct AnalyzeResponse {
     pub query_text: String,
     pub analysis_markdown: String,
     #[serde(default)]
+    pub structured_analysis: Option<StructuredAnalysisDocument>,
+    #[serde(default)]
     pub phrase_lookup: Option<PhraseLookupInfo>,
     #[serde(default)]
     pub phrase_usage_preview: Option<PhraseUsagePreview>,
@@ -206,6 +209,8 @@ pub struct EntryDetailResponse {
     pub prototype: Option<String>,
     pub analysis_markdown: String,
     #[serde(default)]
+    pub structured_analysis: Option<StructuredAnalysisDocument>,
+    #[serde(default)]
     pub phrase_lookup: Option<PhraseLookupInfo>,
     #[serde(default)]
     pub phrase_usage_preview: Option<PhraseUsagePreview>,
@@ -237,6 +242,8 @@ pub struct DBSuggestion {
     pub query_text: String,
     pub preview: String,
     pub analysis_markdown: String,
+    #[serde(default)]
+    pub structured_analysis: Option<StructuredAnalysisDocument>,
     pub source: String,
     pub follow_ups: Vec<FollowUpItem>,
 }
@@ -338,6 +345,8 @@ pub struct ReviewResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisDocument {
     pub markdown: String,
+    #[serde(default)]
+    pub structured: Option<StructuredAnalysisDocument>,
     #[serde(default)]
     pub tags: Vec<String>,
     #[serde(default)]
@@ -446,6 +455,8 @@ pub struct LearningSessionWord {
     pub entry_id: i64,
     pub query_text: String,
     pub analysis_markdown: String,
+    #[serde(default)]
+    pub structured_analysis: Option<StructuredAnalysisDocument>,
     pub repetitions_left: i32,
     pub progress: Option<LearningProgressView>,
 }

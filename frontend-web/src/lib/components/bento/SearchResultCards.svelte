@@ -3,26 +3,29 @@
     markdownToPlainText,
     parseAnalysisMarkdown,
     renderMarkdownHtml,
+    resolveStructuredAnalysis,
   } from "$lib/analysis/structuredAnalysis";
   import FollowUpCard from "$lib/components/bento/FollowUpCard.svelte";
   import type { AnalyzeResponse, AttachedPhraseModule, FollowUpItem, PhraseUsageModule, QualityMode, RecentItem } from "$lib/types";
   import { slide, fade } from "svelte/transition";
+  import GrammarFeatureCard from "$lib/components/bento/GrammarFeatureCard.svelte";
+  import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
 
-  type StructuredAnalysis = ReturnType<typeof parseAnalysisMarkdown>;
+  type StructuredAnalysis = ReturnType<typeof resolveStructuredAnalysis>;
   type AttachedPhraseBlock = AttachedPhraseModule & { structured: StructuredAnalysis };
 
-  let { 
-    result, 
-    isStreaming = false, 
-    isAddingToLearning = false, 
+  let {
+    result,
+    isStreaming = false,
+    isAddingToLearning = false,
     isUpdatingPhraseAttachment = false,
-    recentItems = [], 
+    recentItems = [],
     onAddToLearning,
     onRegenerate,
     onSelectRecent,
     onSelectPhraseHost,
     onDetachAttachedPhrase,
-    onnewFollowUp 
+    onnewFollowUp
   } = $props<{
     result: AnalyzeResponse;
     isStreaming?: boolean;
@@ -40,9 +43,83 @@
   let showRegenerateHint = $state(false);
   let regenerateHint = $state("");
   let pendingHostHeadword = $state<string | null>(null);
+  let activeGrammarBranch = $state<import("$lib/types").GrammarBranch | null>(null);
+  let popoverTriggerRect = $state<DOMRect | null>(null);
+
+  function formatPos(branch: import("$lib/types").GrammarBranch): string {
+    const p = (branch.pos || "").toLowerCase();
+    const g = branch.grammar;
+    const posTokens = p.split(/[\s,]+/);
+
+    if (posTokens.includes("verb")) {
+      let base = "v.";
+      const trans = (g.transitivity || "").toLowerCase().trim();
+      if (trans === "transitive") base = "vt.";
+      else if (trans === "intransitive") base = "vi.";
+      else if (trans === "both") base = "vt./vi.";
+
+      let res = base;
+      const refl = (g.reflexive || "").toLowerCase().trim();
+      if (refl === "optional" || refl === "required") res += " refl.";
+
+      const sep = (g.separable || "").toLowerCase().trim();
+      if (sep === "separable") res += " (sep.)";
+      return res;
+    }
+
+    if (posTokens.includes("noun")) {
+      const genderMap: Record<string, string> = {
+        "masculine": "m.", "feminine": "f.", "neuter": "n.", "plural": "pl."
+      };
+      // 支持多性别名词拼接，如 (m./n.) n.
+      const genders = (g.genders || [])
+        .map(v => genderMap[v.toLowerCase().trim()] || "")
+        .filter(Boolean);
+
+      const prefix = genders.length > 0 ? `(${genders.join("/")}) ` : "";
+      return `${prefix}n.`;
+    }
+
+    if (posTokens.includes("adjective") && posTokens.includes("adverb")) return "adj./adv.";
+    if (posTokens.includes("adjective")) return "adj.";
+    if (posTokens.includes("adverb")) return "adv.";
+    if (posTokens.includes("pronoun")) return "pron.";
+    if (posTokens.includes("preposition")) return "prep.";
+    if (posTokens.includes("conjunction")) return "conj.";
+    if (posTokens.includes("article")) return "art.";
+
+    return branch.pos;
+  }
+
+  function formatMeanings(meanings: {zh: string, en: string}[]): string {
+    return meanings.map(m => m.zh).filter(Boolean).join("；");
+  }
+
+  // 分支按词性分组，同词性放一排
+  const branchGroups = $derived(() => {
+    const groups: (import("$lib/types").GrammarBranch[])[] = [];
+    if (!structured.grammarBranches) return groups;
+
+    structured.grammarBranches.forEach(branch => {
+      const lastGroup = groups[groups.length - 1];
+      if (lastGroup && lastGroup[0].pos === branch.pos) {
+        lastGroup.push(branch);
+      } else {
+        groups.push([branch]);
+      }
+    });
+    return groups;
+  });
 
   // 严格同步：使用刚才基于真实数据库样本修复的解析逻辑
-  const structured = $derived(parseAnalysisMarkdown(result.analysis_markdown || "", result.query_text));
+  const structured = $derived(
+    resolveStructuredAnalysis(
+      result.analysis_markdown || "",
+      result.structured_analysis,
+      result.query_text
+    )
+  );
+  const useBranchUI = $derived((structured.grammarBranches?.length ?? 0) > 0);
   const phrasePreview = $derived(result.phrase_usage_preview ?? null);
   const isPhrasePreview = $derived(Boolean(result.phrase_lookup && phrasePreview));
   const attachedPhraseBlocks = $derived(
@@ -96,7 +173,7 @@
       };
     })
   ]);
-  
+
   const hasMeanings = $derived(structured.meanings.length > 0);
   const mainMeaning = $derived(
     phrasePreview
@@ -165,17 +242,38 @@
           <span class="word-phonetic">{structured.phonetic}</span>
         {/if}
       </div>
-      
-      <div class="meaning-row">
-        {#if mainMeaning}
-          <span class="pos-badge">{mainMeaning.partOfSpeech}</span>
-          <span class="zh-text">{mainMeaning.chinese}</span>
-          {#if !phrasePreview && mainMeaning.english}
-            <span class="en-text">{mainMeaning.english}</span>
+
+      <div class="meaning-row" class:is-branch-list={useBranchUI}>
+        {#if useBranchUI}
+          {#each branchGroups() as group}
+            <div class="branch-group-row">
+              {#each group as branch}
+                <button
+                  class="branch-meaning-item"
+                  onclick={(e) => {
+                    activeGrammarBranch = branch;
+                    popoverTriggerRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  }}
+                  title="点击查看详细语法"
+                >
+                  <span class="pos-badge compact">{formatPos(branch)}</span>
+                  <span class="zh-text">{formatMeanings(branch.meanings)}</span>
+                  <i class="ph ph-info branch-info-icon"></i>
+                </button>
+              {/each}
+            </div>
+          {/each}
+        {:else}
+          {#if mainMeaning}
+            <span class="pos-badge">{mainMeaning.partOfSpeech}</span>
+            <span class="zh-text">{mainMeaning.chinese}</span>
+            {#if !phrasePreview && mainMeaning.english}
+              <span class="en-text">{mainMeaning.english}</span>
+            {/if}
           {/if}
-        {/if}
-        {#if phrasePreview?.meaning_en}
-          <span class="word-phonetic">{phrasePreview.meaning_en}</span>
+          {#if phrasePreview?.meaning_en}
+            <span class="word-phonetic">{phrasePreview.meaning_en}</span>
+          {/if}
         {/if}
       </div>
 
@@ -186,9 +284,14 @@
         {#if result.model}
           <span class="mini-label model-name">{result.model}</span>
         {/if}
+        {#if structured.sourceType === "structured"}
+          <span class="mini-label source-pro structured-badge">
+            <i class="ph-fill ph-database"></i> 结构化
+          </span>
+        {/if}
       </div>
     </div>
-    
+
     <div class="header-actions">
       <div class="action-icons">
         <button class="icon-btn" onclick={() => onRegenerate("default", regenerateHint)} disabled={isStreaming} title="重新生成">
@@ -292,7 +395,7 @@
   {/if}
 
   <!-- 应用与例句: 结构化展示 -->
-  <div class="bento-card card-main">
+  <div class="bento-card" class:card-main={!useBranchUI} class:card-full={useBranchUI}>
     <div class="card-title"><i class="ph-fill ph-lightbulb"></i> 应用与例句</div>
     <div class="usage-list">
       {#if usageFeed.length > 0}
@@ -317,13 +420,13 @@
               {/if}
             </div>
             {#if usage.explanation}
-              <p class="card-copy usage-explanation">{usage.explanation}</p>
+              <div class="card-copy usage-explanation markdown-compact">{@html renderMarkdownHtml(usage.explanation)}</div>
             {/if}
             {#if usage.example?.de}
               <div class="example-box">
-                <div class="de-line">{usage.example.de}</div>
+                <div class="de-line markdown-compact">{@html renderMarkdownHtml(usage.example.de)}</div>
                 {#if usage.example.zh}
-                  <div class="zh-line">{usage.example.zh}</div>
+                  <div class="zh-line markdown-compact">{@html renderMarkdownHtml(usage.example.zh)}</div>
                 {/if}
               </div>
             {:else if usage.kind === "attached" && usage.fallbackHtml}
@@ -336,9 +439,9 @@
       {:else if structured.examples.length > 0}
         {#each structured.examples as example}
           <div class="surface-card example-item">
-            <div class="de-line">{example.de}</div>
+            <div class="de-line markdown-compact">{@html renderMarkdownHtml(example.de)}</div>
             {#if example.zh}
-              <div class="zh-line">{example.zh}</div>
+              <div class="zh-line markdown-compact">{@html renderMarkdownHtml(example.zh)}</div>
             {/if}
           </div>
         {/each}
@@ -352,21 +455,15 @@
   </div>
 
   <!-- 语法特性 -->
-  <div class="bento-card card-side">
-    <div class="card-title"><i class="ph-fill ph-text-aa"></i> 语法特性</div>
-    <div class="grammar-list-compact">
-      {#if structured.grammarRows.length > 0}
-        {#each structured.grammarRows as row}
-          <div class="g-row">
-            <span class="g-key">{row.key}</span>
-            <span class="g-val">{row.value}</span>
-          </div>
-        {/each}
-      {:else}
-        <div class="empty-msg">{isStreaming ? "解析中..." : "未提取到表格"}</div>
-      {/if}
+  {#if !useBranchUI}
+    <div class="bento-card card-side">
+      <div class="card-title"><i class="ph-fill ph-text-aa"></i> 语法特性</div>
+      <GrammarFeatureCard
+        grammarRows={structured.grammarRows}
+        isStreaming={isStreaming}
+      />
     </div>
-  </div>
+  {/if}
 
   <!-- 深度解析: 严格使用修复后的 deepInsights -->
   <div class="bento-card card-full">
@@ -392,10 +489,19 @@
       {/if}
     </div>
 
-    {#if structured.family.length > 0 || structured.synonyms.length > 0 || structured.antonyms.length > 0}
+    {#if structured.wordNetwork.family.length > 0 || structured.wordNetwork.synonyms.length > 0 || structured.wordNetwork.antonyms.length > 0}
       <div class="tag-cloud-mini">
-        {#each [...structured.family, ...structured.synonyms, ...structured.antonyms] as item}
-          <span class="mini-tag-btn">{item}</span>
+        {#each [
+          ...structured.wordNetwork.family,
+          ...structured.wordNetwork.synonyms,
+          ...structured.wordNetwork.antonyms
+        ] as item}
+          <span
+            class="mini-tag-btn"
+            title="{item.partOfSpeech ? `[${item.partOfSpeech}] ` : ''}${item.chinese || item.english || ''}"
+          >
+            {item.term}
+          </span>
         {/each}
       </div>
     {/if}
@@ -434,28 +540,96 @@
   </div>
 </div>
 
+{#if activeGrammarBranch}
+  <GrammarBranchPopover
+    branch={activeGrammarBranch}
+    triggerRect={popoverTriggerRect}
+    onClose={() => {
+      activeGrammarBranch = null;
+      popoverTriggerRect = null;
+    }}
+  />
+{/if}
+
 <style>
-  .bento-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; width: 100%; margin-bottom: 4rem; }
+  .bento-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.25rem;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto 4rem;
+    padding: 0 1rem;
+    box-sizing: border-box;
+  }
 
   /* Header 优化 */
-  .card-header { 
-    grid-column: span 3; display: flex; justify-content: space-between; align-items: flex-end; 
+  .card-header {
+    grid-column: span 4; display: flex; justify-content: space-between; align-items: flex-end;
     padding: 1.5rem 2rem;
   }
   .header-main-info { display: flex; flex-direction: column; gap: 0.4rem; }
-  
+
   .title-row { display: flex; align-items: baseline; gap: 0.8rem; }
   .word-title { font-size: 2.2rem; font-weight: 800; color: var(--text-main); letter-spacing: -0.02em; margin: 0; }
-  
+
   /* 音标专用字体栈修复：强制使用标准 IPA 支持字体 */
-  .word-phonetic { 
+  .word-phonetic {
     font-family: "Arial Unicode MS", "Lucida Sans Unicode", sans-serif;
     color: var(--text-muted); font-size: 1.1rem; line-height: 1.6;
     background: var(--bg-color); padding: 0.1rem 0.4rem; border-radius: 4px;
   }
 
   .meaning-row { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.2rem; }
+
+  /* Branch UI 专属样式 */
+  .meaning-row.is-branch-list {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+    margin-top: 0.85rem;
+  }
+  .branch-group-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.25rem;
+    width: 100%;
+  }
+  .branch-meaning-item {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.25rem 0.5rem;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    margin-left: -0.5rem; /* 抵消内边距，保持视觉对齐 */
+  }
+  .branch-meaning-item:hover {
+    background: var(--btn-secondary);
+    transform: translateX(4px);
+  }
+  .branch-info-icon {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  .branch-meaning-item:hover .branch-info-icon {
+    color: var(--accent-main);
+    opacity: 1;
+  }
+
   .pos-badge { background: var(--accent-main); color: white; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: 800; }
+  .pos-badge.compact {
+    min-width: 2rem;
+    text-align: center;
+    background: var(--text-main);
+    color: var(--bg-color);
+  }
   .zh-text { font-size: 1.1rem; font-weight: 700; color: var(--text-main); }
   .en-text { font-size: 0.98rem; font-style: italic; color: var(--text-muted); }
 
@@ -464,21 +638,29 @@
   .source-db { background: #e0f2fe; color: #0369a1; }
   .source-flash { background: #dcfce7; color: #15803d; }
   .source-pro { background: #f5f3ff; color: #6d28d9; }
+  .structured-badge {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #10b981;
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+  }
   .model-name { background: var(--bg-color); color: var(--text-muted); border: 1px solid var(--border-color); }
 
   .header-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 0.75rem; }
   .action-icons { display: flex; gap: 0.5rem; }
-  .icon-btn { 
-    width: 2.2rem; height: 2.2rem; border-radius: 50%; background: var(--btn-secondary); 
+  .icon-btn {
+    width: 2.2rem; height: 2.2rem; border-radius: 50%; background: var(--btn-secondary);
     color: var(--text-main); display: flex; align-items: center; justify-content: center; font-size: 1rem;
   }
   .pro-btn { color: #6d28d9; }
   .learn-btn { padding: 0.5rem 1rem; font-size: 0.85rem; }
 
   /* 其它卡片微调 */
-  .card-main { grid-column: span 2; display: flex; flex-direction: column; gap: 1rem; }
+  .card-main { grid-column: span 3; display: flex; flex-direction: column; gap: 1rem; }
   .card-side { grid-column: span 1; display: flex; flex-direction: column; gap: 1rem; }
-  .card-full { grid-column: span 3; }
+  .card-full { grid-column: span 4; }
 
   .usage-list, .insights-stack { display: flex; flex-direction: column; gap: 1rem; }
   .usage-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
@@ -486,21 +668,24 @@
   .de-line { font-weight: 700; font-size: 1.05rem; }
   .zh-line { color: var(--text-muted); font-size: 0.9rem; margin-top: 0.4rem; }
 
-  .grammar-list-compact { display: flex; flex-direction: column; }
-  .g-row { display: flex; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
-  .g-key { color: var(--text-muted); }
-  .g-val { font-weight: 700; color: var(--accent-main); }
-
   .tag-cloud-mini { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; }
   .mini-tag-btn { font-size: 0.8rem; padding: 0.25rem 0.6rem; background: var(--bg-color); border-radius: 6px; border: 1px solid var(--border-color); }
 
   .recent-mini-list { display: flex; flex-direction: column; gap: 0.6rem; }
-  .recent-mini-btn { 
-    width: 100%; padding: 0.75rem; text-align: left; background: var(--bg-color); border-radius: 8px; 
+  .recent-mini-btn {
+    width: 100%; padding: 0.75rem; text-align: left; background: var(--bg-color); border-radius: 8px;
     display: flex; flex-direction: column; border: 1px solid transparent;
   }
   .recent-mini-btn:hover { border-color: var(--accent-main); }
-  .recent-mini-btn .p-text { font-size: 0.8rem; color: var(--text-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .recent-mini-btn .p-text {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    display: block;
+    width: 100%;
+  }
 
   .compact-textarea { width: 100%; min-height: 4rem; padding: 0.75rem; border-radius: 8px; background: var(--bg-color); border: 1px solid var(--border-color); font-size: 0.9rem; }
   .phrase-host-card { display: flex; flex-direction: column; gap: 0.9rem; }

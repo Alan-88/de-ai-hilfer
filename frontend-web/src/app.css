@@ -200,10 +200,14 @@ button {
 
 /* Markdown 内容微调 */
 .markdown-compact { line-height: 1.7; color: var(--text-main); }
-.markdown-compact :global(p) { margin-bottom: 0.85rem; }
-.markdown-compact :global(ul) { padding-left: 1.5rem; margin-bottom: 1rem; }
-.markdown-compact :global(li) { margin-bottom: 0.4rem; }
-.markdown-compact :global(strong) { color: var(--accent-main); }
+.markdown-compact p { margin-bottom: 0.85rem; }
+.markdown-compact ul, .markdown-compact ol { padding-left: 1.5rem; margin-bottom: 1rem; list-style-position: outside; }
+.markdown-compact li { margin-bottom: 0.4rem; }
+.markdown-compact strong { color: var(--accent-main); }
+.markdown-compact :last-child { margin-bottom: 0; }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
 
 /* Siri 呼吸效果恢复 */
 @keyframes siri-breathe {

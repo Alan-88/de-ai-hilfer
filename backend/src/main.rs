@@ -8,6 +8,7 @@ mod prompts;
 mod repositories;
 mod services;
 mod state;
+mod structured_analysis_models;
 
 use axum::{
     routing::{get, post},
@@ -108,7 +109,10 @@ async fn main() -> anyhow::Result<()> {
             "/api/v1/entries/recent",
             get(handlers::query::get_recent_entries),
         )
-        .route("/api/v1/entries", get(handlers::query::get_library_entries_page))
+        .route(
+            "/api/v1/entries",
+            get(handlers::query::get_library_entries_page),
+        )
         .route("/api/v1/entries/all", get(handlers::query::get_all_entries))
         .route(
             "/api/v1/entries/:entry_id",

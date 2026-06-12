@@ -3,7 +3,7 @@ use crate::models::{
     DetachPhraseRequest, PhraseLookupConfidence, QualityMode,
 };
 use crate::repositories::{dictionary, knowledge};
-use crate::services::analysis_preview::analysis_markdown;
+use crate::services::analysis_preview::{analysis_markdown, structured_analysis};
 use crate::services::analyze;
 use crate::services::analyze_support::render_phrase_preview_markdown;
 use crate::services::query_resolution::{
@@ -19,6 +19,7 @@ fn build_response(entry: crate::models::KnowledgeEntry) -> AnalyzeResponse {
         entry_id: entry.id,
         query_text: entry.query_text,
         analysis_markdown: analysis_markdown(&entry.analysis),
+        structured_analysis: structured_analysis(&entry.analysis),
         phrase_lookup: phrase_lookup_from_analysis(&entry.analysis),
         phrase_usage_preview: phrase_usage_preview_from_analysis(&entry.analysis),
         attached_phrase_modules: attached_phrase_modules_from_analysis(&entry.analysis),

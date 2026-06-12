@@ -58,7 +58,7 @@ pub async fn infer_headword_with_ai(
             &input,
             AiChatOptions {
                 temperature: 0.0,
-                max_tokens: 48,
+                max_tokens: Some(48),
                 timeout: Duration::from_secs(8),
             },
         )
@@ -95,6 +95,7 @@ pub fn build_intelligent_search_pending_response(term: &str, hint: &str) -> Anal
         analysis_markdown: format!(
             "## 高级查询暂未完成\n\n- {hint_note}\n- 现阶段本地已经能处理：字典直达、变形识别、近似拼写。\n- 如果你输入的是中文语义线索，请等待 AI 推断链路进一步稳定后再试，或先补一个更接近的德语拼写。 "
         ),
+        structured_analysis: None,
         phrase_lookup: None,
         phrase_usage_preview: None,
         attached_phrase_modules: Vec::new(),

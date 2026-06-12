@@ -2,15 +2,17 @@ use crate::models::{
     AnalysisDocument, AnalyzeRequest, AnalyzeResponse, FollowUpItem, NewKnowledgeEntry, QualityMode,
 };
 use crate::repositories::{dictionary, dictionary_lexemes, knowledge};
+use crate::services::analysis_grounded_runtime::generate_grounded_analysis;
 use crate::services::analysis_preview::analysis_markdown;
 use crate::services::analyze_runtime::generate_analysis_with_model;
 use crate::services::analyze_support::{
-    build_phrase_preview_analysis, parse_llm_analysis, parse_phrase_usage_preview, AnalysisMode,
+    build_phrase_preview_analysis, parse_phrase_usage_preview, AnalysisMode,
 };
+use crate::services::dictionary_facts::dictionary_pos;
 use crate::services::dictionary_render::{
     build_compact_analysis_from_dictionary, build_dictionary_excerpt,
-    build_full_analysis_from_dictionary, build_unavailable_analysis,
 };
+use crate::services::dictionary_tags::build_tags;
 use crate::services::query_inference::{
     infer_phrase_lookup, is_form_reference_entry, is_phrase_like_query,
 };
@@ -22,6 +24,11 @@ use crate::state::AppState;
 use anyhow::Result;
 use serde_json::Value;
 use std::collections::VecDeque;
+
+enum GeneratedFullAnalysis {
+    Legacy(crate::services::analyze_runtime::GeneratedAnalysis),
+    Grounded(crate::services::analysis_grounded_runtime::GroundedAnalysis),
+}
 
 pub async fn analyze(state: &AppState, request: AnalyzeRequest) -> Result<AnalyzeResponse> {
     analyze_with_mode(state, request, AnalysisMode::Full).await
@@ -167,14 +174,15 @@ async fn analyze_with_mode(
             dictionary_entry
             .as_ref()
             .map(|entry| build_compact_analysis_from_dictionary(&prototype, &entry.raw_data))
-            .unwrap_or_else(|| AnalysisDocument {
-                markdown: format!(
-                    "## {}\n\n- 核心判断：暂未命中字典或知识库。\n- 建议：请改用首页直接查询，或补充更准确的拼写线索。",
-                    prototype
-                ),
-                tags: vec!["待确认".to_string()],
-                aliases: Vec::new(),
-                prototype: Some(prototype.clone()),
+                .unwrap_or_else(|| AnalysisDocument {
+                    markdown: format!(
+                        "## {}\n\n- 核心判断：暂未命中字典或知识库。\n- 建议：请改用首页直接查询，或补充更准确的拼写线索。",
+                        prototype
+                    ),
+                    structured: None,
+                    tags: vec!["待确认".to_string()],
+                    aliases: Vec::new(),
+                    prototype: Some(prototype.clone()),
                 phrase_lookup: None,
                 phrase_usage_preview: None,
                 attached_phrase_modules: Vec::new(),
@@ -194,20 +202,31 @@ async fn analyze_with_mode(
         tracing::info!(
             "analyze full ai generation: query={query}, prototype={prototype}, phrase_query={is_phrase_query}"
         );
-        match generate_analysis_with_model(
-            state,
-            if is_phrase_query { query } else { &prototype },
-            dictionary_entry.as_ref(),
-            mode,
-            quality_mode,
-            generation_hint,
-            phrase_lookup.as_ref(),
-        )
-        .await
-        {
+        let generated_result = if is_phrase_query {
+            generate_analysis_with_model(
+                state,
+                query,
+                dictionary_entry.as_ref(),
+                mode,
+                quality_mode,
+                generation_hint,
+                phrase_lookup.as_ref(),
+            )
+            .await
+            .map(|generated| GeneratedFullAnalysis::Legacy(generated))
+        } else {
+            generate_grounded_analysis(state, &prototype, dictionary_entry.as_ref(), quality_mode)
+                .await
+                .map(GeneratedFullAnalysis::Grounded)
+        };
+
+        match generated_result {
             Ok(generated) => {
                 let target = if is_phrase_query { query } else { &prototype };
                 if is_phrase_query {
+                    let GeneratedFullAnalysis::Legacy(generated) = generated else {
+                        unreachable!("phrase query should use legacy phrase generation");
+                    };
                     let (preview, tags, aliases) =
                         parse_phrase_usage_preview(&generated.content, target)?;
                     (
@@ -229,7 +248,10 @@ async fn analyze_with_mode(
                         Some(generated.model),
                     )
                 } else {
-                    let mut parsed = parse_llm_analysis(&generated.content, target);
+                    let GeneratedFullAnalysis::Grounded(generated) = generated else {
+                        unreachable!("word query should use grounded generation");
+                    };
+                    let mut parsed = generated.analysis;
                     parsed.phrase_lookup = phrase_lookup.clone();
                     (
                         parsed,
@@ -244,29 +266,17 @@ async fn analyze_with_mode(
             }
             Err(err) => {
                 tracing::warn!(
-                    "analyze fallback to deterministic dictionary rendering: query={query}, prototype={prototype}, err={err:#}"
+                    "grounded analyze generation failed: query={query}, prototype={prototype}, err={err:#}"
                 );
-                if is_phrase_query {
-                    (
-                        build_phrase_unavailable_analysis(query, phrase_lookup.as_ref()),
-                        false,
-                        "短语待确认".to_string(),
-                        None,
-                    )
-                } else {
-                    let fallback = dictionary_entry
-                        .as_ref()
-                        .map(|entry| {
-                            build_full_analysis_from_dictionary(&prototype, &entry.raw_data)
-                        })
-                        .unwrap_or_else(|| build_unavailable_analysis(&prototype));
-                    let source = if dictionary_entry.is_some() {
-                        "字典兜底"
-                    } else {
-                        "本地兜底"
-                    };
-                    (fallback, false, source.to_string(), None)
+                if !is_phrase_query {
+                    return Err(err.context("grounded analysis generation failed"));
                 }
+                (
+                    build_phrase_unavailable_analysis(query, phrase_lookup.as_ref()),
+                    false,
+                    "短语待确认".to_string(),
+                    None,
+                )
             }
         }
     };
@@ -287,6 +297,11 @@ async fn analyze_with_mode(
     {
         analysis.aliases.push(query.to_string());
     }
+    if analysis.tags.is_empty() {
+        if let Some(entry) = dictionary_entry.as_ref() {
+            analysis.tags = build_tags(&entry.raw_data, dictionary_pos(&entry.raw_data));
+        }
+    }
 
     if dictionary_entry.is_none() && !used_ai_generation {
         tracing::info!(
@@ -301,6 +316,7 @@ async fn analyze_with_mode(
                 prototype
             },
             analysis_markdown: analysis.markdown,
+            structured_analysis: analysis.structured,
             phrase_lookup: analysis.phrase_lookup,
             phrase_usage_preview: analysis.phrase_usage_preview,
             attached_phrase_modules: analysis.attached_phrase_modules,
@@ -319,6 +335,7 @@ async fn analyze_with_mode(
             entry_id: 0,
             query_text: query.to_string(),
             analysis_markdown: analysis.markdown,
+            structured_analysis: analysis.structured,
             phrase_lookup: analysis.phrase_lookup,
             phrase_usage_preview: analysis.phrase_usage_preview,
             attached_phrase_modules: analysis.attached_phrase_modules,
@@ -329,8 +346,8 @@ async fn analyze_with_mode(
         });
     }
 
-    let lexeme_id = dictionary_lexemes::find_unique_lexeme_id_by_surface(&state.pool, &prototype)
-        .await?;
+    let lexeme_id =
+        dictionary_lexemes::find_unique_lexeme_id_by_surface(&state.pool, &prototype).await?;
 
     let new_entry = NewKnowledgeEntry {
         query_text: prototype.clone(),
@@ -371,6 +388,7 @@ async fn analyze_with_mode(
         entry_id: entry.id,
         query_text: entry.query_text,
         analysis_markdown: analysis.markdown,
+        structured_analysis: analysis.structured,
         phrase_lookup: analysis.phrase_lookup,
         phrase_usage_preview: analysis.phrase_usage_preview,
         attached_phrase_modules: analysis.attached_phrase_modules,
@@ -398,6 +416,7 @@ fn cached_response(
         entry_id,
         query_text: query_text.to_string(),
         analysis_markdown: analysis_markdown(analysis),
+        structured_analysis: crate::services::analysis_preview::structured_analysis(analysis),
         phrase_lookup: phrase_lookup_from_analysis(analysis),
         phrase_usage_preview: phrase_usage_preview_from_analysis(analysis),
         attached_phrase_modules: attached_phrase_modules_from_analysis(analysis),

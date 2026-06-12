@@ -69,16 +69,19 @@ pub async fn list_lexemes_by_ids(
         return Ok(Vec::new());
     }
 
-    let rows = sqlx::query_as::<_, (
-        i64,
-        String,
-        String,
-        Value,
-        Option<bool>,
-        chrono::DateTime<chrono::Utc>,
-        bool,
-        Option<String>,
-    )>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            i64,
+            String,
+            String,
+            Value,
+            Option<bool>,
+            chrono::DateTime<chrono::Utc>,
+            bool,
+            Option<String>,
+        ),
+    >(
         r#"
         SELECT
             dl.id AS lexeme_id,
@@ -107,7 +110,8 @@ pub async fn list_lexemes_by_ids(
     .await?;
 
     let mut grouped = HashMap::<i64, (String, Vec<DictionaryRawLookupRow>)>::new();
-    for (lexeme_id, lexeme_surface, headword, raw_data, has_audio, created_at, is_form_of, pos) in rows
+    for (lexeme_id, lexeme_surface, headword, raw_data, has_audio, created_at, is_form_of, pos) in
+        rows
     {
         grouped
             .entry(lexeme_id)

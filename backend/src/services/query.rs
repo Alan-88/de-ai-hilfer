@@ -3,7 +3,9 @@ use crate::models::{
     LibraryQueryTab, RecentItem, StatusResponse, SuggestionResponse,
 };
 use crate::repositories::{dictionary, dictionary_lexemes, knowledge};
-use crate::services::analysis_preview::{analysis_markdown, preview_from_analysis};
+use crate::services::analysis_preview::{
+    analysis_markdown, preview_from_analysis, structured_analysis,
+};
 use crate::services::embedding_lookup::infer_headword_by_embedding;
 use crate::services::query_inference::{
     build_intelligent_search_pending_response, infer_headword_locally, infer_headword_with_ai,
@@ -227,6 +229,7 @@ fn build_knowledge_suggestion(
         query_text: entry.query_text,
         preview: preview_from_analysis(&entry.analysis),
         analysis_markdown: analysis_markdown(&entry.analysis),
+        structured_analysis: structured_analysis(&entry.analysis),
         source: "知识库".to_string(),
         follow_ups: Vec::new(),
     }
@@ -247,6 +250,7 @@ fn build_alias_suggestion(
             preview_from_analysis(&entry.analysis)
         ),
         analysis_markdown: analysis_markdown(&entry.analysis),
+        structured_analysis: structured_analysis(&entry.analysis),
         source: "知识库".to_string(),
         follow_ups: Vec::new(),
     }
@@ -263,6 +267,7 @@ fn build_lexeme_suggestion(
         query_text: entry.surface.clone(),
         preview,
         analysis_markdown: String::new(),
+        structured_analysis: None,
         source: "词典".to_string(),
         follow_ups: Vec::new(),
     }
@@ -356,6 +361,7 @@ pub async fn intelligent_search(
                 entry_id: entry.id,
                 query_text: entry.query_text,
                 analysis_markdown: analysis_markdown(&entry.analysis),
+                structured_analysis: structured_analysis(&entry.analysis),
                 phrase_lookup: entry
                     .analysis
                     .get("phrase_lookup")

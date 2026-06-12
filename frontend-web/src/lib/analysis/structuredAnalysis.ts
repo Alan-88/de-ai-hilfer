@@ -4,6 +4,16 @@ import {
   type StructuredExample,
   type UsageModule,
 } from "$lib/analysis/usageModules";
+import {
+  extractDeepInsights,
+  flattenWordNetworkTerms,
+  looksStructuredTooSparse,
+  normalizeWordNetworkDocument,
+  type StructuredAnalysisDeepInsight as DeepInsight,
+  type StructuredAnalysisWordNetwork as WordNetwork,
+  type StructuredAnalysisWordNetworkItem as WordNetworkItem,
+} from "$lib/analysis/structuredAnalysisSupport";
+import type { StructuredAnalysisDocument as BackendStructuredAnalysisDocument } from "$lib/types";
 
 export interface StructuredMeaning {
   partOfSpeech: string;
@@ -16,12 +26,6 @@ export interface GrammarRow {
   value: string;
 }
 
-export interface DeepInsight {
-  title: string;
-  plain: string;
-  html: string;
-}
-
 export interface StructuredAnalysis {
   headword: string;
   phonetic: string;
@@ -30,11 +34,29 @@ export interface StructuredAnalysis {
   collocations: string[];
   examples: StructuredExample[];
   grammarRows: GrammarRow[];
-  family: string[];
-  synonyms: string[];
-  antonyms: string[];
+  grammarBranches: import("$lib/types").GrammarBranch[];
+  wordNetwork: WordNetwork;
   deepInsights: DeepInsight[];
   rawMarkdown: string;
+  sourceType: "structured" | "markdown";
+}
+
+type StructuredAnalysisPayload = Omit<StructuredAnalysis, "sourceType">;
+
+export function resolveStructuredAnalysis(
+  markdown: string,
+  structured: BackendStructuredAnalysisDocument | null | undefined,
+  fallbackHeadword = ""
+): StructuredAnalysis {
+  const normalizedStructured = normalizeStructuredAnalysisDocument(
+    structured,
+    markdown,
+    fallbackHeadword
+  );
+  if (normalizedStructured) {
+    return { ...normalizedStructured, sourceType: "structured" };
+  }
+  return { ...parseAnalysisMarkdown(markdown, fallbackHeadword), sourceType: "markdown" };
 }
 
 interface RawSection {
@@ -45,16 +67,6 @@ interface RawSection {
 }
 
 const SECTION_RE = /^####\s+(.+)$/gm;
-const DEEP_INSIGHT_TITLES = [
-  "深度解析",
-  "避坑",
-  "多维解释",
-  "词源",
-  "常见错误",
-  "易错",
-  "辨析",
-  "使用提醒",
-];
 
 export function parseAnalysisMarkdown(markdown: string, fallbackHeadword = ""): StructuredAnalysis {
   const normalized = (markdown || "").replace(/\r/g, "").trim();
@@ -71,9 +83,8 @@ export function parseAnalysisMarkdown(markdown: string, fallbackHeadword = ""): 
     markdownToPlainText
   );
   const grammarRows = parseGrammarTable(getContentByKeywords(allSections, ["语法详情", "语法"]));
-  const { family, synonyms, antonyms } = parseWordNetwork(getContentByKeywords(allSections, ["词汇网络", "相关词"]));
-  
-  const deepInsights = extractDeepInsights(allSections);
+  const wordNetwork = parseWordNetwork(getContentByKeywords(allSections, ["词汇网络", "相关词"]));
+  const deepInsights = extractDeepInsights(allSections, markdownToPlainText, renderMarkdownHtml);
 
   return {
     headword,
@@ -83,125 +94,95 @@ export function parseAnalysisMarkdown(markdown: string, fallbackHeadword = ""): 
     collocations,
     examples,
     grammarRows,
-    family,
-    synonyms,
-    antonyms,
+    grammarBranches: [],
+    wordNetwork,
     deepInsights,
     rawMarkdown: normalized,
+    sourceType: "markdown",
   };
 }
 
-function extractDeepInsights(sections: RawSection[]): DeepInsight[] {
-  const insights: DeepInsight[] = [];
-  const deepSections = sections.filter((section) =>
-    DEEP_INSIGHT_TITLES.some((title) => section.title.includes(title))
-  );
+function normalizeStructuredAnalysisDocument(
+  structured: BackendStructuredAnalysisDocument | null | undefined,
+  markdown: string,
+  fallbackHeadword: string
+): StructuredAnalysisPayload | null {
+  if (!structured) return null;
 
-  for (const section of deepSections) {
-    if (!section.content.trim()) continue;
+  const rawMarkdown = (markdown || "").replace(/\r/g, "").trim();
+  const wordNetwork = normalizeWordNetworkDocument(structured);
+  const family = flattenWordNetworkTerms(wordNetwork.family, markdownToPlainText);
+  const synonyms = flattenWordNetworkTerms(wordNetwork.synonyms, markdownToPlainText);
+  const antonyms = flattenWordNetworkTerms(wordNetwork.antonyms, markdownToPlainText);
 
-    if (section.title.includes("深度解析") || section.title.includes("避坑")) {
-      const parsed = parseDeepInsights(section.content);
-      if (parsed.length > 0) {
-        insights.push(...parsed);
-        continue;
-      }
-    }
+  const normalized = {
+    headword: (structured.headword || fallbackHeadword || "").trim(),
+    phonetic: (structured.phonetic || "").trim(),
+    meanings: (structured.meanings || [])
+      .map((meaning) => ({
+        partOfSpeech: (meaning.part_of_speech || "").trim(),
+        chinese: (meaning.chinese || "").trim(),
+        english: (meaning.english || "").trim(),
+      }))
+      .filter((meaning) => meaning.chinese || meaning.english),
+    usageModules: (structured.usage_modules || [])
+      .map((module) => ({
+        title: (module.title || "").trim(),
+        explanation: (module.explanation || "").trim(),
+        example:
+          module.example_de?.trim() || module.example_zh?.trim()
+            ? {
+                de: (module.example_de || "").trim(),
+                zh: (module.example_zh || "").trim(),
+              }
+            : null,
+      }))
+      .filter((module) => module.title || module.explanation || module.example?.de || module.example?.zh),
+    collocations: dedupeStrings(structured.collocations || []),
+    examples: (structured.examples || [])
+      .map((example) => ({
+        de: (example.de || "").trim(),
+        zh: (example.zh || "").trim(),
+      }))
+      .filter((example) => example.de || example.zh),
+    grammarRows: (structured.grammar_rows || [])
+      .map((row) => ({
+        key: (row.key || "").trim(),
+        value: (row.value || "").trim(),
+      }))
+      .filter((row) => row.key && row.value),
+    grammarBranches: structured.grammar_branches || [],
+    wordNetwork,
+    deepInsights: (structured.deep_insights || [])
+      .map((insight) => {
+        const title = markdownToPlainText((insight.title || "").trim()) || "分析片段";
+        const body = (insight.content_markdown || "").trim();
+        return body
+          ? {
+              title,
+              plain: markdownToPlainText(body),
+              html: renderMarkdownHtml(body),
+            }
+          : null;
+      })
+      .filter((insight): insight is DeepInsight => Boolean(insight)),
+    rawMarkdown,
+  } satisfies StructuredAnalysisPayload;
 
-    insights.push(createDeepInsight(section.title, section.content));
+  if (looksStructuredTooSparse(normalized, rawMarkdown)) {
+    return null;
   }
 
-  return dedupeDeepInsights(insights);
-}
+  const isEmpty =
+    !normalized.phonetic &&
+    normalized.meanings.length === 0 &&
+    normalized.usageModules.length === 0 &&
+    normalized.collocations.length === 0 &&
+    normalized.examples.length === 0 &&
+    normalized.grammarRows.length === 0 &&
+    normalized.deepInsights.length === 0;
 
-function parseDeepInsights(content: string): DeepInsight[] {
-  if (!content) return [];
-  const lines = content.split("\n");
-  const insights: DeepInsight[] = [];
-
-  let currentTitle = "";
-  let currentLines: string[] = [];
-
-  function flush() {
-    if (!currentTitle) return;
-    const body = currentLines.join("\n").trim();
-    if (!body) return;
-    insights.push(createDeepInsight(currentTitle, body));
-  }
-
-  for (const line of lines) {
-    if (isTopLevelInsightBullet(line) || isInlineInsightHeading(line) || isOrderedInsightHeading(line)) {
-      flush();
-      const rawTitle = normalizeInsightLead(line);
-      const { title, rest } = splitInsightLead(rawTitle);
-      currentTitle = title;
-      currentLines = rest ? [rest] : [];
-    } else if (currentTitle) {
-      const cleanLine = line.replace(/^ {1,4}/, "");
-      currentLines.push(cleanLine);
-    }
-  }
-  flush();
-  return insights;
-}
-
-function isTopLevelInsightBullet(line: string): boolean {
-  return /^(\*|-)\s+/.test(line);
-}
-
-function isInlineInsightHeading(line: string): boolean {
-  return /^\*\*[^*]+\*\*[:：]?\s*$/.test(line.trim());
-}
-
-function isOrderedInsightHeading(line: string): boolean {
-  return /^\s*\d+\.\s+/.test(line);
-}
-
-function normalizeInsightLead(line: string): string {
-  return line.replace(/^(\*|-)\s+/, "").replace(/^\s*\d+\.\s+/, "").trim();
-}
-
-function splitInsightLead(rawTitle: string): { title: string; rest: string } {
-  const boldOnly = rawTitle.match(/^\*\*([^*]+)\*\*[:：]?(.*)$/);
-  if (boldOnly) {
-    return {
-      title: markdownToPlainText(boldOnly[1]),
-      rest: boldOnly[2].trim(),
-    };
-  }
-
-  const colonIndex = rawTitle.search(/[:：]/);
-  if (colonIndex >= 0) {
-    return {
-      title: markdownToPlainText(rawTitle.slice(0, colonIndex)),
-      rest: rawTitle.slice(colonIndex + 1).trim(),
-    };
-  }
-
-  return {
-    title: markdownToPlainText(rawTitle),
-    rest: "",
-  };
-}
-
-function createDeepInsight(title: string, body: string): DeepInsight {
-  const normalizedTitle = markdownToPlainText(title) || "分析片段";
-  const normalizedBody = body.trim();
-  return {
-    title: normalizedTitle,
-    plain: markdownToPlainText(normalizedBody),
-    html: renderMarkdownHtml(normalizedBody),
-  };
-}
-
-function dedupeDeepInsights(insights: DeepInsight[]): DeepInsight[] {
-  const seen = new Set<string>();
-  return insights.filter((insight) => {
-    const key = `${insight.title}::${insight.plain}`;
-    if (!insight.plain || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return isEmpty ? null : normalized;
 }
 
 function getAllSections(markdown: string): RawSection[] {
@@ -277,8 +258,8 @@ function parseGrammarTable(content: string): GrammarRow[] {
     .filter(row => row.key && row.value && !row.key.includes("特征"));
 }
 
-function parseWordNetwork(content: string): { family: string[], synonyms: string[], antonyms: string[] } {
-  const res = { family: [], synonyms: [], antonyms: [] };
+function parseWordNetwork(content: string): WordNetwork {
+  const res: WordNetwork = { family: [], synonyms: [], antonyms: [] };
   if (!content) return res;
   let current: keyof typeof res | null = null;
   for (const line of content.split("\n")) {
@@ -288,8 +269,13 @@ function parseWordNetwork(content: string): { family: string[], synonyms: string
     if (p.includes("同义词")) { current = "synonyms"; continue; }
     if (p.includes("反义词")) { current = "antonyms"; continue; }
     if (current && (line.trim().startsWith("*") || line.includes("    *"))) {
-      // @ts-ignore
-      res[current].push(p);
+      res[current].push({
+        term: p,
+        partOfSpeech: "",
+        chinese: "",
+        english: "",
+        note: "",
+      });
     }
   }
   return res;
@@ -298,9 +284,23 @@ function parseWordNetwork(content: string): { family: string[], synonyms: string
 function createEmptyAnalysis(headword: string): StructuredAnalysis {
   return {
     headword, phonetic: "", meanings: [], usageModules: [], collocations: [],
-    examples: [], grammarRows: [], family: [], synonyms: [], antonyms: [],
-    deepInsights: [], rawMarkdown: ""
+    examples: [], grammarRows: [], grammarBranches: [], wordNetwork: { family: [], synonyms: [], antonyms: [] },
+    deepInsights: [], rawMarkdown: "",
+    sourceType: "markdown"
   };
+}
+
+function dedupeStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values
+    .map((value) => markdownToPlainText(value))
+    .filter((value) => !!value)
+    .filter((value) => {
+      const key = value.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 export function markdownToPlainText(markdown: string): string {

@@ -6,11 +6,11 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use crate::services::dictionary_lexeme_extract::{
-    build_gloss_preview, clean_entry, extract_form_of_words, extract_forms, normalize_surface,
-};
 use crate::services::dictionary_entry_form::{
     classify_form_status, strip_form_of_senses, EntryFormStatus,
+};
+use crate::services::dictionary_lexeme_extract::{
+    build_gloss_preview, clean_entry, extract_form_of_words, extract_forms, normalize_surface,
 };
 
 #[derive(Debug, Clone)]

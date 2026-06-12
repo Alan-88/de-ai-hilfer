@@ -11,3 +11,4 @@ pub mod prompts;
 pub mod repositories;
 pub mod services;
 pub mod state;
+mod structured_analysis_models;

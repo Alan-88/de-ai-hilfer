@@ -118,7 +118,10 @@ pub fn validate_snapshot(snapshot: &KnowledgeSnapshotPayload) -> SnapshotValidat
 
     SnapshotValidationSummary {
         total_entries: snapshot.knowledge_entries.len(),
-        valid_entries: snapshot.knowledge_entries.len().saturating_sub(issues.len()),
+        valid_entries: snapshot
+            .knowledge_entries
+            .len()
+            .saturating_sub(issues.len()),
         invalid_entries: issues.len(),
         issues,
     }
@@ -161,7 +164,9 @@ pub async fn build_restore_plan(
                     retained_entry_ids.insert(entry.id);
                 }
                 None => {
-                    reasons.push("prototype did not resolve to a unique restorable lexeme".to_string());
+                    reasons.push(
+                        "prototype did not resolve to a unique restorable lexeme".to_string(),
+                    );
                     rejected_entries.push(RestoreRejectedEntry {
                         entry_id: entry.id,
                         query_text: entry.query_text.clone(),
@@ -337,7 +342,10 @@ fn validate_snapshot_entry(entry: &KnowledgeEntry) -> Vec<String> {
         None => reasons.push("missing prototype".to_string()),
     }
 
-    match (entry.prototype.as_deref(), dictionary_excerpt_word(&entry.analysis)) {
+    match (
+        entry.prototype.as_deref(),
+        dictionary_excerpt_word(&entry.analysis),
+    ) {
         (Some(prototype), Some(word)) if prototype == word => {}
         (Some(prototype), Some(word)) => reasons.push(format!(
             "dictionary_excerpt.word mismatch: {} != {}",
@@ -347,11 +355,15 @@ fn validate_snapshot_entry(entry: &KnowledgeEntry) -> Vec<String> {
         (None, Some(_)) => {}
     }
 
-    if let (Some(expected), Some(actual)) =
-        (entry.prototype.as_deref(), analysis_prototype(&entry.analysis))
-    {
+    if let (Some(expected), Some(actual)) = (
+        entry.prototype.as_deref(),
+        analysis_prototype(&entry.analysis),
+    ) {
         if expected != actual {
-            reasons.push(format!("analysis.prototype mismatch: {} != {}", expected, actual));
+            reasons.push(format!(
+                "analysis.prototype mismatch: {} != {}",
+                expected, actual
+            ));
         }
     }
 
@@ -384,7 +396,10 @@ async fn resolve_target_lexeme(
     Ok(None)
 }
 
-async fn resolve_unique_exact_lexeme(pool: &DbPool, surface: &str) -> Result<Option<i64>, sqlx::Error> {
+async fn resolve_unique_exact_lexeme(
+    pool: &DbPool,
+    surface: &str,
+) -> Result<Option<i64>, sqlx::Error> {
     let rows = sqlx::query("SELECT id FROM dictionary_lexemes WHERE surface = $1 ORDER BY id ASC")
         .bind(surface)
         .fetch_all(pool)
@@ -397,7 +412,10 @@ async fn resolve_unique_exact_lexeme(pool: &DbPool, surface: &str) -> Result<Opt
     }
 }
 
-async fn resolve_unique_ci_lexeme(pool: &DbPool, surface: &str) -> Result<Option<i64>, sqlx::Error> {
+async fn resolve_unique_ci_lexeme(
+    pool: &DbPool,
+    surface: &str,
+) -> Result<Option<i64>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
         SELECT id

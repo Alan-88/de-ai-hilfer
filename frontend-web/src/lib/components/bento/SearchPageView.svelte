@@ -59,7 +59,7 @@
       recentItems,
       suggestions,
     });
-    
+
     s.update(state => ({
       ...state,
       query,
@@ -75,6 +75,7 @@
               entry_id: 0,
               query_text: query,
               analysis_markdown: "",
+              structured_analysis: null,
               phrase_usage_preview: null,
               attached_phrase_modules: [],
               source: qualityMode === "pro" ? "Pro" : "Flash",
@@ -292,6 +293,15 @@
     advancedHint = "";
   }
 
+  async function cancelSearch() {
+    currentSearchController?.abort();
+    s.update(state => ({ ...state, isLoading: false, isStreaming: false }));
+    // 如果还没结果，清空占位
+    if (!$s.result || $s.result.entry_id === 0) {
+      s.setResult(null);
+    }
+  }
+
   // 键盘交互优化
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === "Tab") {
@@ -348,8 +358,8 @@
 
     <div class="search-panel-group" class:has-suggestions={isSearchFocusing}>
       <form class="search-form" onsubmit={(e) => { e.preventDefault(); (showAdvanced && advancedHint.trim()) ? handleAdvancedSearch() : handleSearch(); }}>
-        <div class="input-row main-row" class:is-generating-box={$s.isStreaming}>
-          <i class="ph ph-magnifying-glass search-icon"></i>
+        <div class="input-row main-row" class:is-generating-box={$s.isStreaming} class:is-single-row={!showAdvanced}>
+          <i class="ph-bold ph-magnifying-glass search-icon"></i>
           <input
             bind:this={mainInputRef}
             bind:value={$s.query}
@@ -368,8 +378,18 @@
             <button type="button" class="shortcut-btn" onclick={() => { showAdvanced = !showAdvanced; focusSoon(advancedInputRef); }}>
               <span>↹</span> Tab 联想
             </button>
-            <button type="submit" class="btn-primary search-submit-btn" disabled={$s.isLoading}>
-              {$s.isLoading ? "分析中" : "分析"}
+            <button
+              type={$s.isLoading ? "button" : "submit"}
+              class="btn-primary search-submit-btn"
+              class:is-canceling={$s.isLoading}
+              onclick={() => { if ($s.isLoading) cancelSearch(); }}
+            >
+              {#if $s.isLoading}
+                <span class="btn-text-content loading-text"><i class="ph-bold ph-spinner-gap spin"></i> 分析中</span>
+                <span class="btn-text-content cancel-text"><i class="ph-fill ph-stop"></i> 取消</span>
+              {:else}
+                <i class="ph-bold ph-magnifying-glass"></i> 分析
+              {/if}
             </button>
           </div>
         </div>
@@ -459,15 +479,15 @@
 
 <style>
   .search-page-container { width: 100%; display: flex; flex-direction: column; align-items: center; position: relative; }
-  
+
   .search-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.1);
     backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     z-index: 90;
   }
 
-  .search-main-wrapper { 
-    width: 100%; max-width: 740px; margin-top: 25vh; 
+  .search-main-wrapper {
+    width: 100%; max-width: 740px; margin-top: 25vh;
     transition: all var(--transition-smooth); z-index: 100; position: relative;
   }
   .is-searching .search-main-wrapper { margin-top: 0; }
@@ -477,18 +497,19 @@
   .search-intro h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 800; letter-spacing: -0.03em; margin-bottom: 0.5rem; color: var(--text-main); }
   .search-intro p { margin-left: 14rem; color: var(--text-muted); font-size: 1.15rem; }
 
-  .search-panel-group { 
+  .search-panel-group {
     position: relative; width: 100%; background: var(--card-bg);
     border: 1px solid var(--border-color); border-radius: 28px;
     box-shadow: var(--shadow-sm); transition: all var(--transition-smooth);
   }
-  
+
   .has-suggestions { border-bottom-left-radius: 0; border-bottom-right-radius: 0; box-shadow: var(--shadow-hover); }
 
-  .input-row { display: flex; align-items: center; padding: 0.5rem 0.5rem 0.5rem 1.5rem; gap: 1rem; }
+  .input-row { display: flex; align-items: center; padding: 0.5rem 0.5rem 0.5rem 1.5rem; gap: 1rem; border-radius: inherit; }
   .input-row input { flex: 1; background: transparent; font-size: 1.25rem; color: var(--text-main); height: 3.5rem; }
 
-  .main-row { position: relative; z-index: 2; }
+  .main-row { position: relative; z-index: 2; border-top-left-radius: 28px; border-top-right-radius: 28px; }
+  .main-row.is-single-row { border-bottom-left-radius: 28px; border-bottom-right-radius: 28px; }
   .sub-row { border-top: 1px solid var(--border-color); padding: 0.85rem 1.5rem; background: var(--bg-color); }
   .sub-row input { font-size: 1.05rem; height: 2.5rem; }
 
@@ -503,6 +524,51 @@
     width: 2.8rem; height: 2.8rem; border-radius: 50%;
     background: var(--card-bg); border: 1px solid var(--border-color);
     box-shadow: var(--shadow-sm); display: flex; align-items: center; justify-content: center;
+  }
+
+  .search-submit-btn {
+    position: relative;
+    overflow: hidden;
+    width: 7.2rem;
+    height: 2.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .btn-text-content {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .cancel-text {
+    transform: translateY(100%);
+    opacity: 0;
+    color: var(--text-main);
+  }
+
+  .search-submit-btn.is-canceling:hover {
+    background: var(--btn-secondary);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    box-shadow: none;
+  }
+
+  .search-submit-btn.is-canceling:hover .loading-text {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+
+  .search-submit-btn.is-canceling:hover .cancel-text {
+    transform: translateY(0);
+    opacity: 1;
   }
 
   .integrated-suggestions {

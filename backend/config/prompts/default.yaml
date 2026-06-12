@@ -103,6 +103,12 @@ analysis_prompt: >-
   * 常见错误 (Typische Fehler)
       点出 1-2 个常见错误并给出正误对照。
 
+model_a_prompt: ""
+
+stage2_prompt: ""
+
+structure_prompt: ""
+
 intelligent_search_prompt: >-
   You are an expert German language detective. Your task is to deduce the single, correct, canonical German word a user wants to find, based on their potentially misspelled German input and an optional natural language hint in Chinese.
   You MUST respond ONLY with a JSON object in the format {"result": "the_deduced_word"}. Do not add any conversational text, explanations, or markdown.

@@ -42,6 +42,7 @@ pub fn build_phrase_unavailable_analysis(
         markdown: format!(
             "## {phrase}\n\n- 这是一次短语/搭配查询。\n{host_line}\n- 但本轮模型暂时不可用，无法稳定生成该短语的场景化解释。\n- 建议：稍后重试，或先切换查看候选主词。"
         ),
+        structured: None,
         tags: vec!["短语待确认".to_string()],
         aliases: Vec::new(),
         prototype: phrase_lookup.and_then(|lookup| lookup.best_host_headword.clone()),
@@ -69,7 +70,7 @@ pub async fn maybe_correct_spelling(state: &AppState, query: &str) -> Result<Str
             query,
             AiChatOptions {
                 temperature: 0.0,
-                max_tokens: 80,
+                max_tokens: Some(80),
                 timeout: Duration::from_secs(8),
             },
         )
@@ -97,7 +98,7 @@ pub async fn identify_prototype(state: &AppState, query: &str) -> Result<String>
             query,
             AiChatOptions {
                 temperature: 0.0,
-                max_tokens: 80,
+                max_tokens: Some(80),
                 timeout: Duration::from_secs(8),
             },
         )
