@@ -48,7 +48,7 @@
     selectedActionModelKey?: string;
     selectedActionModelOverride?: AiModelOverride | null;
     onAddToLearning: () => void;
-    onRegenerate: (mode: QualityMode, hint: string) => void;
+    onRegenerate: (mode: QualityMode, hint: string, modelOverride?: AiModelOverride | null) => void;
     onActionModelChange?: (key: string) => void;
     onSelectRecent: (query: string) => void;
     onSelectPhraseHost?: (headword: string, mode?: "attach" | "view") => void;
@@ -57,8 +57,8 @@
     onnewFollowUp?: (item: FollowUpItem) => void;
   }>();
 
-  let showRegenerateHint = $state(false);
-  let regenerateHint = $state("");
+  let showCustomRegenerate = $state(false);
+  let customRegenerateHint = $state("");
   let pendingHostHeadword = $state<string | null>(null);
   let activeGrammarBranch = $state<import("$lib/types").GrammarBranch | null>(null);
   let popoverTriggerRect = $state<DOMRect | null>(null);
@@ -205,6 +205,19 @@
   const needsHostConfirmation = $derived(
     Boolean(result.phrase_lookup && result.phrase_lookup.confidence !== "high")
   );
+  const actionProviderOptions = $derived(
+    Array.from(new Map(actionModelOptions.map((option: ActionModelOption) => [option.provider_name, option.provider_name])).values())
+  );
+  const selectedActionProviderName = $derived(
+    actionModelOptions.find((option: ActionModelOption) => option.key === selectedActionModelKey)?.provider_name
+      ?? actionProviderOptions[0]
+      ?? ""
+  );
+  const selectedProviderModelOptions = $derived(
+    actionModelOptions.filter((option: ActionModelOption) => option.provider_name === selectedActionProviderName)
+  );
+  const displayedModelName = $derived(displayModelName(result.model));
+  const shouldShowSourceBadge = $derived(shouldDisplaySourceBadge(result.source, result.model));
 
   $effect(() => {
     result.entry_id;
@@ -218,6 +231,28 @@
     if (s.includes("db") || s.includes("数据")) return "source-db";
     if (s.includes("pro")) return "source-pro";
     return "source-flash";
+  }
+
+  function displayModelName(model?: string | null) {
+    if (!model) return "";
+    const trimmed = model.trim();
+    return trimmed.split(/\s*\/\s*|\s*:\s*/).filter(Boolean).at(-1) ?? trimmed;
+  }
+
+  function shouldDisplaySourceBadge(source?: string | null, model?: string | null) {
+    if (!source) return false;
+    const s = source.toLowerCase();
+    if (model && (s.includes("flash") || s.includes("pro"))) return false;
+    return true;
+  }
+
+  function firstModelKeyForProvider(providerName: string) {
+    return actionModelOptions.find((option: ActionModelOption) => option.provider_name === providerName)?.key ?? "";
+  }
+
+  function selectActionProvider(providerName: string) {
+    const nextKey = firstModelKeyForProvider(providerName);
+    if (nextKey) onActionModelChange?.(nextKey);
   }
 
   function emitFollowUp(item: FollowUpItem) {
@@ -295,11 +330,13 @@
       </div>
 
       <div class="meta-row">
-        <span class="mini-label {getSourceClass(result.source)}">
-          {result.source || "AI"}
-        </span>
-        {#if result.model}
-          <span class="mini-label model-name">{result.model}</span>
+        {#if shouldShowSourceBadge}
+          <span class="mini-label {getSourceClass(result.source)}">
+            {result.source || "AI"}
+          </span>
+        {/if}
+        {#if displayedModelName}
+          <span class="mini-label model-name">{displayedModelName}</span>
         {/if}
         {#if structured.sourceType === "structured"}
           <span class="mini-label source-pro structured-badge">
@@ -310,27 +347,20 @@
     </div>
 
     <div class="header-actions">
-      {#if actionModelOptions.length > 0}
-        <select
-          class="action-model-select"
-          value={selectedActionModelKey}
-          onchange={(event) => onActionModelChange?.(event.currentTarget.value)}
-          disabled={isStreaming}
-          title="本次动作使用的模型"
-        >
-          {#each actionModelOptions as option}
-            <option value={option.key}>{option.label}</option>
-          {/each}
-        </select>
-      {/if}
       <div class="action-icons">
-        <button class="icon-btn" onclick={() => onRegenerate("default", regenerateHint)} disabled={isStreaming} title="重新生成">
+        <button class="icon-btn" onclick={() => onRegenerate("default", "", null)} disabled={isStreaming} title="按当前配置重新生成">
           <i class="ph ph-arrows-clockwise"></i>
         </button>
-        <button class="icon-btn pro-btn" onclick={() => onRegenerate("pro", regenerateHint)} disabled={isStreaming} title="Pro 增强模式">
+        <button class="icon-btn pro-btn" onclick={() => onRegenerate("pro", "", null)} disabled={isStreaming} title="按当前配置增强生成">
           <i class="ph-fill ph-lightning"></i>
         </button>
-        <button class="icon-btn" onclick={() => showRegenerateHint = !showRegenerateHint} disabled={isStreaming} title="提示词调整">
+        <button
+          class="icon-btn"
+          class:is-active={showCustomRegenerate}
+          onclick={() => showCustomRegenerate = !showCustomRegenerate}
+          disabled={isStreaming}
+          title="本次动作设置"
+        >
           <i class="ph ph-sliders-horizontal"></i>
         </button>
       </div>
@@ -412,15 +442,52 @@
     </div>
   {/if}
 
-  {#if showRegenerateHint}
-    <div class="bento-card card-full" transition:slide>
-      <div class="card-title"><i class="ph-fill ph-sliders-horizontal"></i> 本次生成要求</div>
+  {#if showCustomRegenerate}
+    <div class="bento-card card-full custom-regenerate-card" transition:slide>
+      <div class="card-title"><i class="ph-fill ph-sliders-horizontal"></i> 本次动作设置</div>
+      <div class="custom-action-grid">
+        <label class="compact-field">
+          <span>渠道</span>
+          <select
+            value={selectedActionProviderName}
+            onchange={(event) => selectActionProvider(event.currentTarget.value)}
+            disabled={isStreaming || actionProviderOptions.length === 0}
+          >
+            {#each actionProviderOptions as provider}
+              <option value={provider}>{provider}</option>
+            {/each}
+          </select>
+        </label>
+        <label class="compact-field">
+          <span>模型</span>
+          <select
+            value={selectedActionModelKey}
+            onchange={(event) => onActionModelChange?.(event.currentTarget.value)}
+            disabled={isStreaming || selectedProviderModelOptions.length === 0}
+          >
+            {#each selectedProviderModelOptions as option}
+              <option value={option.key}>{option.model_id}</option>
+            {/each}
+          </select>
+        </label>
+      </div>
       <textarea
-        bind:value={regenerateHint}
+        bind:value={customRegenerateHint}
         class="compact-textarea"
-        placeholder="例如：多讲固定搭配；例句更长一点..."
+        placeholder="额外提示，可留空。例如：多讲固定搭配；例句更长一点..."
         disabled={isStreaming}
       ></textarea>
+      <div class="custom-action-footer">
+        <button
+          class="btn-primary compact-run-btn"
+          type="button"
+          onclick={() => onRegenerate("default", customRegenerateHint, selectedActionModelOverride)}
+          disabled={isStreaming || !selectedActionModelOverride}
+        >
+          <i class="ph-fill ph-sparkle"></i>
+          <span>用此设置重新生成</span>
+        </button>
+      </div>
     </div>
   {/if}
 
@@ -690,24 +757,60 @@
   .model-name { background: var(--bg-color); color: var(--text-muted); border: 1px solid var(--border-color); }
 
   .header-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 0.75rem; }
-  .action-model-select {
-    width: min(18rem, 100%);
-    min-height: 2.1rem;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--bg-color);
-    color: var(--text-main);
-    padding: 0 0.65rem;
-    font-size: 0.78rem;
-    font-weight: 700;
-  }
   .action-icons { display: flex; gap: 0.5rem; }
   .icon-btn {
     width: 2.2rem; height: 2.2rem; border-radius: 50%; background: var(--btn-secondary);
     color: var(--text-main); display: flex; align-items: center; justify-content: center; font-size: 1rem;
   }
+  .icon-btn.is-active {
+    color: var(--accent-main);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-main) 35%, transparent);
+  }
   .pro-btn { color: #6d28d9; }
   .learn-btn { padding: 0.5rem 1rem; font-size: 0.85rem; }
+
+  .custom-regenerate-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+  .custom-action-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+    gap: 0.75rem;
+  }
+  .compact-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+  .compact-field span {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--text-muted);
+  }
+  .compact-field select {
+    width: 100%;
+    min-height: 2.35rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-color);
+    color: var(--text-main);
+    padding: 0 0.7rem;
+    font-size: 0.86rem;
+    font-weight: 700;
+  }
+  .custom-action-footer {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .compact-run-btn {
+    min-height: 2.35rem;
+    padding: 0 0.95rem;
+    gap: 0.45rem;
+    font-size: 0.86rem;
+  }
 
   /* 其它卡片微调 */
   .card-main { grid-column: span 3; display: flex; flex-direction: column; gap: 1rem; }
@@ -862,6 +965,7 @@
     .card-header, .card-main, .card-side, .card-full { grid-column: span 1; }
     .card-header { flex-direction: row; align-items: center; padding: 1rem; }
     .header-actions { flex-direction: row; }
+    .custom-action-grid { grid-template-columns: 1fr; }
     .card-title-row {
       align-items: flex-start;
       flex-direction: column;

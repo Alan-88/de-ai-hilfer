@@ -426,7 +426,7 @@
     if (!settings) return [];
     return settings.profiles.flatMap((profile) =>
       profile.model_ids
-        .filter((model) => !model.toLowerCase().includes("embedding"))
+        .filter((model) => !looksLikeEmbeddingModel(model))
         .map((model) => ({
           key: `${profile.name}:${model}`,
           label: `${profile.name} / ${model}`,
@@ -439,17 +439,20 @@
   function defaultActionModelKey(settings: AiSettingsResponse | null): string {
     if (!settings) return "";
     const analyze = settings.task_settings.find((setting) => setting.task_key === "analyze");
-    if (analyze?.provider_name && analyze.model_id) {
+    if (analyze?.provider_name && analyze.model_id && !looksLikeEmbeddingModel(analyze.model_id)) {
       return `${analyze.provider_name}:${analyze.model_id}`;
     }
-    const firstProfile = settings.profiles[0];
-    const firstModel = firstProfile?.model_ids[0];
-    return firstProfile && firstModel ? `${firstProfile.name}:${firstModel}` : "";
+    const firstOption = buildActionModelOptions(settings)[0];
+    return firstOption?.key ?? "";
   }
 
   function actionModelOverrideForKey(key: string): AiModelOverride | null {
     const option = actionModelOptions.find((item) => item.key === key);
     return option ? { provider_name: option.provider_name, model_id: option.model_id } : null;
+  }
+
+  function looksLikeEmbeddingModel(model: string): boolean {
+    return model.toLowerCase().includes("embedding");
   }
 </script>
 
@@ -589,7 +592,7 @@
         selectedActionModelKey={selectedActionModelKey}
         selectedActionModelOverride={selectedActionModelOverride}
         onActionModelChange={(key) => selectedActionModelKey = key}
-        onRegenerate={(mode, hint) => handleSearch($s.query, mode, true, hint, true, selectedActionModelOverride)}
+        onRegenerate={(mode, hint, modelOverride = null) => handleSearch($s.query, mode, true, hint, true, modelOverride)}
         onSelectRecent={(q) => handleSearch(q, "default", false, "", false)}
         onSelectPhraseHost={handlePhraseHostSelection}
         onDetachAttachedPhrase={handleDetachPhraseHost}
