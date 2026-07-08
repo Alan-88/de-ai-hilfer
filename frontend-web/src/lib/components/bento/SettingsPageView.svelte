@@ -1,6 +1,7 @@
 <script lang="ts">
   import ServerStatus from "$lib/components/ServerStatus.svelte";
   import DataManagementPage from "$lib/components/DataManagementPage.svelte";
+  import AiModelSettingsPanel from "$lib/components/bento/AiModelSettingsPanel.svelte";
 
   let { active = false } = $props();
 </script>
@@ -11,6 +12,8 @@
 </header>
 
 <div class="settings-grid">
+  <AiModelSettingsPanel />
+
   <!-- 移除冗余的主题切换，保留核心的服务状态监测 -->
   <div class="bento-card setting-section">
     <div class="card-title"><i class="ph-fill ph-broadcast"></i> 后端服务状态</div>
