@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getAiSettings, updateAiSettings } from "$lib/queryApi";
+  import { getAiSettings, testAiModel, updateAiSettings } from "$lib/queryApi";
   import type {
     AiProviderProfileInput,
     AiProviderProfileView,
@@ -15,6 +15,10 @@
     api_key_set?: boolean;
     api_key_preview?: string | null;
     model_draft: string;
+  };
+  type ModelTestState = {
+    status: "testing" | "ok" | "failed";
+    message: string;
   };
 
   const INHERIT_ANALYZE_VALUE = "__inherit_analyze__";
@@ -33,6 +37,7 @@
   let isSaving = $state(false);
   let error = $state("");
   let success = $state("");
+  let modelTestStates = $state<Record<string, ModelTestState>>({});
 
   const hasProfiles = $derived(profiles.length > 0);
 
@@ -151,15 +156,54 @@
   }
 
   function removeModel(profile: EditableProfile, model: string) {
+    const testKey = modelTestKey(profile, model);
     updateProfile(profile.client_id, {
       model_ids: (profile.model_ids ?? []).filter((item) => item !== model),
     });
+    const { [testKey]: _removed, ...nextStates } = modelTestStates;
+    modelTestStates = nextStates;
     for (const task of taskMeta) {
       const setting = taskSettings[task.key];
       if (setting.provider_name === profile.name && setting.model_id === model) {
         updateTask(task.key, { model_id: null });
       }
     }
+  }
+
+  async function testModel(profile: EditableProfile, model: string) {
+    const testKey = modelTestKey(profile, model);
+    modelTestStates = {
+      ...modelTestStates,
+      [testKey]: { status: "testing", message: "测试中" },
+    };
+    try {
+      const response = await testAiModel({
+        profile_id: profile.id ?? null,
+        profile_name: profile.name,
+        base_url: profile.base_url,
+        api_key: profile.api_key?.trim() ? profile.api_key.trim() : null,
+        model_id: model,
+      });
+      modelTestStates = {
+        ...modelTestStates,
+        [testKey]: {
+          status: response.success ? "ok" : "failed",
+          message: response.message,
+        },
+      };
+    } catch (testError) {
+      modelTestStates = {
+        ...modelTestStates,
+        [testKey]: {
+          status: "failed",
+          message: testError instanceof Error ? testError.message : "测试失败",
+        },
+      };
+    }
+  }
+
+  function modelTestKey(profile: EditableProfile, model: string) {
+    return `${profile.client_id}:${model}`;
   }
 
   function updateTask(taskKey: TaskKey, patch: Partial<AiTaskModelSettingInput>) {
@@ -358,10 +402,33 @@
                 <span class="field-label">模型 ID</span>
                 <div class="model-chips">
                   {#each profile.model_ids ?? [] as model}
-                    <button type="button" class="model-chip" title="移除模型" onclick={() => removeModel(profile, model)}>
-                      <span>{model}</span>
-                      <i class="ph ph-x"></i>
-                    </button>
+                    {@const testState = modelTestStates[modelTestKey(profile, model)]}
+                    <span
+                      class="model-chip"
+                      class:is-testing={testState?.status === "testing"}
+                      class:is-ok={testState?.status === "ok"}
+                      class:is-failed={testState?.status === "failed"}
+                    >
+                      <button
+                        type="button"
+                        class="model-test-btn"
+                        title={testState?.message ?? "测试模型"}
+                        disabled={testState?.status === "testing"}
+                        onclick={() => testModel(profile, model)}
+                      >
+                        <span>{model}</span>
+                        {#if testState?.status === "testing"}
+                          <i class="ph ph-circle-notch spin"></i>
+                        {:else if testState?.status === "ok"}
+                          <i class="ph ph-check-circle"></i>
+                        {:else if testState?.status === "failed"}
+                          <i class="ph ph-warning-circle"></i>
+                        {/if}
+                      </button>
+                      <button type="button" class="model-remove-btn" title="移除模型" onclick={() => removeModel(profile, model)}>
+                        <i class="ph ph-x"></i>
+                      </button>
+                    </span>
                   {/each}
                   {#if (profile.model_ids ?? []).length === 0}
                     <span class="empty-chip">暂无模型</span>
@@ -551,21 +618,67 @@
     max-width: 100%;
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.35rem 0.55rem;
     border-radius: 8px;
     background: var(--bg-color);
     color: var(--text-main);
     border: 1px solid var(--border-color);
     font-size: 0.78rem;
     font-weight: 700;
+    overflow: hidden;
   }
 
-  .model-chip span {
+  .model-chip.is-ok {
+    border-color: color-mix(in srgb, #2c9f7b 58%, var(--border-color));
+    background: color-mix(in srgb, #2c9f7b 12%, var(--bg-color));
+    color: #187456;
+  }
+
+  .model-chip.is-failed {
+    border-color: color-mix(in srgb, var(--danger-text) 50%, var(--border-color));
+    background: color-mix(in srgb, var(--danger-text) 10%, var(--bg-color));
+    color: var(--danger-text);
+  }
+
+  .model-chip.is-testing {
+    border-color: color-mix(in srgb, var(--accent-main) 45%, var(--border-color));
+  }
+
+  .model-test-btn, .model-remove-btn {
+    min-height: 2rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font: inherit;
+  }
+
+  .model-test-btn {
+    min-width: 0;
+    padding: 0.35rem 0.4rem 0.35rem 0.55rem;
+  }
+
+  .model-test-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent-main) 8%, transparent);
+  }
+
+  .model-test-btn span {
     overflow-wrap: anywhere;
   }
 
+  .model-remove-btn {
+    padding: 0.35rem 0.5rem;
+    border-left: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  }
+
+  .model-remove-btn:hover {
+    color: var(--danger-text);
+    background: color-mix(in srgb, var(--danger-text) 10%, transparent);
+  }
+
   .empty-chip {
+    padding: 0.35rem 0.55rem;
     color: var(--text-muted);
     font-weight: 600;
   }

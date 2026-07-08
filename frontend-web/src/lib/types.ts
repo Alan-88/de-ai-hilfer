@@ -285,6 +285,19 @@ export interface AiSettingsUpdateRequest {
   task_settings: AiTaskModelSettingInput[];
 }
 
+export interface AiModelTestRequest {
+  profile_id?: number | null;
+  profile_name: string;
+  base_url: string;
+  api_key?: string | null;
+  model_id: string;
+}
+
+export interface AiModelTestResponse {
+  success: boolean;
+  message: string;
+}
+
 export interface FollowUpCreateResponse {
   answer: string;
   follow_up: FollowUpItem;

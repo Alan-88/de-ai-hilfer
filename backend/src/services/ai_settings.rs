@@ -1,11 +1,14 @@
+use crate::ai::{AiChatOptions, AiClient, AiEmbeddingOptions};
 use crate::models::{
-    AiProviderProfileView, AiSettingsResponse, AiSettingsUpdateRequest, AiTaskModelSettingView,
+    AiModelTestRequest, AiModelTestResponse, AiProviderProfileView, AiSettingsResponse,
+    AiSettingsUpdateRequest, AiTaskModelSettingView,
 };
 use crate::repositories::ai_settings;
 use crate::services::ai_model_resolver::env_structure_model;
 use crate::state::AppState;
 use anyhow::{anyhow, Result};
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::time::Duration;
 
 const TASK_ANALYZE: &str = "analyze";
 const TASK_PHRASE: &str = "phrase";
@@ -72,6 +75,99 @@ pub async fn update_ai_settings(
     ai_settings::replace_ai_settings(&state.pool, &request.profiles, &request.task_settings)
         .await?;
     get_ai_settings(state).await
+}
+
+pub async fn test_ai_model(
+    state: &AppState,
+    request: AiModelTestRequest,
+) -> Result<AiModelTestResponse> {
+    let base_url = request.base_url.trim();
+    let model = request.model_id.trim();
+    if base_url.is_empty() || model.is_empty() {
+        return Ok(test_response(false, "Base URL 或模型 ID 为空"));
+    }
+
+    let api_key = resolve_test_api_key(state, &request).await?;
+    let Some(api_key) = api_key else {
+        return Ok(test_response(false, "缺少 API Key"));
+    };
+
+    let client = AiClient::new(api_key, base_url.to_string());
+    let result = if looks_like_embedding_model(model) {
+        client
+            .embed_model_with_options(
+                model,
+                &["ping".to_string()],
+                AiEmbeddingOptions {
+                    timeout: Duration::from_secs(20),
+                    dimensions: None,
+                },
+            )
+            .await
+            .map(|_| ())
+    } else {
+        client
+            .chat_model_with_options(
+                model,
+                "Reply with exactly: ok",
+                "ok",
+                AiChatOptions {
+                    temperature: 0.0,
+                    max_tokens: Some(8),
+                    timeout: Duration::from_secs(20),
+                },
+            )
+            .await
+            .map(|_| ())
+    };
+
+    match result {
+        Ok(()) => Ok(test_response(true, "模型可用")),
+        Err(err) => Ok(test_response(false, format!("测试失败：{err}"))),
+    }
+}
+
+async fn resolve_test_api_key(
+    state: &AppState,
+    request: &AiModelTestRequest,
+) -> Result<Option<String>> {
+    if let Some(api_key) = request
+        .api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+    {
+        return Ok(Some(api_key.to_string()));
+    }
+
+    if let Some(profile_id) = request.profile_id {
+        let profiles = ai_settings::list_provider_profiles(&state.pool).await?;
+        if let Some(profile) = profiles
+            .into_iter()
+            .find(|profile| profile.id == profile_id)
+        {
+            return Ok((!profile.api_key.is_empty()).then_some(profile.api_key));
+        }
+    }
+
+    Ok(state
+        .config
+        .openai_api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .map(ToString::to_string))
+}
+
+fn looks_like_embedding_model(model: &str) -> bool {
+    model.to_ascii_lowercase().contains("embedding")
+}
+
+fn test_response(message_ok: bool, message: impl Into<String>) -> AiModelTestResponse {
+    AiModelTestResponse {
+        success: message_ok,
+        message: message.into(),
+    }
 }
 
 async fn hydrate_env_api_key_for_first_save(
