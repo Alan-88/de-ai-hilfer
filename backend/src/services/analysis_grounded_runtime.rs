@@ -1,4 +1,4 @@
-use crate::ai::{is_hard_failure, AiChatOptions, AiClient};
+use crate::ai::{is_hard_failure, AiClient};
 use crate::models::{
     AiModelOverride, AnalysisDocument, DictionaryRaw, QualityMode, StructuredAnalysisDocument,
 };
@@ -10,6 +10,9 @@ use crate::services::analysis_grounded_facts::{
     build_light_dictionary_facts_payload, load_raw_rows_by_headword,
 };
 use crate::services::analysis_grounded_model_a::{normalize_model_a_output, ModelAOutput};
+use crate::services::analysis_grounded_options::{
+    model_a_chat_options, stage2_chat_options, structure_chat_options,
+};
 use crate::services::analysis_grounded_prompt::{
     build_model_a_prompt, build_model_a_user_payload, build_stage2_prompt,
     build_stage2_user_payload,
@@ -46,6 +49,7 @@ pub async fn generate_grounded_analysis(
     target_query: &str,
     dictionary_entry: Option<&DictionaryRaw>,
     quality_mode: QualityMode,
+    generation_hint: Option<&str>,
     model_override: Option<&AiModelOverride>,
 ) -> Result<GroundedAnalysis> {
     generate_grounded_analysis_with_stage2_fallback(
@@ -54,6 +58,7 @@ pub async fn generate_grounded_analysis(
         dictionary_entry,
         quality_mode,
         true,
+        generation_hint,
         model_override,
     )
     .await
@@ -72,6 +77,7 @@ pub async fn generate_grounded_analysis_strict_primary(
         quality_mode,
         false,
         None,
+        None,
     )
     .await
 }
@@ -82,6 +88,7 @@ async fn generate_grounded_analysis_with_stage2_fallback(
     dictionary_entry: Option<&DictionaryRaw>,
     quality_mode: QualityMode,
     allow_stage2_fallback: bool,
+    generation_hint: Option<&str>,
     model_override: Option<&AiModelOverride>,
 ) -> Result<GroundedAnalysis> {
     let stage1 = generate_model_a(state, target_query, quality_mode, model_override).await?;
@@ -102,6 +109,7 @@ async fn generate_grounded_analysis_with_stage2_fallback(
         &stage2_primary.model,
         fallback_model,
         quality_mode,
+        generation_hint,
     )
     .await?;
     let (structured, _structure_model) = structure_and_assemble(
@@ -135,6 +143,7 @@ pub async fn stream_grounded_analysis(
     target_query: &str,
     dictionary_entry: Option<&DictionaryRaw>,
     quality_mode: QualityMode,
+    generation_hint: Option<&str>,
     model_override: Option<&AiModelOverride>,
 ) -> Result<GroundedAnalysis> {
     let stage1 = generate_model_a(state, target_query, quality_mode, model_override).await?;
@@ -160,6 +169,7 @@ pub async fn stream_grounded_analysis(
         &stage2_primary.model,
         fallback_model,
         quality_mode,
+        generation_hint,
     )
     .await?;
     if tx.is_closed() {
@@ -232,9 +242,15 @@ pub(crate) async fn generate_stage2_markdown(
     primary_model: &str,
     fallback_model: &str,
     quality_mode: QualityMode,
+    generation_hint: Option<&str>,
 ) -> Result<StreamedMarkdown> {
     let prompt = build_stage2_prompt(prompts);
-    let user_payload = build_stage2_user_payload(target_query, dictionary_facts, stage1_output);
+    let user_payload = build_stage2_user_payload(
+        target_query,
+        dictionary_facts,
+        stage1_output,
+        generation_hint,
+    );
     let options = stage2_chat_options(quality_mode);
 
     for cycle in 1..=HARD_FAILURE_RETRY_CYCLES {
@@ -294,9 +310,15 @@ async fn stream_stage2_markdown(
     primary_model: &str,
     fallback_model: &str,
     quality_mode: QualityMode,
+    generation_hint: Option<&str>,
 ) -> Result<StreamedMarkdown> {
     let prompt = build_stage2_prompt(prompts);
-    let user_payload = build_stage2_user_payload(target_query, dictionary_facts, stage1_output);
+    let user_payload = build_stage2_user_payload(
+        target_query,
+        dictionary_facts,
+        stage1_output,
+        generation_hint,
+    );
     let options = stage2_chat_options(quality_mode);
 
     for cycle in 1..=HARD_FAILURE_RETRY_CYCLES {
@@ -456,30 +478,6 @@ pub(crate) fn build_grounded_document(
         dictionary_excerpt: dictionary_entry.map(|entry| build_dictionary_excerpt(&entry.raw_data)),
         model: Some(model.to_string()),
         quality_mode: Some(quality_mode),
-    }
-}
-
-pub(crate) fn model_a_chat_options() -> AiChatOptions {
-    AiChatOptions {
-        temperature: 0.1,
-        max_tokens: Some(2200),
-        timeout: Duration::from_secs(90),
-    }
-}
-
-pub(crate) fn stage2_chat_options(_quality_mode: QualityMode) -> AiChatOptions {
-    AiChatOptions {
-        temperature: 0.2,
-        max_tokens: Some(1800),
-        timeout: Duration::from_secs(90),
-    }
-}
-
-pub(crate) fn structure_chat_options() -> AiChatOptions {
-    AiChatOptions {
-        temperature: 0.0,
-        max_tokens: None,
-        timeout: Duration::from_secs(90),
     }
 }
 

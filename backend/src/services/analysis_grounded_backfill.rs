@@ -41,6 +41,7 @@ pub async fn prepare_grounded_ab_strict_primary(
         primary_model,
         "",
         quality_mode,
+        None,
     )
     .await?;
     let stage2_elapsed_ms = stage2_started_at.elapsed().as_millis();

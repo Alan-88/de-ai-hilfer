@@ -22,12 +22,22 @@ pub fn build_stage2_user_payload(
     word: &str,
     dictionary_facts: Option<&str>,
     stage1_output: &ModelAOutput,
+    generation_hint: Option<&str>,
 ) -> String {
     let dictionary_facts = dictionary_facts.unwrap_or("{}");
     let stage1_summary = render_stage1_boundary_summary(stage1_output);
+    let hint_block = generation_hint
+        .map(str::trim)
+        .filter(|hint| !hint.is_empty())
+        .map(|hint| {
+            format!(
+                "\n\n--- Extra User Instruction ---\n{hint}\n\n约束：这条额外要求只影响 Stage 2 的学习内容呈现（应用与例句、词汇网络、深度解析与避坑）。不得改写、推翻或新增 Branch Skeleton 中的释义和语法骨架。"
+            )
+        })
+        .unwrap_or_default();
     format!(
         "查询词：{word}\n\n--- Dictionary Facts JSON ---\n{dictionary_facts}\n\n--- Branch Skeleton Reference ---\n{stage1_summary}"
-    )
+    ) + &hint_block
 }
 
 fn render_stage1_boundary_summary(stage1_output: &ModelAOutput) -> String {
@@ -137,4 +147,30 @@ fn model_a_schema_block() -> &'static str {
     }\n\
   ]\n\
 }"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::analysis_grounded_model_a::{ModelAEntry, ModelAGrammar, ModelAOutput};
+
+    #[test]
+    fn stage2_payload_scopes_generation_hint_to_learning_content() {
+        let stage1 = ModelAOutput {
+            word: "tragen".to_string(),
+            entries: vec![ModelAEntry {
+                selector: "Verb · stark".to_string(),
+                pos: "verb".to_string(),
+                meanings: Vec::new(),
+                grammar: ModelAGrammar::default(),
+            }],
+        };
+
+        let payload = build_stage2_user_payload("tragen", None, &stage1, Some("多讲一点口语搭配"));
+
+        assert!(payload.contains("--- Extra User Instruction ---"));
+        assert!(payload.contains("多讲一点口语搭配"));
+        assert!(payload.contains("只影响 Stage 2 的学习内容呈现"));
+        assert!(payload.contains("不得改写、推翻或新增 Branch Skeleton"));
+    }
 }

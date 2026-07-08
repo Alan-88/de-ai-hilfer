@@ -242,6 +242,7 @@ async fn analyze_with_mode(
                 &prototype,
                 dictionary_entry.as_ref(),
                 quality_mode,
+                generation_hint,
                 request.model_override.as_ref(),
             )
             .await

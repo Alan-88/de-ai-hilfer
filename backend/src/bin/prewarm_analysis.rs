@@ -238,6 +238,7 @@ async fn process_headword(
                 quality_mode: QualityMode::Default,
                 force_refresh: true,
                 entry_id: None,
+                model_override: None,
             },
         )
         .await

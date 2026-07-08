@@ -4,6 +4,7 @@ pub mod analysis_grounded_assembly;
 pub mod analysis_grounded_backfill;
 pub mod analysis_grounded_facts;
 pub mod analysis_grounded_model_a;
+pub mod analysis_grounded_options;
 pub mod analysis_grounded_prompt;
 pub mod analysis_grounded_runtime;
 pub mod analysis_grounded_stage2_quality;
