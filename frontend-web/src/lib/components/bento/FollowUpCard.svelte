@@ -1,17 +1,19 @@
 <script lang="ts">
   import { renderMarkdownHtml } from "$lib/analysis/structuredAnalysis";
   import { streamFollowUp } from "$lib/streamApi";
-  import type { FollowUpItem, QualityMode } from "$lib/types";
+  import type { AiModelOverride, FollowUpItem, QualityMode } from "$lib/types";
 
   let { 
     entryId, 
     disabled = false, 
     history = [], 
+    modelOverride = null,
     onnewFollowUp 
   } = $props<{
     entryId: number;
     disabled?: boolean;
     history?: FollowUpItem[];
+    modelOverride?: AiModelOverride | null;
     onnewFollowUp?: (item: FollowUpItem) => void;
   }>();
 
@@ -43,7 +45,7 @@
     try {
       const response = await new Promise<{ follow_up: FollowUpItem }>((resolve, reject) => {
         void streamFollowUp(
-          { entry_id: entryId, question, quality_mode: qualityMode },
+          { entry_id: entryId, question, quality_mode: qualityMode, model_override: modelOverride },
           {
             onMeta: (payload) => {
               pendingModel = payload.model;

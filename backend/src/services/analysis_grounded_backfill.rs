@@ -27,7 +27,7 @@ pub async fn prepare_grounded_ab_strict_primary(
 ) -> Result<GroundedAbCache> {
     let started_at = Instant::now();
     let stage1_started_at = Instant::now();
-    let stage1 = generate_model_a(state, target_query, quality_mode).await?;
+    let stage1 = generate_model_a(state, target_query, quality_mode, None).await?;
     let stage1_elapsed_ms = stage1_started_at.elapsed().as_millis();
     let dictionary_facts = stage1.dictionary_facts.as_deref();
     let primary_model = primary_model_for(state, quality_mode);

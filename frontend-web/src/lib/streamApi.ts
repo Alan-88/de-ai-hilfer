@@ -2,6 +2,7 @@ import { apiUrl } from "$lib/api";
 import type {
   AnalyzeResponse,
   AnalyzeStreamRequest,
+  AiModelOverride,
   FollowUpCreateResponse,
   QualityMode,
 } from "$lib/types";
@@ -34,6 +35,7 @@ interface FollowUpStreamRequest {
   entry_id: number;
   question: string;
   quality_mode?: QualityMode;
+  model_override?: AiModelOverride | null;
 }
 
 export function streamAnalyze(

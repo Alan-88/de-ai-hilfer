@@ -232,13 +232,20 @@ async fn analyze_with_mode(
                 quality_mode,
                 generation_hint,
                 phrase_lookup.as_ref(),
+                request.model_override.as_ref(),
             )
             .await
             .map(|generated| GeneratedFullAnalysis::Legacy(generated))
         } else {
-            generate_grounded_analysis(state, &prototype, dictionary_entry.as_ref(), quality_mode)
-                .await
-                .map(GeneratedFullAnalysis::Grounded)
+            generate_grounded_analysis(
+                state,
+                &prototype,
+                dictionary_entry.as_ref(),
+                quality_mode,
+                request.model_override.as_ref(),
+            )
+            .await
+            .map(GeneratedFullAnalysis::Grounded)
         };
 
         match generated_result {

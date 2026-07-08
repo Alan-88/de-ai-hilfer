@@ -3,7 +3,7 @@ use crate::models::{
     FollowUpRequest, FollowUpResponse, NewFollowUp, QualityMode, StreamMetaPayload,
 };
 use crate::repositories::{follow_up, knowledge};
-use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
+use crate::services::ai_model_resolver::{resolve_task_model_with_override, AiModelTask};
 use crate::services::follow_up_fallback::{build_follow_up_fallback, normalize_answer};
 use crate::services::follow_up_prompt::build_follow_up_prompt;
 use crate::services::stream_response::{sse_complete, sse_delta, sse_meta};
@@ -33,7 +33,12 @@ pub async fn stream_follow_up(
         &history,
     );
 
-    let primary = resolve_task_model(&state, AiModelTask::Analyze).await?;
+    let primary = resolve_task_model_with_override(
+        &state,
+        AiModelTask::Analyze,
+        request.model_override.as_ref(),
+    )
+    .await?;
     let primary_model = primary.model.as_str();
     let fallback_model = if primary.persisted {
         ""

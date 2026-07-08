@@ -2,7 +2,7 @@ use crate::models::{
     AnalyzeRequest, AnalyzeResponse, FollowUpItem, NewKnowledgeEntry, QualityMode,
 };
 use crate::repositories::{dictionary, dictionary_lexemes, knowledge};
-use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
+use crate::services::ai_model_resolver::{resolve_task_model_with_override, AiModelTask};
 use crate::services::analysis_grounded_runtime::stream_grounded_analysis;
 use crate::services::dictionary_facts::dictionary_pos;
 use crate::services::dictionary_tags::build_tags;
@@ -218,6 +218,7 @@ pub async fn stream_analyze(
             generation_hint,
             phrase_lookup.as_ref(),
             &tx,
+            request.model_override.as_ref(),
         )
         .await
         {
@@ -247,7 +248,12 @@ pub async fn stream_analyze(
             }
         }
     } else {
-        let resolved_meta = resolve_task_model(&state, AiModelTask::Analyze).await?;
+        let resolved_meta = resolve_task_model_with_override(
+            &state,
+            AiModelTask::Analyze,
+            request.model_override.as_ref(),
+        )
+        .await?;
         send_meta(
             &tx,
             "analyze",
@@ -266,6 +272,7 @@ pub async fn stream_analyze(
             &prototype,
             dictionary_entry.as_ref(),
             quality_mode,
+            request.model_override.as_ref(),
         )
         .await
         {
