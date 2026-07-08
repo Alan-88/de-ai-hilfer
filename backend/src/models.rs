@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
+pub use crate::ai_settings_models::*;
 pub use crate::dictionary_lexeme_models::*;
 pub use crate::structured_analysis_models::*;
 

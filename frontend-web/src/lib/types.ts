@@ -242,6 +242,49 @@ export interface DatabaseImportResponse {
   message: string;
 }
 
+export interface AiProviderProfileView {
+  id?: number | null;
+  name: string;
+  base_url: string;
+  model_ids: string[];
+  is_default: boolean;
+  api_key_set: boolean;
+  api_key_preview?: string | null;
+}
+
+export interface AiTaskModelSettingView {
+  task_key: "analyze" | "phrase" | "structure" | "embedding" | "intelligent_search";
+  provider_name?: string | null;
+  model_id?: string | null;
+  inherit_task_key?: string | null;
+}
+
+export interface AiSettingsResponse {
+  profiles: AiProviderProfileView[];
+  task_settings: AiTaskModelSettingView[];
+}
+
+export interface AiProviderProfileInput {
+  id?: number | null;
+  name: string;
+  base_url: string;
+  api_key?: string | null;
+  model_ids?: string[];
+  is_default?: boolean;
+}
+
+export interface AiTaskModelSettingInput {
+  task_key: AiTaskModelSettingView["task_key"];
+  provider_name?: string | null;
+  model_id?: string | null;
+  inherit_task_key?: string | null;
+}
+
+export interface AiSettingsUpdateRequest {
+  profiles: AiProviderProfileInput[];
+  task_settings: AiTaskModelSettingInput[];
+}
+
 export interface FollowUpCreateResponse {
   answer: string;
   follow_up: FollowUpItem;

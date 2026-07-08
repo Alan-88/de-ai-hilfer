@@ -1,3 +1,4 @@
+pub mod ai_settings;
 pub mod analyze;
 pub mod follow_up;
 pub mod learning;
