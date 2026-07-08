@@ -20,8 +20,6 @@ pub struct AiModelConfig {
     pub follow_up: String,
     pub follow_up_pro: String,
     pub intelligent_search: String,
-    pub spell_check: String,
-    pub prototype: String,
     pub embedding: String,
     pub fallback_fast: String,
     pub fallback_pro: String,
@@ -74,8 +72,6 @@ fn ai_models_from_env() -> AiModelConfig {
             .unwrap_or_else(|| "gemini-3.1-pro-preview".to_string()),
         intelligent_search: expanded_env_var("AI_MODEL_INTELLIGENT_SEARCH")
             .unwrap_or_else(|| default.clone()),
-        spell_check: expanded_env_var("AI_MODEL_SPELL_CHECK").unwrap_or_else(|| default.clone()),
-        prototype: expanded_env_var("AI_MODEL_PROTOTYPE").unwrap_or_else(|| default.clone()),
         embedding: expanded_env_var("AI_MODEL_EMBEDDING")
             .or_else(|| expanded_env_var("OPENAI_EMBEDDING_MODEL"))
             .unwrap_or_else(|| "gemini-embedding-2-preview".to_string()),

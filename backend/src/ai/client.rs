@@ -41,8 +41,6 @@ pub enum AiScene {
     Analyze,
     FollowUp,
     IntelligentSearch,
-    SpellCheck,
-    Prototype,
     Embedding,
 }
 
@@ -212,8 +210,6 @@ impl AiClient {
             AiScene::Analyze => &self.models.analyze,
             AiScene::FollowUp => &self.models.follow_up,
             AiScene::IntelligentSearch => &self.models.intelligent_search,
-            AiScene::SpellCheck => &self.models.spell_check,
-            AiScene::Prototype => &self.models.prototype,
             AiScene::Embedding => &self.models.embedding,
         }
     }

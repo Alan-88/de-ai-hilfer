@@ -39,6 +39,7 @@
   let isAdvancedLoading = $state(false);
   let isUpdatingPhraseAttachment = $state(false);
   let isAddingPhraseModule = $state(false);
+  let suggestionsQuery = $state("");
   let currentSearchController: AbortController | null = null;
   let hasMounted = $state(false);
   let mainInputRef = $state<HTMLInputElement | null>(null);
@@ -54,9 +55,13 @@
     term = $s.query,
     qualityMode: QualityMode = "default",
     forceRefresh = false,
-    generationHint = ""
+    generationHint = "",
+    useSuggestionDefault = true
   ) {
-    const query = term.trim();
+    const rawQuery = term.trim();
+    const query = await resolveSearchTarget(rawQuery, {
+      enabled: useSuggestionDefault && !forceRefresh && !generationHint.trim(),
+    });
     if (!query) return;
 
     currentSearchController?.abort();
@@ -191,18 +196,44 @@
   }
 
   async function fetchSuggestions() {
-    if ($s.query.trim().length < 2) {
+    const query = $s.query.trim();
+    if (query.length < 2) {
       suggestions = [];
+      suggestionsQuery = "";
       showSuggestions = false;
       return;
     }
     try {
-      const resp = await getSuggestions($s.query);
+      const resp = await getSuggestions(query);
+      if ($s.query.trim() !== query) return;
       suggestions = resp.suggestions;
+      suggestionsQuery = query;
       showSuggestions = suggestions.length > 0;
     } catch {
       suggestions = [];
+      suggestionsQuery = query;
     }
+  }
+
+  async function resolveSearchTarget(query: string, options: { enabled: boolean }) {
+    if (!query || !options.enabled || showAdvanced) return query;
+
+    let currentSuggestions = suggestionsQuery === query ? suggestions : [];
+    if (query.length >= 2 && currentSuggestions.length === 0) {
+      try {
+        const resp = await getSuggestions(query);
+        if ($s.query.trim() === query) {
+          suggestions = resp.suggestions;
+          suggestionsQuery = query;
+          showSuggestions = suggestions.length > 0;
+        }
+        currentSuggestions = resp.suggestions;
+      } catch {
+        currentSuggestions = [];
+      }
+    }
+
+    return currentSuggestions[0]?.query_text?.trim() || query;
   }
 
   function handleNewFollowUp(item: FollowUpItem) {
@@ -235,12 +266,12 @@
     if (!host) return;
 
     if (mode === "view") {
-      await handleSearch(host);
+      await handleSearch(host, "default", false, "", false);
       return;
     }
 
     if (!$s.result?.phrase_lookup || $s.result.entry_id <= 0) {
-      await handleSearch(host);
+      await handleSearch(host, "default", false, "", false);
       return;
     }
 
@@ -266,7 +297,7 @@
       void fetchRecentItems();
     } catch (e) {
       s.setError("短语挂载失败，已切换为查看主词。");
-      await handleSearch(host);
+      await handleSearch(host, "default", false, "", false);
     } finally {
       isUpdatingPhraseAttachment = false;
       s.update(state => ({ ...state, isLoading: false }));
@@ -447,7 +478,7 @@
           <div class="suggestion-list">
             {#if !$s.query.trim()}
               {#each recentItems as item}
-                <button class="suggestion-item" onclick={() => handleSearch(item.query_text)}>
+                <button class="suggestion-item" onclick={() => handleSearch(item.query_text, "default", false, "", false)}>
                   <i class="ph ph-clock-counter-clockwise"></i>
                   <div class="text-content">
                     <span class="q">{item.query_text}</span>
@@ -457,7 +488,7 @@
               {/each}
             {:else}
               {#each suggestions as sg}
-                <button class="suggestion-item" onclick={() => handleSearch(sg.query_text)}>
+                <button class="suggestion-item" onclick={() => handleSearch(sg.query_text, "default", false, "", false)}>
                   <i class="ph ph-magnifying-glass"></i>
                   <div class="text-content">
                     <span class="q">{sg.query_text}</span>
@@ -500,7 +531,7 @@
         recentItems={recentItems}
         onAddToLearning={addCurrentWordToLearning}
         onRegenerate={(mode, hint) => handleSearch($s.query, mode, true, hint)}
-        onSelectRecent={(q) => handleSearch(q)}
+        onSelectRecent={(q) => handleSearch(q, "default", false, "", false)}
         onSelectPhraseHost={handlePhraseHostSelection}
         onDetachAttachedPhrase={handleDetachPhraseHost}
         onAddPhraseModule={handleAddPhraseModule}

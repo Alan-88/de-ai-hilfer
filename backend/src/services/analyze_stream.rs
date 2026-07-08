@@ -10,8 +10,9 @@ use crate::services::query_inference::{
     infer_phrase_lookup, is_form_reference_entry, is_phrase_like_query,
 };
 use crate::services::query_resolution::{
-    attached_phrase_modules_from_analysis, build_phrase_unavailable_analysis, identify_prototype,
-    maybe_correct_spelling, phrase_lookup_from_analysis, phrase_usage_preview_from_analysis,
+    attached_phrase_modules_from_analysis, build_no_candidate_analysis,
+    build_phrase_unavailable_analysis, phrase_lookup_from_analysis,
+    phrase_usage_preview_from_analysis,
 };
 use crate::services::stream_analyze_runtime::{
     cached_analysis_markdown, generate_phrase_preview_with_model, send_meta,
@@ -124,15 +125,14 @@ pub async fn stream_analyze(
         } else {
             (entry.headword.clone(), Some(entry))
         }
+    } else if let Some(form_entry) = dictionary::find_by_form(&state.pool, query).await? {
+        tracing::info!(
+            "stream analyze resolved surface form without AI: query={query}, prototype={}",
+            form_entry.headword
+        );
+        (form_entry.headword.clone(), Some(form_entry))
     } else {
-        let corrected_query = maybe_correct_spelling(&state, query)
-            .await
-            .unwrap_or_else(|_| query.to_string());
-        let prototype = identify_prototype(&state, &corrected_query)
-            .await
-            .unwrap_or_else(|_| corrected_query.clone());
-        let dictionary_entry = dictionary::find_by_headword(&state.pool, &prototype).await?;
-        (prototype, dictionary_entry)
+        (query.to_string(), None)
     };
 
     let existing_entry = match request.entry_id {
@@ -188,6 +188,25 @@ pub async fn stream_analyze(
             .ok();
             return Ok(());
         }
+    }
+
+    if !is_phrase_query && dictionary_entry.is_none() {
+        let analysis = build_no_candidate_analysis(query);
+        tx.send(sse_complete(&AnalyzeResponse {
+            entry_id: 0,
+            query_text: query.to_string(),
+            analysis_markdown: analysis.markdown,
+            structured_analysis: analysis.structured,
+            phrase_lookup: analysis.phrase_lookup,
+            phrase_usage_preview: analysis.phrase_usage_preview,
+            attached_phrase_modules: analysis.attached_phrase_modules,
+            source: "未找到可靠候选".to_string(),
+            model: None,
+            quality_mode: Some(quality_mode),
+            follow_ups: Vec::new(),
+        }))
+        .ok();
+        return Ok(());
     }
 
     let (mut analysis, used_ai_generation, source, model) = if is_phrase_query {

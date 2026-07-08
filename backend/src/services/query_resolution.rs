@@ -1,11 +1,5 @@
-use crate::ai::{AiChatOptions, AiScene};
 use crate::models::{AnalysisDocument, AttachedPhraseModule, PhraseLookupInfo, PhraseUsagePreview};
-use crate::services::analyze_support::extract_json;
-use crate::state::AppState;
-use anyhow::Result;
-use serde::Deserialize;
 use serde_json::Value;
-use std::time::Duration;
 
 pub fn phrase_lookup_from_analysis(analysis: &Value) -> Option<PhraseLookupInfo> {
     analysis
@@ -55,54 +49,20 @@ pub fn build_phrase_unavailable_analysis(
     }
 }
 
-pub async fn maybe_correct_spelling(state: &AppState, query: &str) -> Result<String> {
-    #[derive(Deserialize)]
-    struct SpellCheck {
-        is_correct: bool,
-        suggestion: Option<String>,
+pub fn build_no_candidate_analysis(query: &str) -> AnalysisDocument {
+    AnalysisDocument {
+        markdown: format!(
+            "## 未找到可靠候选\n\n- `{query}` 没有命中字典、知识库或可还原词形。\n- 普通查词不会再自动调用 AI 猜测原型，避免把一次搜索悄悄路由到不可控结果。\n- 可以从候选列表中选择最接近的一项，或使用 Tab 联想搜索补充语义线索。"
+        ),
+        structured: None,
+        tags: vec!["未找到可靠候选".to_string()],
+        aliases: Vec::new(),
+        prototype: None,
+        phrase_lookup: None,
+        phrase_usage_preview: None,
+        attached_phrase_modules: Vec::new(),
+        dictionary_excerpt: None,
+        model: None,
+        quality_mode: None,
     }
-
-    let response = state
-        .ai_client
-        .chat_with_options(
-            AiScene::SpellCheck,
-            &state.prompts.spell_checker_prompt,
-            query,
-            AiChatOptions {
-                temperature: 0.0,
-                max_tokens: Some(80),
-                timeout: Duration::from_secs(8),
-            },
-        )
-        .await?;
-    let parsed: SpellCheck = extract_json(&response)?;
-
-    Ok(if parsed.is_correct {
-        query.to_string()
-    } else {
-        parsed.suggestion.unwrap_or_else(|| query.to_string())
-    })
-}
-
-pub async fn identify_prototype(state: &AppState, query: &str) -> Result<String> {
-    #[derive(Deserialize)]
-    struct PrototypeResponse {
-        prototype: String,
-    }
-
-    let response = state
-        .ai_client
-        .chat_with_options(
-            AiScene::Prototype,
-            &state.prompts.prototype_identification_prompt,
-            query,
-            AiChatOptions {
-                temperature: 0.0,
-                max_tokens: Some(80),
-                timeout: Duration::from_secs(8),
-            },
-        )
-        .await?;
-    let parsed: PrototypeResponse = extract_json(&response)?;
-    Ok(parsed.prototype)
 }
