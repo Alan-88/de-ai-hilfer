@@ -1,4 +1,3 @@
-use crate::config::AiModelConfig;
 use anyhow::{anyhow, Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -36,24 +35,15 @@ impl Default for AiEmbeddingOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum AiScene {
-    Analyze,
-    FollowUp,
-    IntelligentSearch,
-    Embedding,
-}
-
 #[derive(Clone)]
 pub struct AiClient {
     client: Client,
     api_key: String,
     base_url: String,
-    models: AiModelConfig,
 }
 
 impl AiClient {
-    pub fn new(api_key: String, base_url: String, models: AiModelConfig) -> Self {
+    pub fn new(api_key: String, base_url: String) -> Self {
         Self {
             client: Client::builder()
                 .timeout(AiChatOptions::default().timeout)
@@ -61,19 +51,7 @@ impl AiClient {
                 .expect("failed to build reqwest client"),
             api_key,
             base_url: base_url.trim_end_matches('/').to_string(),
-            models,
         }
-    }
-
-    pub async fn chat_with_options(
-        &self,
-        scene: AiScene,
-        system_prompt: &str,
-        user_message: &str,
-        options: AiChatOptions,
-    ) -> Result<String> {
-        self.chat_model_with_options(self.model_for(scene), system_prompt, user_message, options)
-            .await
     }
 
     pub async fn chat_model_with_options(
@@ -161,9 +139,9 @@ impl AiClient {
             .context("AI streaming endpoint returned error status")
     }
 
-    pub async fn embed_with_options(
+    pub async fn embed_model_with_options(
         &self,
-        scene: AiScene,
+        model: &str,
         inputs: &[String],
         options: AiEmbeddingOptions,
     ) -> Result<Vec<Vec<f32>>> {
@@ -177,7 +155,7 @@ impl AiClient {
             .bearer_auth(&self.api_key)
             .timeout(options.timeout)
             .json(&EmbeddingRequest {
-                model: self.model_for(scene).to_string(),
+                model: model.to_string(),
                 input: inputs.to_vec(),
                 dimensions: options.dimensions,
                 encoding_format: Some("float"),
@@ -203,15 +181,6 @@ impl AiClient {
         }
 
         Ok(data.into_iter().map(|item| item.embedding).collect())
-    }
-
-    pub fn model_for(&self, scene: AiScene) -> &str {
-        match scene {
-            AiScene::Analyze => &self.models.analyze,
-            AiScene::FollowUp => &self.models.follow_up,
-            AiScene::IntelligentSearch => &self.models.intelligent_search,
-            AiScene::Embedding => &self.models.embedding,
-        }
     }
 
     fn chat_max_tokens(&self, model: &str, options: AiChatOptions) -> Option<u32> {

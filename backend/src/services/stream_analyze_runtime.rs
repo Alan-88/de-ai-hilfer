@@ -2,8 +2,9 @@ use crate::ai::AiClient;
 use crate::models::{
     AnalysisDocument, DictionaryRaw, PhraseLookupInfo, QualityMode, StreamMetaPayload,
 };
+use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
 use crate::services::analysis_preview::analysis_markdown;
-use crate::services::analyze_runtime::{fallback_model_for, primary_model_for};
+use crate::services::analyze_runtime::fallback_model_for;
 use crate::services::analyze_support::{
     analysis_chat_options, build_analysis_prompt, build_phrase_preview_analysis,
     parse_phrase_usage_preview, AnalysisMode,
@@ -77,8 +78,13 @@ pub async fn generate_phrase_preview_with_model(
     phrase_lookup: Option<&PhraseLookupInfo>,
     tx: &UnboundedSender<String>,
 ) -> Result<AnalysisDocument> {
-    let primary_model = primary_model_for(state, quality_mode);
-    let fallback_model = fallback_model_for(state, quality_mode);
+    let primary = resolve_task_model(state, AiModelTask::Phrase).await?;
+    let primary_model = primary.model.as_str();
+    let fallback_model = if primary.persisted {
+        ""
+    } else {
+        fallback_model_for(state, quality_mode)
+    };
     let prompt = build_analysis_prompt(
         &state.prompts,
         dictionary_entry,
@@ -101,8 +107,8 @@ pub async fn generate_phrase_preview_with_model(
             },
             false,
         );
-        match state
-            .ai_client
+        match primary
+            .client
             .chat_model_with_options(primary_model, &prompt, target_query, options)
             .await
         {
@@ -136,8 +142,8 @@ pub async fn generate_phrase_preview_with_model(
                     },
                     true,
                 );
-                match state
-                    .ai_client
+                match primary
+                    .client
                     .chat_model_with_options(fallback_model, &prompt, target_query, options)
                     .await
                 {

@@ -4,8 +4,9 @@ use crate::models::{
     PhraseLookupConfidence, PhraseUsageModule, PhraseUsagePreview,
 };
 use crate::repositories::{follow_up, knowledge};
+use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
 use crate::services::analysis_preview::{analysis_markdown, structured_analysis};
-use crate::services::analyze_runtime::{fallback_model_for, primary_model_for};
+use crate::services::analyze_runtime::fallback_model_for;
 use crate::services::analyze_support::{extract_json, render_phrase_preview_markdown};
 use crate::services::query_resolution::{
     attached_phrase_modules_from_analysis, phrase_lookup_from_analysis,
@@ -83,12 +84,17 @@ async fn generate_phrase_usage_module(
     anyhow::ensure!(!prompt.is_empty(), "phrase module prompt is empty");
 
     let user_payload = build_phrase_module_user_payload(host_headword, host_analysis, request);
-    let primary_model = primary_model_for(state, request.quality_mode);
-    let fallback_model = fallback_model_for(state, request.quality_mode);
+    let primary = resolve_task_model(state, AiModelTask::Phrase).await?;
+    let primary_model = primary.model.as_str();
+    let fallback_model = if primary.persisted {
+        ""
+    } else {
+        fallback_model_for(state, request.quality_mode)
+    };
     let options = phrase_module_chat_options();
 
-    let raw = match state
-        .ai_client
+    let raw = match primary
+        .client
         .chat_model_with_options(primary_model, prompt, &user_payload, options)
         .await
     {
@@ -101,8 +107,8 @@ async fn generate_phrase_usage_module(
             tracing::warn!(
                 "phrase module switching to fallback model: primary={primary_model}, fallback={fallback_model}, host={host_headword}, err={primary_err:#}"
             );
-            state
-                .ai_client
+            primary
+                .client
                 .chat_model_with_options(fallback_model, prompt, &user_payload, options)
                 .await?
         }

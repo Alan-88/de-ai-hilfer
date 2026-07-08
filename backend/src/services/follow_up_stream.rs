@@ -3,6 +3,7 @@ use crate::models::{
     FollowUpRequest, FollowUpResponse, NewFollowUp, QualityMode, StreamMetaPayload,
 };
 use crate::repositories::{follow_up, knowledge};
+use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
 use crate::services::follow_up_fallback::{build_follow_up_fallback, normalize_answer};
 use crate::services::follow_up_prompt::build_follow_up_prompt;
 use crate::services::stream_response::{sse_complete, sse_delta, sse_meta};
@@ -32,13 +33,15 @@ pub async fn stream_follow_up(
         &history,
     );
 
-    let primary_model = match request.quality_mode {
-        QualityMode::Default => state.config.ai_models.follow_up.as_str(),
-        QualityMode::Pro => state.config.ai_models.follow_up_pro.as_str(),
-    };
-    let fallback_model = match request.quality_mode {
-        QualityMode::Default => state.config.ai_models.fallback_fast.as_str(),
-        QualityMode::Pro => state.config.ai_models.fallback_pro.as_str(),
+    let primary = resolve_task_model(&state, AiModelTask::Analyze).await?;
+    let primary_model = primary.model.as_str();
+    let fallback_model = if primary.persisted {
+        ""
+    } else {
+        match request.quality_mode {
+            QualityMode::Default => state.config.ai_models.fallback_fast.as_str(),
+            QualityMode::Pro => state.config.ai_models.fallback_pro.as_str(),
+        }
     };
     let source = if request.quality_mode == QualityMode::Pro {
         "Pro"
@@ -55,8 +58,8 @@ pub async fn stream_follow_up(
     }))
     .ok();
 
-    let streamed = match state
-        .ai_client
+    let streamed = match primary
+        .client
         .chat_model_stream_with_options(
             primary_model,
             &system_prompt,
@@ -96,8 +99,8 @@ pub async fn stream_follow_up(
                 fallback: true,
             }))
             .ok();
-            let response = state
-                .ai_client
+            let response = primary
+                .client
                 .chat_model_stream_with_options(
                     fallback_model,
                     &system_prompt,

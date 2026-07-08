@@ -74,7 +74,6 @@ async fn main() -> Result<()> {
             .openai_base_url
             .clone()
             .unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
-        config.ai_models.clone(),
     );
 
     let state = AppState {

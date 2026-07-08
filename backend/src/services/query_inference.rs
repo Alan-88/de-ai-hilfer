@@ -1,9 +1,10 @@
-use crate::ai::{AiChatOptions, AiScene};
+use crate::ai::AiChatOptions;
 use crate::models::{
     AnalyzeRequest, AnalyzeResponse, KnowledgeEntry, PhraseHostCandidate, PhraseLookupConfidence,
     PhraseLookupInfo,
 };
 use crate::repositories::dictionary;
+use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
 use crate::services::analysis_preview::analysis_markdown;
 use crate::services::analyze;
 use crate::services::embedding_lookup::infer_headword_by_embedding;
@@ -50,10 +51,11 @@ pub async fn infer_headword_with_ai(
     })
     .to_string();
 
-    let parsed = state
-        .ai_client
-        .chat_with_options(
-            AiScene::IntelligentSearch,
+    let resolved = resolve_task_model(state, AiModelTask::IntelligentSearch).await?;
+    let parsed = resolved
+        .client
+        .chat_model_with_options(
+            &resolved.model,
             &state.prompts.intelligent_search_prompt,
             &input,
             AiChatOptions {
