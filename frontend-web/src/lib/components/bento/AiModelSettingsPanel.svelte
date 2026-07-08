@@ -17,6 +17,8 @@
     model_draft: string;
   };
 
+  const INHERIT_ANALYZE_VALUE = "__inherit_analyze__";
+
   const taskMeta: Array<{ key: TaskKey; label: string; icon: string; tone: string }> = [
     { key: "analyze", label: "查词", icon: "ph ph-sparkle", tone: "tone-analyze" },
     { key: "phrase", label: "短语", icon: "ph ph-puzzle-piece", tone: "tone-phrase" },
@@ -108,7 +110,6 @@
       api_key_preview: null,
     };
     profiles = [...profiles, profile];
-    if (!profiles.some((item) => item.is_default)) setDefaultProfile(profile.client_id);
   }
 
   function removeProfile(clientId: string) {
@@ -122,16 +123,6 @@
         }
       }
     }
-    if (profiles.length > 0 && !profiles.some((profile) => profile.is_default)) {
-      setDefaultProfile(profiles[0].client_id);
-    }
-  }
-
-  function setDefaultProfile(clientId: string) {
-    profiles = profiles.map((profile) => ({
-      ...profile,
-      is_default: profile.client_id === clientId,
-    }));
   }
 
   function updateProfile(clientId: string, patch: Partial<EditableProfile>) {
@@ -182,6 +173,10 @@
   }
 
   function setTaskProvider(taskKey: TaskKey, providerName: string) {
+    if (taskKey === "phrase" && providerName === INHERIT_ANALYZE_VALUE) {
+      updateTask("phrase", { inherit_task_key: "analyze", provider_name: null, model_id: null });
+      return;
+    }
     const profile = profiles.find((item) => item.name === providerName);
     updateTask(taskKey, {
       provider_name: providerName || null,
@@ -207,7 +202,6 @@
 
   function validateBeforeSave() {
     if (profiles.length === 0) return "至少保留一个供应商 Profile。";
-    if (profiles.filter((profile) => profile.is_default).length !== 1) return "需要且只能有一个默认 Profile。";
 
     const names = new Set<string>();
     for (const profile of profiles) {
@@ -264,7 +258,7 @@
         base_url: profile.base_url.trim(),
         api_key: profile.api_key?.trim() ? profile.api_key.trim() : null,
         model_ids: profile.model_ids ?? [],
-        is_default: !!profile.is_default,
+        is_default: profiles[0]?.client_id === profile.client_id,
       })),
       task_settings: taskMeta.map(({ key }) => {
         const setting = taskSettings[key];
@@ -325,7 +319,7 @@
 
         <div class="profile-list">
           {#each profiles as profile (profile.client_id)}
-            <article class="profile-card" class:is-default={profile.is_default}>
+            <article class="profile-card">
               <div class="profile-top">
                 <label class="field name-field">
                   <span>名称</span>
@@ -358,19 +352,8 @@
                 <input
                   type="password"
                   value={profile.api_key ?? ""}
-                  placeholder={profile.api_key_set ? `保留当前密钥 ${profile.api_key_preview ?? ""}` : "sk-..."}
                   oninput={(event) => updateProfile(profile.client_id, { api_key: event.currentTarget.value })}
                 />
-              </label>
-
-              <label class="default-row">
-                <input
-                  type="radio"
-                  name="default-profile"
-                  checked={profile.is_default}
-                  onchange={() => setDefaultProfile(profile.client_id)}
-                />
-                <span>默认 Profile</span>
               </label>
 
               <div class="model-editor">
@@ -414,46 +397,28 @@
           {#each taskMeta as task}
             {@const setting = taskSettings[task.key]}
             {@const models = modelOptions(setting.provider_name)}
+            {@const providerValue = task.key === "phrase" && setting.inherit_task_key === "analyze" ? INHERIT_ANALYZE_VALUE : setting.provider_name ?? ""}
             <article class={`task-row ${task.tone}`}>
               <div class="task-label">
                 <i class={task.icon}></i>
                 <span>{task.label}</span>
               </div>
 
-              {#if task.key === "phrase"}
-                <label class="inherit-toggle">
-                  <input
-                    type="checkbox"
-                    checked={setting.inherit_task_key === "analyze"}
-                    onchange={(event) => {
-                      if (event.currentTarget.checked) {
-                        updateTask("phrase", { inherit_task_key: "analyze", provider_name: null, model_id: null });
-                      } else {
-                        const first = profiles[0];
-                        updateTask("phrase", {
-                          inherit_task_key: null,
-                          provider_name: first?.name ?? null,
-                          model_id: first?.model_ids?.[0] ?? null,
-                        });
-                      }
-                    }}
-                  />
-                  <span>沿用查词</span>
-                </label>
-              {/if}
+              <select value={providerValue} onchange={(event) => setTaskProvider(task.key, event.currentTarget.value)}>
+                <option value="" disabled>选择 Profile</option>
+                {#if task.key === "phrase"}
+                  <option value={INHERIT_ANALYZE_VALUE}>沿用查词</option>
+                {/if}
+                {#each profiles as profile}
+                  <option value={profile.name}>{profile.name}</option>
+                {/each}
+              </select>
 
               {#if setting.inherit_task_key}
-                <div class="inherited-route">
-                  <i class="ph ph-arrow-bend-down-right"></i>
-                  <span>查词模型</span>
-                </div>
-              {:else}
-                <select value={setting.provider_name ?? ""} onchange={(event) => setTaskProvider(task.key, event.currentTarget.value)}>
-                  <option value="" disabled>选择 Profile</option>
-                  {#each profiles as profile}
-                    <option value={profile.name}>{profile.name}</option>
-                  {/each}
+                <select value={INHERIT_ANALYZE_VALUE} disabled>
+                  <option value={INHERIT_ANALYZE_VALUE}>查词模型</option>
                 </select>
+              {:else}
                 <select
                   value={setting.model_id ?? ""}
                   onchange={(event) => updateTask(task.key, { model_id: event.currentTarget.value || null })}
@@ -542,11 +507,6 @@
     background: color-mix(in srgb, var(--card-bg) 88%, var(--bg-color) 12%);
   }
 
-  .profile-card.is-default {
-    border-color: color-mix(in srgb, var(--accent-main) 45%, var(--border-color));
-    box-shadow: inset 3px 0 0 var(--accent-main);
-  }
-
   .profile-top {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -581,23 +541,6 @@
   input:focus, select:focus {
     border-color: var(--accent-main);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-main) 16%, transparent);
-  }
-
-  .default-row, .inherit-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: fit-content;
-    color: var(--text-muted);
-    font-size: 0.88rem;
-    font-weight: 700;
-  }
-
-  .default-row input, .inherit-toggle input {
-    width: 1rem;
-    height: 1rem;
-    min-height: 1rem;
-    accent-color: var(--accent-main);
   }
 
   .model-chips {

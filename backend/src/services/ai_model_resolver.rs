@@ -89,7 +89,7 @@ fn env_model(state: &AppState, task: AiModelTask) -> ResolvedAiModel {
     }
 }
 
-pub fn env_structure_model(state: &AppState) -> String {
+pub fn env_structure_model(_state: &AppState) -> String {
     std::env::var("AI_MODEL_STRUCTURE")
         .ok()
         .filter(|model| !model.trim().is_empty())
@@ -98,7 +98,7 @@ pub fn env_structure_model(state: &AppState) -> String {
                 .ok()
                 .filter(|model| !model.trim().is_empty())
         })
-        .unwrap_or_else(|| state.config.ai_models.fallback_fast.clone())
+        .unwrap_or_else(|| "minimax-m2.5".to_string())
 }
 
 impl AiModelTask {
