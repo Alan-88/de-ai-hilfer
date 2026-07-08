@@ -207,9 +207,6 @@
     for (const profile of profiles) {
       if (!profile.name.trim()) return "Profile 名称不能为空。";
       if (!profile.base_url.trim()) return `${profile.name} 缺少 Base URL。`;
-      if (!profile.id && profile.api_key_set && !profile.api_key?.trim()) {
-        return `${profile.name} 来自环境变量，首次保存前需要重新填写 API Key。`;
-      }
       if (names.has(profile.name.trim())) return `Profile 名称重复：${profile.name}`;
       names.add(profile.name.trim());
     }
@@ -352,6 +349,7 @@
                 <input
                   type="password"
                   value={profile.api_key ?? ""}
+                  placeholder={profile.api_key_set ? "留空不修改当前密钥" : "输入 API Key"}
                   oninput={(event) => updateProfile(profile.client_id, { api_key: event.currentTarget.value })}
                 />
               </label>
