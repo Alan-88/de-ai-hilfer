@@ -409,9 +409,20 @@ pub struct AttachPhraseRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddPhraseModuleRequest {
+    pub phrase: String,
+    #[serde(default)]
+    pub instruction: Option<String>,
+    #[serde(default)]
+    pub quality_mode: QualityMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetachPhraseRequest {
     pub host_entry_id: i64,
     pub source_phrase_entry_id: i64,
+    #[serde(default)]
+    pub phrase: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -5,6 +5,7 @@ use std::path::Path;
 const BUNDLED_MODEL_A_PROMPT: &str = include_str!("../config/prompts/model_a.md");
 const BUNDLED_STAGE2_PROMPT: &str = include_str!("../config/prompts/stage2.md");
 const BUNDLED_STRUCTURE_PROMPT: &str = include_str!("../config/prompts/structure.md");
+const BUNDLED_PHRASE_MODULE_PROMPT: &str = include_str!("../config/prompts/phrase_module.md");
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PromptConfig {
@@ -17,6 +18,8 @@ pub struct PromptConfig {
     pub stage2_prompt: String,
     #[serde(default)]
     pub structure_prompt: String,
+    #[serde(default)]
+    pub phrase_module_prompt: String,
     pub follow_up_prompt: String,
     pub intelligent_search_prompt: String,
 }
@@ -44,6 +47,12 @@ impl PromptConfig {
                 base_dir,
                 "structure.md",
                 BUNDLED_STRUCTURE_PROMPT,
+            )?;
+            fill_prompt_from_file_or_bundle(
+                &mut config.phrase_module_prompt,
+                base_dir,
+                "phrase_module.md",
+                BUNDLED_PHRASE_MODULE_PROMPT,
             )?;
         }
         Ok(config)

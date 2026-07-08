@@ -1,11 +1,15 @@
-use crate::models::{AnalyzeRequest, AnalyzeResponse, AttachPhraseRequest, DetachPhraseRequest};
+use crate::models::{
+    AddPhraseModuleRequest, AnalyzeRequest, AnalyzeResponse, AttachPhraseRequest,
+    DetachPhraseRequest,
+};
 use crate::services::analyze;
 use crate::services::analyze_stream;
 use crate::services::phrase_attach;
+use crate::services::phrase_module;
 use crate::state::AppState;
 use axum::{
     body::Body,
-    extract::State,
+    extract::{Path, State},
     http::{header, HeaderValue, StatusCode},
     response::Response,
     Json,
@@ -75,6 +79,20 @@ pub async fn detach_phrase_from_host(
         .map(Json)
         .map_err(|err| {
             tracing::error!("detach phrase failed: {err:#}");
+            (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+        })
+}
+
+pub async fn add_phrase_module_to_entry(
+    State(state): State<AppState>,
+    Path(entry_id): Path<i64>,
+    Json(request): Json<AddPhraseModuleRequest>,
+) -> Result<Json<AnalyzeResponse>, (StatusCode, String)> {
+    phrase_module::add_phrase_module_to_entry(&state, entry_id, request)
+        .await
+        .map(Json)
+        .map_err(|err| {
+            tracing::error!("add phrase module failed: {err:#}");
             (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
         })
 }

@@ -1,5 +1,6 @@
 import { apiFetch, apiUrl } from "$lib/api";
 import type {
+  AddPhraseModuleRequest,
   AnalyzeResponse,
   AttachPhraseRequest,
   DatabaseImportResponse,
@@ -85,6 +86,14 @@ export function attachPhraseToHost(payload: AttachPhraseRequest) {
 
 export function detachPhraseFromHost(payload: DetachPhraseRequest) {
   return apiFetch<AnalyzeResponse>(`${API_BASE}/phrases/detach`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function addPhraseModuleToEntry(entryId: number, payload: AddPhraseModuleRequest) {
+  return apiFetch<AnalyzeResponse>(`${API_BASE}/entries/${entryId}/phrase-modules`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

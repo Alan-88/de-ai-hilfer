@@ -3,7 +3,15 @@
   import { browser } from "$app/environment";
   import { fade, slide } from "svelte/transition";
   import { addWordToLearning } from "$lib/learningApi";
-  import { analyzeWord, attachPhraseToHost, detachPhraseFromHost, getRecentEntries, getSuggestions, intelligentSearch } from "$lib/queryApi";
+  import {
+    addPhraseModuleToEntry,
+    analyzeWord,
+    attachPhraseToHost,
+    detachPhraseFromHost,
+    getRecentEntries,
+    getSuggestions,
+    intelligentSearch
+  } from "$lib/queryApi";
   import SearchResultCards from "$lib/components/bento/SearchResultCards.svelte";
   import { markdownToPlainText, renderMarkdownHtml } from "$lib/analysis/structuredAnalysis";
   import { shouldPreferDirectAnalyze } from "$lib/search/searchExecution";
@@ -30,6 +38,7 @@
   let advancedPending = $state<AnalyzeResponse | null>(null);
   let isAdvancedLoading = $state(false);
   let isUpdatingPhraseAttachment = $state(false);
+  let isAddingPhraseModule = $state(false);
   let currentSearchController: AbortController | null = null;
   let hasMounted = $state(false);
   let mainInputRef = $state<HTMLInputElement | null>(null);
@@ -273,6 +282,7 @@
       const detached = await detachPhraseFromHost({
         host_entry_id: $s.result.entry_id,
         source_phrase_entry_id: item.source_phrase_entry_id,
+        phrase: item.phrase,
       });
       s.setQuery(detached.query_text);
       s.setResult(detached);
@@ -282,6 +292,27 @@
     } finally {
       isUpdatingPhraseAttachment = false;
       s.update(state => ({ ...state, isLoading: false }));
+    }
+  }
+
+  async function handleAddPhraseModule(phrase: string) {
+    if (!$s.result || $s.result.entry_id <= 0) return;
+
+    try {
+      isAddingPhraseModule = true;
+      s.update(state => ({ ...state, error: "" }));
+      const updated = await addPhraseModuleToEntry($s.result.entry_id, {
+        phrase,
+        quality_mode: $s.result.quality_mode ?? "default",
+      });
+      s.setQuery(updated.query_text);
+      s.setResult(updated);
+      void fetchRecentItems();
+    } catch (e) {
+      s.setError(e instanceof Error ? e.message : "短语卡片添加失败，请稍后重试。");
+      throw e;
+    } finally {
+      isAddingPhraseModule = false;
     }
   }
 
@@ -465,12 +496,14 @@
         isStreaming={$s.isStreaming}
         isAddingToLearning={isAddingToLearning}
         isUpdatingPhraseAttachment={isUpdatingPhraseAttachment}
+        isAddingPhraseModule={isAddingPhraseModule}
         recentItems={recentItems}
         onAddToLearning={addCurrentWordToLearning}
         onRegenerate={(mode, hint) => handleSearch($s.query, mode, true, hint)}
         onSelectRecent={(q) => handleSearch(q)}
         onSelectPhraseHost={handlePhraseHostSelection}
         onDetachAttachedPhrase={handleDetachPhraseHost}
+        onAddPhraseModule={handleAddPhraseModule}
         onnewFollowUp={handleNewFollowUp}
       />
     {/if}

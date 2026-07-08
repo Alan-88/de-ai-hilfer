@@ -36,6 +36,7 @@ pub mod learning;
 pub mod library;
 pub mod management;
 pub mod phrase_attach;
+pub mod phrase_module;
 pub mod prewarm_selection;
 pub mod query;
 pub mod query_inference;
