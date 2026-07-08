@@ -10,6 +10,7 @@
   import { slide, fade } from "svelte/transition";
   import GrammarFeatureCard from "$lib/components/bento/GrammarFeatureCard.svelte";
   import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
+  import PhraseModuleAddControl from "$lib/components/bento/PhraseModuleAddControl.svelte";
 
   type StructuredAnalysis = ReturnType<typeof resolveStructuredAnalysis>;
   type AttachedPhraseBlock = AttachedPhraseModule & { structured: StructuredAnalysis };
@@ -19,24 +20,28 @@
     isStreaming = false,
     isAddingToLearning = false,
     isUpdatingPhraseAttachment = false,
+    isAddingPhraseModule = false,
     recentItems = [],
     onAddToLearning,
     onRegenerate,
     onSelectRecent,
     onSelectPhraseHost,
     onDetachAttachedPhrase,
+    onAddPhraseModule,
     onnewFollowUp
   } = $props<{
     result: AnalyzeResponse;
     isStreaming?: boolean;
     isAddingToLearning?: boolean;
     isUpdatingPhraseAttachment?: boolean;
+    isAddingPhraseModule?: boolean;
     recentItems?: RecentItem[];
     onAddToLearning: () => void;
     onRegenerate: (mode: QualityMode, hint: string) => void;
     onSelectRecent: (query: string) => void;
     onSelectPhraseHost?: (headword: string, mode?: "attach" | "view") => void;
     onDetachAttachedPhrase?: (item: AttachedPhraseModule) => void;
+    onAddPhraseModule?: (phrase: string) => Promise<void> | void;
     onnewFollowUp?: (item: FollowUpItem) => void;
   }>();
 
@@ -396,27 +401,37 @@
 
   <!-- 应用与例句: 结构化展示 -->
   <div class="bento-card" class:card-main={!useBranchUI} class:card-full={useBranchUI}>
-    <div class="card-title"><i class="ph-fill ph-lightbulb"></i> 应用与例句</div>
+    <div class="card-title-row">
+      <div class="card-title"><i class="ph-fill ph-lightbulb"></i> 应用与例句</div>
+      {#if !isPhrasePreview && result.entry_id > 0 && onAddPhraseModule}
+        <PhraseModuleAddControl
+          disabled={isStreaming}
+          isLoading={isAddingPhraseModule}
+          onSubmit={onAddPhraseModule}
+        />
+      {/if}
+    </div>
     <div class="usage-list">
       {#if usageFeed.length > 0}
         {#each usageFeed as usage}
-          <div class="surface-card usage-item">
+          <div class="surface-card usage-item" class:is-attached={usage.kind === "attached"}>
             <div class="usage-head">
               <p class="small-copy"><strong>{usage.title}</strong></p>
               {#if usage.kind === "attached"}
-                <div class="attached-phrase-actions">
-                  <span class="mini-label source-flash">短语追加</span>
-                  <span class="mini-label model-name">{usage.attachment.phrase}</span>
-                  <button
-                    class="mini-inline-btn"
-                    type="button"
-                    onclick={() => onDetachAttachedPhrase?.(usage.attachment)}
-                    disabled={isUpdatingPhraseAttachment || isStreaming}
-                    title="移除这条短语追加"
-                  >
-                    <i class="ph ph-x"></i>
-                  </button>
-                </div>
+                <span class="mini-label source-flash attached-phrase-label">短语追加</span>
+                <button
+                  class="attached-trash-btn"
+                  type="button"
+                  onclick={() => onDetachAttachedPhrase?.(usage.attachment)}
+                  disabled={isUpdatingPhraseAttachment || isStreaming}
+                  title="删除这条短语卡片"
+                  aria-label={`删除短语卡片：${usage.attachment.phrase}`}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M9 3h6l1 2h4v2H4V5h4l1-2Z" />
+                    <path d="M6 9h12l-.75 11A2.2 2.2 0 0 1 15.06 22H8.94a2.2 2.2 0 0 1-2.19-2L6 9Zm4 2v8h2v-8h-2Zm4 0v8h2v-8h-2Z" />
+                  </svg>
+                </button>
               {/if}
             </div>
             {#if usage.explanation}
@@ -662,8 +677,58 @@
   .card-side { grid-column: span 1; display: flex; flex-direction: column; gap: 1rem; }
   .card-full { grid-column: span 4; }
 
+  .card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .attached-trash-btn svg {
+    width: 1.05rem;
+    height: 1.05rem;
+    fill: currentColor;
+  }
+
   .usage-list, .insights-stack { display: flex; flex-direction: column; gap: 1rem; }
+  .usage-item { position: relative; }
+  .usage-item.is-attached { padding-right: 3rem; }
   .usage-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .attached-phrase-label {
+    margin-right: 1.6rem;
+  }
+  .attached-trash-btn {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--card-bg) 84%, transparent);
+    border: 1px solid var(--border-color);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease, color 0.18s ease, background 0.18s ease;
+  }
+  .usage-item.is-attached:hover .attached-trash-btn,
+  .attached-trash-btn:focus-visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+  }
+  .attached-trash-btn:hover:not(:disabled) {
+    color: #dc2626;
+    background: color-mix(in srgb, #fee2e2 82%, var(--card-bg));
+  }
+  .attached-trash-btn:disabled {
+    cursor: wait;
+    opacity: 0.5;
+  }
   .example-box { background: var(--bg-color); padding: 1rem; border-radius: 8px; border-left: 3px solid var(--border-color); }
   .de-line { font-weight: 700; font-size: 1.05rem; }
   .zh-line { color: var(--text-muted); font-size: 0.9rem; margin-top: 0.4rem; }
@@ -760,5 +825,9 @@
     .card-header, .card-main, .card-side, .card-full { grid-column: span 1; }
     .card-header { flex-direction: row; align-items: center; padding: 1rem; }
     .header-actions { flex-direction: row; }
+    .card-title-row {
+      align-items: flex-start;
+      flex-direction: column;
+    }
   }
 </style>

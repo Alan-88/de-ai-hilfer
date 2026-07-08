@@ -115,6 +115,10 @@ async fn main() -> anyhow::Result<()> {
         )
         .route("/api/v1/entries/all", get(handlers::query::get_all_entries))
         .route(
+            "/api/v1/entries/:entry_id/phrase-modules",
+            post(handlers::analyze::add_phrase_module_to_entry),
+        )
+        .route(
             "/api/v1/entries/:entry_id",
             get(handlers::query::get_entry_detail).delete(handlers::query::delete_entry),
         )

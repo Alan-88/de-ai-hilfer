@@ -218,9 +218,16 @@ export interface AttachPhraseRequest {
   quality_mode?: QualityMode;
 }
 
+export interface AddPhraseModuleRequest {
+  phrase: string;
+  instruction?: string | null;
+  quality_mode?: QualityMode;
+}
+
 export interface DetachPhraseRequest {
   host_entry_id: number;
   source_phrase_entry_id: number;
+  phrase?: string | null;
 }
 
 export interface AnalyzeStreamRequest {

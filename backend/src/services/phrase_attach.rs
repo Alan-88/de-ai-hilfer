@@ -38,9 +38,7 @@ fn build_response(entry: crate::models::KnowledgeEntry) -> AnalyzeResponse {
 }
 
 fn transient_attachment_id() -> i64 {
-    -Utc::now()
-        .timestamp_nanos_opt()
-        .unwrap_or_else(|| Utc::now().timestamp_micros())
+    -Utc::now().timestamp_micros()
 }
 
 pub async fn attach_phrase_to_host(
@@ -207,9 +205,19 @@ pub async fn detach_phrase_from_host(
         .context("failed to parse host analysis document")?;
 
     let original_len = host_analysis.attached_phrase_modules.len();
-    host_analysis
-        .attached_phrase_modules
-        .retain(|item| item.source_phrase_entry_id != request.source_phrase_entry_id);
+    let requested_phrase = request
+        .phrase
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    host_analysis.attached_phrase_modules.retain(|item| {
+        let same_source = item.source_phrase_entry_id == request.source_phrase_entry_id;
+        let same_phrase = requested_phrase
+            .map(|phrase| item.phrase.trim().eq_ignore_ascii_case(phrase))
+            .unwrap_or(false);
+        !(same_source || same_phrase)
+    });
 
     anyhow::ensure!(
         host_analysis.attached_phrase_modules.len() != original_len,
