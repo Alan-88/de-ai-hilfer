@@ -348,11 +348,16 @@
 
     <div class="header-actions">
       <div class="action-icons">
-        <button class="icon-btn" onclick={() => onRegenerate("default", "", null)} disabled={isStreaming} title="按当前配置重新生成">
+        <button
+          class="icon-btn"
+          class:is-custom-action={showCustomRegenerate}
+          onclick={() => showCustomRegenerate
+            ? onRegenerate("default", customRegenerateHint, selectedActionModelOverride)
+            : onRegenerate("default", "", null)}
+          disabled={isStreaming}
+          title={showCustomRegenerate ? "按本次动作设置重新生成" : "按当前配置重新生成"}
+        >
           <i class="ph ph-arrows-clockwise"></i>
-        </button>
-        <button class="icon-btn pro-btn" onclick={() => onRegenerate("pro", "", null)} disabled={isStreaming} title="按当前配置增强生成">
-          <i class="ph-fill ph-lightning"></i>
         </button>
         <button
           class="icon-btn"
@@ -477,17 +482,6 @@
         placeholder="额外提示，可留空。例如：多讲固定搭配；例句更长一点..."
         disabled={isStreaming}
       ></textarea>
-      <div class="custom-action-footer">
-        <button
-          class="btn-primary compact-run-btn"
-          type="button"
-          onclick={() => onRegenerate("default", customRegenerateHint, selectedActionModelOverride)}
-          disabled={isStreaming || !selectedActionModelOverride}
-        >
-          <i class="ph-fill ph-sparkle"></i>
-          <span>用此设置重新生成</span>
-        </button>
-      </div>
     </div>
   {/if}
 
@@ -766,7 +760,11 @@
     color: var(--accent-main);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-main) 35%, transparent);
   }
-  .pro-btn { color: #6d28d9; }
+  .icon-btn.is-custom-action {
+    background: var(--accent-main);
+    color: #fff;
+    box-shadow: 0 4px 15px var(--accent-glow);
+  }
   .learn-btn { padding: 0.5rem 1rem; font-size: 0.85rem; }
 
   .custom-regenerate-card {
@@ -805,18 +803,6 @@
   }
   .custom-model-controls select:first-child { max-width: 10rem; }
   .custom-model-controls select:last-child { flex: 1 1 12rem; }
-  .custom-action-footer {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: -0.1rem;
-  }
-  .compact-run-btn {
-    min-height: 2.25rem;
-    padding: 0 0.9rem;
-    gap: 0.45rem;
-    font-size: 0.84rem;
-  }
-
   /* 其它卡片微调 */
   .card-main { grid-column: span 3; display: flex; flex-direction: column; gap: 1rem; }
   .card-side { grid-column: span 1; display: flex; flex-direction: column; gap: 1rem; }
@@ -897,7 +883,7 @@
     width: 100%;
   }
 
-  .compact-textarea { width: 100%; min-height: 3.4rem; padding: 0.7rem 0.75rem; border-radius: 8px; background: var(--bg-color); border: 1px solid var(--border-color); font-size: 0.9rem; resize: vertical; }
+  .compact-textarea { width: 100%; min-height: 4rem; padding: 0.75rem; border-radius: 8px; background: var(--bg-color); border: 1px solid var(--border-color); font-size: 0.9rem; resize: vertical; }
   .phrase-host-card { display: flex; flex-direction: column; gap: 0.9rem; }
   .phrase-meta { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
   .host-chip-list { display: flex; flex-wrap: wrap; gap: 0.75rem; }
