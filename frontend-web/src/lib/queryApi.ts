@@ -1,6 +1,8 @@
 import { apiFetch, apiUrl } from "$lib/api";
 import type {
   AddPhraseModuleRequest,
+  AiModelTestRequest,
+  AiModelTestResponse,
   AiSettingsResponse,
   AiSettingsUpdateRequest,
   AnalyzeResponse,
@@ -77,6 +79,14 @@ export function getAiSettings() {
 export function updateAiSettings(payload: AiSettingsUpdateRequest) {
   return apiFetch<AiSettingsResponse>(`${API_BASE}/ai-settings`, {
     method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function testAiModel(payload: AiModelTestRequest) {
+  return apiFetch<AiModelTestResponse>(`${API_BASE}/ai-settings/test-model`, {
+    method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });

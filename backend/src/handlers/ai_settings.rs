@@ -1,4 +1,6 @@
-use crate::models::{AiSettingsResponse, AiSettingsUpdateRequest};
+use crate::models::{
+    AiModelTestRequest, AiModelTestResponse, AiSettingsResponse, AiSettingsUpdateRequest,
+};
 use crate::services::ai_settings;
 use crate::state::AppState;
 use axum::{extract::State, http::StatusCode, Json};
@@ -17,6 +19,16 @@ pub async fn update_ai_settings(
     Json(request): Json<AiSettingsUpdateRequest>,
 ) -> Result<Json<AiSettingsResponse>, (StatusCode, String)> {
     ai_settings::update_ai_settings(&state, request)
+        .await
+        .map(Json)
+        .map_err(settings_error)
+}
+
+pub async fn test_ai_model(
+    State(state): State<AppState>,
+    Json(request): Json<AiModelTestRequest>,
+) -> Result<Json<AiModelTestResponse>, (StatusCode, String)> {
+    ai_settings::test_ai_model(&state, request)
         .await
         .map(Json)
         .map_err(settings_error)

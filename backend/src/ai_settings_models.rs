@@ -81,3 +81,20 @@ pub struct AiSettingsUpdateRequest {
     #[serde(default)]
     pub task_settings: Vec<AiTaskModelSettingInput>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiModelTestRequest {
+    #[serde(default)]
+    pub profile_id: Option<i64>,
+    pub profile_name: String,
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    pub model_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiModelTestResponse {
+    pub success: bool,
+    pub message: String,
+}

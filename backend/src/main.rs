@@ -133,6 +133,10 @@ async fn main() -> anyhow::Result<()> {
                 .put(handlers::ai_settings::update_ai_settings),
         )
         .route(
+            "/api/v1/ai-settings/test-model",
+            post(handlers::ai_settings::test_ai_model),
+        )
+        .route(
             "/api/v1/database/export",
             get(handlers::management::export_database),
         )
