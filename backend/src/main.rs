@@ -1,4 +1,5 @@
 mod ai;
+mod ai_settings_models;
 mod config;
 mod db;
 mod dictionary_lexeme_models;
@@ -127,6 +128,11 @@ async fn main() -> anyhow::Result<()> {
             post(handlers::query::intelligent_search),
         )
         .route("/api/v1/status", get(handlers::query::get_status))
+        .route(
+            "/api/v1/ai-settings",
+            get(handlers::ai_settings::get_ai_settings)
+                .put(handlers::ai_settings::update_ai_settings),
+        )
         .route(
             "/api/v1/database/export",
             get(handlers::management::export_database),

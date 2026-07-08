@@ -1,6 +1,8 @@
 import { apiFetch, apiUrl } from "$lib/api";
 import type {
   AddPhraseModuleRequest,
+  AiSettingsResponse,
+  AiSettingsUpdateRequest,
   AnalyzeResponse,
   AttachPhraseRequest,
   DatabaseImportResponse,
@@ -66,6 +68,18 @@ export function getSuggestions(query: string) {
 
 export function getServerStatus() {
   return apiFetch<StatusResponse>(`${API_BASE}/status`);
+}
+
+export function getAiSettings() {
+  return apiFetch<AiSettingsResponse>(`${API_BASE}/ai-settings`);
+}
+
+export function updateAiSettings(payload: AiSettingsUpdateRequest) {
+  return apiFetch<AiSettingsResponse>(`${API_BASE}/ai-settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 export function intelligentSearch(payload: IntelligentSearchRequest) {

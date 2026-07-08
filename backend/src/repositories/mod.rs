@@ -1,3 +1,4 @@
+pub mod ai_settings;
 pub mod dictionary;
 pub mod dictionary_lexemes;
 pub(crate) mod dictionary_merge;
