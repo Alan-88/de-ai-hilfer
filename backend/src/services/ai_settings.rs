@@ -65,12 +65,45 @@ pub async fn get_ai_settings(state: &AppState) -> Result<AiSettingsResponse> {
 
 pub async fn update_ai_settings(
     state: &AppState,
-    request: AiSettingsUpdateRequest,
+    mut request: AiSettingsUpdateRequest,
 ) -> Result<AiSettingsResponse> {
+    hydrate_env_api_key_for_first_save(state, &mut request).await?;
     validate_update(&request)?;
     ai_settings::replace_ai_settings(&state.pool, &request.profiles, &request.task_settings)
         .await?;
     get_ai_settings(state).await
+}
+
+async fn hydrate_env_api_key_for_first_save(
+    state: &AppState,
+    request: &mut AiSettingsUpdateRequest,
+) -> Result<()> {
+    if !ai_settings::list_provider_profiles(&state.pool)
+        .await?
+        .is_empty()
+    {
+        return Ok(());
+    }
+
+    let Some(env_api_key) = state
+        .config
+        .openai_api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+    else {
+        return Ok(());
+    };
+
+    if let Some(profile) = request
+        .profiles
+        .iter_mut()
+        .find(|profile| profile.id.is_none() && profile.is_default && profile.api_key.is_none())
+    {
+        profile.api_key = Some(env_api_key.to_string());
+    }
+
+    Ok(())
 }
 
 fn validate_update(request: &AiSettingsUpdateRequest) -> Result<()> {
