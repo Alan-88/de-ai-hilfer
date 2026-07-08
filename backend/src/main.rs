@@ -85,14 +85,6 @@ async fn main() -> anyhow::Result<()> {
         .route("/health", get(health_check))
         .route("/api/v1/analyze", post(handlers::analyze::analyze_word))
         .route(
-            "/api/v1/phrases/attach",
-            post(handlers::analyze::attach_phrase_to_host),
-        )
-        .route(
-            "/api/v1/phrases/detach",
-            post(handlers::analyze::detach_phrase_from_host),
-        )
-        .route(
             "/api/v1/analyze/stream",
             post(handlers::analyze::stream_analyze_word),
         )
@@ -115,7 +107,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/v1/entries/all", get(handlers::query::get_all_entries))
         .route(
             "/api/v1/entries/:entry_id/phrase-modules",
-            post(handlers::analyze::add_phrase_module_to_entry),
+            post(handlers::analyze::add_phrase_module_to_entry)
+                .delete(handlers::analyze::delete_phrase_module_from_entry),
         )
         .route(
             "/api/v1/entries/:entry_id",

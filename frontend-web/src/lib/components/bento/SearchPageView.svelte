@@ -6,8 +6,7 @@
   import {
     addPhraseModuleToEntry,
     analyzeWord,
-    attachPhraseToHost,
-    detachPhraseFromHost,
+    deletePhraseModuleFromEntry,
     getAiSettings,
     getRecentEntries,
     getSuggestions,
@@ -283,57 +282,13 @@
     }
   }
 
-  async function handlePhraseHostSelection(headword: string, mode: "attach" | "view" = "attach") {
-    const host = headword.trim();
-    if (!host) return;
-
-    if (mode === "view") {
-      await handleSearch(host, "default", false, "", false);
-      return;
-    }
-
-    if (!$s.result?.phrase_lookup || $s.result.entry_id <= 0) {
-      await handleSearch(host, "default", false, "", false);
-      return;
-    }
-
-    try {
-      isUpdatingPhraseAttachment = true;
-      s.update(state => ({ ...state, isLoading: true, error: "" }));
-      const attached = await attachPhraseToHost({
-        phrase_entry_id: $s.result.entry_id > 0 ? $s.result.entry_id : null,
-        host_headword: host,
-        phrase: $s.result.query_text,
-        phrase_lookup: $s.result.phrase_lookup ?? null,
-        phrase_usage_preview: $s.result.phrase_usage_preview ?? null,
-        analysis_markdown: $s.result.analysis_markdown,
-        model: $s.result.model,
-        quality_mode: $s.result.quality_mode
-      });
-      s.setQuery(attached.query_text);
-      s.setResult(attached);
-      advancedPending = null;
-      showSuggestions = false;
-      showAdvanced = false;
-      advancedHint = "";
-      void fetchRecentItems();
-    } catch (e) {
-      s.setError("短语挂载失败，已切换为查看主词。");
-      await handleSearch(host, "default", false, "", false);
-    } finally {
-      isUpdatingPhraseAttachment = false;
-      s.update(state => ({ ...state, isLoading: false }));
-    }
-  }
-
   async function handleDetachPhraseHost(item: AttachedPhraseModule) {
     if (!$s.result || $s.result.entry_id <= 0) return;
 
     try {
       isUpdatingPhraseAttachment = true;
       s.update(state => ({ ...state, isLoading: true, error: "" }));
-      const detached = await detachPhraseFromHost({
-        host_entry_id: $s.result.entry_id,
+      const detached = await deletePhraseModuleFromEntry($s.result.entry_id, {
         source_phrase_entry_id: item.source_phrase_entry_id,
         phrase: item.phrase,
       });
@@ -483,7 +438,7 @@
           <input
             bind:this={mainInputRef}
             bind:value={$s.query}
-            placeholder="输入德语单词、短语或近似拼写..."
+            placeholder="输入德语单词或近似拼写..."
             oninput={fetchSuggestions}
             onkeydown={handleKeyDown}
             onfocus={() => showSuggestions = true}
@@ -594,7 +549,6 @@
         onActionModelChange={(key) => selectedActionModelKey = key}
         onRegenerate={(mode, hint, modelOverride = null) => handleSearch($s.query, mode, true, hint, true, modelOverride)}
         onSelectRecent={(q) => handleSearch(q, "default", false, "", false)}
-        onSelectPhraseHost={handlePhraseHostSelection}
         onDetachAttachedPhrase={handleDetachPhraseHost}
         onAddPhraseModule={handleAddPhraseModule}
         onnewFollowUp={handleNewFollowUp}

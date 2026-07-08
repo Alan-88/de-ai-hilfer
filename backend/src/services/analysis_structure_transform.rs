@@ -1,7 +1,6 @@
 use crate::models::{
-    PhraseUsagePreview, StructuredAnalysisDocument, StructuredDeepInsight, StructuredExample,
-    StructuredGrammarRow, StructuredMeaning, StructuredUsageModule, StructuredWordNetwork,
-    StructuredWordNetworkItem,
+    StructuredAnalysisDocument, StructuredDeepInsight, StructuredExample, StructuredGrammarRow,
+    StructuredMeaning, StructuredUsageModule, StructuredWordNetwork, StructuredWordNetworkItem,
 };
 use std::collections::HashSet;
 
@@ -100,40 +99,6 @@ pub fn normalize_structured_analysis(
     } else {
         Some(structured)
     }
-}
-
-pub fn structured_from_phrase_preview(
-    query: &str,
-    preview: &PhraseUsagePreview,
-) -> StructuredAnalysisDocument {
-    normalize_structured_analysis(
-        Some(StructuredAnalysisDocument {
-            headword: query.trim().to_string(),
-            phonetic: String::new(),
-            meanings: vec![StructuredMeaning {
-                part_of_speech: "短语".to_string(),
-                chinese: preview.meaning_zh.trim().to_string(),
-                english: preview.meaning_en.trim().to_string(),
-            }],
-            usage_modules: vec![StructuredUsageModule {
-                title: preview.usage_module.title.trim().to_string(),
-                explanation: preview.usage_module.explanation.trim().to_string(),
-                example_de: preview.usage_module.example_de.trim().to_string(),
-                example_zh: preview.usage_module.example_zh.trim().to_string(),
-            }],
-            collocations: Vec::new(),
-            examples: Vec::new(),
-            grammar_rows: Vec::new(),
-            grammar_branches: Vec::new(),
-            word_network: StructuredWordNetwork::default(),
-            deep_insights: vec![StructuredDeepInsight {
-                title: "短语说明".to_string(),
-                content_markdown: preview.usage_module.explanation.trim().to_string(),
-            }],
-        }),
-        query,
-    )
-    .unwrap_or_default()
 }
 
 pub fn merge_structured_with_seed(

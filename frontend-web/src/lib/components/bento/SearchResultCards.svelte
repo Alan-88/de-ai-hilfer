@@ -7,7 +7,7 @@
   } from "$lib/analysis/structuredAnalysis";
   import FollowUpCard from "$lib/components/bento/FollowUpCard.svelte";
   import type { AiModelOverride, AnalyzeResponse, AttachedPhraseModule, FollowUpItem, PhraseUsageModule, QualityMode, RecentItem } from "$lib/types";
-  import { slide, fade } from "svelte/transition";
+  import { slide } from "svelte/transition";
   import GrammarFeatureCard from "$lib/components/bento/GrammarFeatureCard.svelte";
   import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
   import PhraseModuleAddControl from "$lib/components/bento/PhraseModuleAddControl.svelte";
@@ -33,7 +33,6 @@
     onRegenerate,
     onActionModelChange,
     onSelectRecent,
-    onSelectPhraseHost,
     onDetachAttachedPhrase,
     onAddPhraseModule,
     onnewFollowUp
@@ -51,7 +50,6 @@
     onRegenerate: (mode: QualityMode, hint: string, modelOverride?: AiModelOverride | null) => void;
     onActionModelChange?: (key: string) => void;
     onSelectRecent: (query: string) => void;
-    onSelectPhraseHost?: (headword: string, mode?: "attach" | "view") => void;
     onDetachAttachedPhrase?: (item: AttachedPhraseModule) => void;
     onAddPhraseModule?: (phrase: string) => Promise<void> | void;
     onnewFollowUp?: (item: FollowUpItem) => void;
@@ -59,7 +57,6 @@
 
   let showCustomRegenerate = $state(false);
   let customRegenerateHint = $state("");
-  let pendingHostHeadword = $state<string | null>(null);
   let activeGrammarBranch = $state<import("$lib/types").GrammarBranch | null>(null);
   let popoverTriggerRect = $state<DOMRect | null>(null);
 
@@ -137,8 +134,6 @@
     )
   );
   const useBranchUI = $derived((structured.grammarBranches?.length ?? 0) > 0);
-  const phrasePreview = $derived(result.phrase_usage_preview ?? null);
-  const isPhrasePreview = $derived(Boolean(result.phrase_lookup && phrasePreview));
   const attachedPhraseBlocks = $derived(
     (result.attached_phrase_modules ?? []).map((item: AttachedPhraseModule) => ({
       ...item,
@@ -146,24 +141,12 @@
     }))
   );
   const usageFeed = $derived([
-    ...(phrasePreview
-      ? [
-          {
-            kind: "phrase_preview" as const,
-            title: phrasePreview.usage_module.title,
-            explanation: phrasePreview.usage_module.explanation,
-            example: {
-              de: phrasePreview.usage_module.example_de,
-              zh: phrasePreview.usage_module.example_zh
-            }
-          }
-        ]
-      : structured.usageModules.map((usage) => ({
-          kind: "base" as const,
-          title: usage.title,
-          explanation: usage.explanation,
-          example: usage.example
-        }))),
+    ...structured.usageModules.map((usage) => ({
+      kind: "base" as const,
+      title: usage.title,
+      explanation: usage.explanation,
+      example: usage.example
+    })),
     ...attachedPhraseBlocks.map((attachment: AttachedPhraseBlock) => {
       const fallbackUsage = attachment.structured.usageModules[0];
       const usage = attachment.usage_module
@@ -192,19 +175,8 @@
   ]);
 
   const hasMeanings = $derived(structured.meanings.length > 0);
-  const mainMeaning = $derived(
-    phrasePreview
-      ? {
-          partOfSpeech: "短语",
-          chinese: phrasePreview.meaning_zh,
-          english: ""
-        }
-      : structured.meanings[0]
-  );
-  const deepInsights = $derived(isPhrasePreview ? [] : structured.deepInsights);
-  const needsHostConfirmation = $derived(
-    Boolean(result.phrase_lookup && result.phrase_lookup.confidence !== "high")
-  );
+  const mainMeaning = $derived(structured.meanings[0]);
+  const deepInsights = $derived(structured.deepInsights);
   const actionProviderOptions = $derived(
     Array.from(new Map(actionModelOptions.map((option: ActionModelOption) => [option.provider_name, option.provider_name])).values())
   );
@@ -222,7 +194,6 @@
   $effect(() => {
     result.entry_id;
     result.query_text;
-    pendingHostHeadword = null;
   });
 
   function getSourceClass(source?: string) {
@@ -259,29 +230,6 @@
     if (onnewFollowUp) onnewFollowUp(item);
   }
 
-  function confidenceLabel(value?: "high" | "medium" | "low" | null) {
-    if (value === "high") return "高置信";
-    if (value === "medium") return "中等置信";
-    return "待确认";
-  }
-
-  function phraseActionHint(value?: "high" | "medium" | "low" | null) {
-    if (value === "high") return "点击候选后会直接挂载当前短语，并切换到对应主词结果。";
-    if (value === "medium") return "当前候选有一定把握。点击候选后会先进入确认，再决定是仅查看主词，还是正式挂载。";
-    return "当前候选偏弱。点击候选后不会立刻写库，而是先让你确认主词是否合适。";
-  }
-
-  function handleCandidateClick(headword: string) {
-    if (needsHostConfirmation) {
-      pendingHostHeadword = headword;
-      return;
-    }
-    onSelectPhraseHost?.(headword, "attach");
-  }
-
-  function clearPendingHost() {
-    pendingHostHeadword = null;
-  }
 </script>
 
 <div class="bento-grid">
@@ -319,12 +267,9 @@
           {#if mainMeaning}
             <span class="pos-badge">{mainMeaning.partOfSpeech}</span>
             <span class="zh-text">{mainMeaning.chinese}</span>
-            {#if !phrasePreview && mainMeaning.english}
+            {#if mainMeaning.english}
               <span class="en-text">{mainMeaning.english}</span>
             {/if}
-          {/if}
-          {#if phrasePreview?.meaning_en}
-            <span class="word-phonetic">{phrasePreview.meaning_en}</span>
           {/if}
         {/if}
       </div>
@@ -376,77 +321,6 @@
     </div>
   </div>
 
-  {#if result.phrase_lookup}
-    <div class="bento-card card-full phrase-host-card">
-      <div class="card-title"><i class="ph-fill ph-git-branch"></i> 短语宿主候选</div>
-      <div class="phrase-meta">
-        <span class="mini-label source-db">短语解析</span>
-        <span class="mini-label model-name">{confidenceLabel(result.phrase_lookup.confidence)}</span>
-        {#if result.phrase_lookup.best_host_headword}
-          <span class="card-copy">当前优先关联到 <strong>{result.phrase_lookup.best_host_headword}</strong></span>
-        {:else}
-          <span class="card-copy">当前还没有足够稳的主词，请手动选择查看。</span>
-        {/if}
-      </div>
-      <p class="card-copy phrase-action-hint">{phraseActionHint(result.phrase_lookup.confidence)}</p>
-      {#if result.phrase_lookup.host_candidates.length > 0}
-        <div class="host-chip-list">
-          {#each result.phrase_lookup.host_candidates as candidate}
-            <button
-              class="host-chip"
-              onclick={() => handleCandidateClick(candidate.headword)}
-              disabled={isUpdatingPhraseAttachment}
-              title={`来源：${candidate.source}`}
-              class:is-pending={pendingHostHeadword === candidate.headword}
-            >
-              <strong>{candidate.headword}</strong>
-              <span>{candidate.source}</span>
-            </button>
-          {/each}
-        </div>
-      {/if}
-
-      {#if pendingHostHeadword}
-        <div class="surface-card phrase-confirm-panel" transition:slide>
-          <div class="phrase-confirm-head">
-            <p class="small-copy"><strong>确认宿主主词：{pendingHostHeadword}</strong></p>
-            <span class="mini-label model-name">{confidenceLabel(result.phrase_lookup.confidence)}</span>
-          </div>
-          <p class="card-copy">
-            你可以先只查看 <strong>{pendingHostHeadword}</strong> 的词条，不写入短语挂载；确认合适后，再把当前短语正式挂到这个主词下面。
-          </p>
-          <div class="phrase-confirm-actions">
-            <button
-              class="btn-secondary confirm-btn"
-              type="button"
-              onclick={() => onSelectPhraseHost?.(pendingHostHeadword, "view")}
-              disabled={isUpdatingPhraseAttachment}
-            >
-              仅查看主词
-            </button>
-            <button
-              class="btn-primary confirm-btn"
-              type="button"
-              onclick={() => onSelectPhraseHost?.(pendingHostHeadword, "attach")}
-              disabled={isUpdatingPhraseAttachment}
-            >
-              挂载到主词
-            </button>
-            <button
-              class="icon-btn ghost-close-btn"
-              type="button"
-              onclick={clearPendingHost}
-              disabled={isUpdatingPhraseAttachment}
-              title="取消"
-            >
-              <i class="ph ph-x"></i>
-            </button>
-          </div>
-        </div>
-      {/if}
-    </div>
-  {/if}
-
   {#if showCustomRegenerate}
     <div class="bento-card card-full custom-regenerate-card" transition:slide>
       <div class="custom-action-head">
@@ -489,7 +363,7 @@
   <div class="bento-card" class:card-main={!useBranchUI} class:card-full={useBranchUI}>
     <div class="card-title-row">
       <div class="card-title"><i class="ph-fill ph-lightbulb"></i> 应用与例句</div>
-      {#if !isPhrasePreview && result.entry_id > 0 && onAddPhraseModule}
+      {#if result.entry_id > 0 && onAddPhraseModule}
         <PhraseModuleAddControl
           disabled={isStreaming}
           isLoading={isAddingPhraseModule}
@@ -579,10 +453,6 @@
             </div>
           </div>
         {/each}
-      {:else if isPhrasePreview || result.phrase_lookup}
-        <div class="message-surface muted">
-          <p>当前展示的是短语预览，重点信息已经放在“应用与例句”里。</p>
-        </div>
       {:else if !isStreaming}
         <div class="markdown-compact surface-card">
           {@html renderMarkdownHtml(result.analysis_markdown)}
@@ -884,73 +754,6 @@
   }
 
   .compact-textarea { width: 100%; min-height: 4rem; padding: 0.75rem; border-radius: 8px; background: var(--bg-color); border: 1px solid var(--border-color); font-size: 0.9rem; resize: vertical; }
-  .phrase-host-card { display: flex; flex-direction: column; gap: 0.9rem; }
-  .phrase-meta { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
-  .host-chip-list { display: flex; flex-wrap: wrap; gap: 0.75rem; }
-  .phrase-action-hint { margin: 0; color: var(--text-muted); }
-  .host-chip {
-    background: var(--bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 999px;
-    padding: 0.55rem 0.9rem;
-    display: flex;
-    align-items: baseline;
-    gap: 0.45rem;
-    color: var(--text-main);
-  }
-  .host-chip span { font-size: 0.78rem; color: var(--text-muted); }
-  .host-chip.is-pending {
-    border-color: var(--accent-main);
-    box-shadow: inset 0 0 0 1px var(--accent-main);
-  }
-  .phrase-confirm-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 0.85rem;
-    border: 1px solid var(--border-color);
-  }
-  .phrase-confirm-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-  }
-  .phrase-confirm-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-  }
-  .confirm-btn {
-    min-height: 2.4rem;
-    padding: 0.55rem 1rem;
-  }
-  .ghost-close-btn {
-    background: transparent;
-    border: 1px solid var(--border-color);
-  }
-  .attached-phrase-actions { display: flex; align-items: center; gap: 0.5rem; }
-  .mini-inline-btn {
-    width: 1.9rem;
-    height: 1.9rem;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--text-muted);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .mini-inline-btn:hover:not(:disabled) {
-    background: var(--btn-secondary);
-    color: var(--text-main);
-  }
-  .mini-inline-btn:disabled,
-  .host-chip:disabled {
-    opacity: 0.55;
-    cursor: wait;
-  }
-
   @media (max-width: 900px) {
     .bento-grid { grid-template-columns: 1fr; }
     .card-header, .card-main, .card-side, .card-full { grid-column: span 1; }

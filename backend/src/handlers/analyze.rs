@@ -1,10 +1,8 @@
 use crate::models::{
-    AddPhraseModuleRequest, AnalyzeRequest, AnalyzeResponse, AttachPhraseRequest,
-    DetachPhraseRequest,
+    AddPhraseModuleRequest, AnalyzeRequest, AnalyzeResponse, DeletePhraseModuleRequest,
 };
 use crate::services::analyze;
 use crate::services::analyze_stream;
-use crate::services::phrase_attach;
 use crate::services::phrase_module;
 use crate::state::AppState;
 use axum::{
@@ -57,32 +55,6 @@ pub async fn stream_analyze_word(
     Ok(response)
 }
 
-pub async fn attach_phrase_to_host(
-    State(state): State<AppState>,
-    Json(request): Json<AttachPhraseRequest>,
-) -> Result<Json<AnalyzeResponse>, (StatusCode, String)> {
-    phrase_attach::attach_phrase_to_host(&state, request)
-        .await
-        .map(Json)
-        .map_err(|err| {
-            tracing::error!("attach phrase failed: {err:#}");
-            (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
-        })
-}
-
-pub async fn detach_phrase_from_host(
-    State(state): State<AppState>,
-    Json(request): Json<DetachPhraseRequest>,
-) -> Result<Json<AnalyzeResponse>, (StatusCode, String)> {
-    phrase_attach::detach_phrase_from_host(&state, request)
-        .await
-        .map(Json)
-        .map_err(|err| {
-            tracing::error!("detach phrase failed: {err:#}");
-            (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
-        })
-}
-
 pub async fn add_phrase_module_to_entry(
     State(state): State<AppState>,
     Path(entry_id): Path<i64>,
@@ -93,6 +65,20 @@ pub async fn add_phrase_module_to_entry(
         .map(Json)
         .map_err(|err| {
             tracing::error!("add phrase module failed: {err:#}");
+            (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+        })
+}
+
+pub async fn delete_phrase_module_from_entry(
+    State(state): State<AppState>,
+    Path(entry_id): Path<i64>,
+    Json(request): Json<DeletePhraseModuleRequest>,
+) -> Result<Json<AnalyzeResponse>, (StatusCode, String)> {
+    phrase_module::delete_phrase_module_from_entry(&state, entry_id, request)
+        .await
+        .map(Json)
+        .map_err(|err| {
+            tracing::error!("delete phrase module failed: {err:#}");
             (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
         })
 }

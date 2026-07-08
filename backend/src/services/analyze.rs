@@ -4,32 +4,21 @@ use crate::models::{
 use crate::repositories::{dictionary, dictionary_lexemes, knowledge};
 use crate::services::analysis_grounded_runtime::generate_grounded_analysis;
 use crate::services::analysis_preview::analysis_markdown;
-use crate::services::analyze_runtime::generate_analysis_with_model;
-use crate::services::analyze_support::{
-    build_phrase_preview_analysis, parse_phrase_usage_preview, AnalysisMode,
-};
+use crate::services::analyze_support::AnalysisMode;
 use crate::services::dictionary_facts::dictionary_pos;
 use crate::services::dictionary_render::{
     build_compact_analysis_from_dictionary, build_dictionary_excerpt,
 };
 use crate::services::dictionary_tags::build_tags;
-use crate::services::query_inference::{
-    infer_phrase_lookup, is_form_reference_entry, is_phrase_like_query,
-};
+use crate::services::query_inference::is_form_reference_entry;
 use crate::services::query_resolution::{
     attached_phrase_modules_from_analysis, build_no_candidate_analysis,
-    build_phrase_unavailable_analysis, phrase_lookup_from_analysis,
-    phrase_usage_preview_from_analysis,
+    phrase_lookup_from_analysis, phrase_usage_preview_from_analysis,
 };
 use crate::state::AppState;
 use anyhow::Result;
 use serde_json::Value;
 use std::collections::VecDeque;
-
-enum GeneratedFullAnalysis {
-    Legacy(crate::services::analyze_runtime::GeneratedAnalysis),
-    Grounded(crate::services::analysis_grounded_runtime::GroundedAnalysis),
-}
 
 pub async fn analyze(state: &AppState, request: AnalyzeRequest) -> Result<AnalyzeResponse> {
     analyze_with_mode(state, request, AnalysisMode::Full).await
@@ -85,26 +74,7 @@ async fn analyze_with_mode(
         "analyze dictionary exact hit: query={query}, hit={}",
         exact_dictionary_hit.is_some()
     );
-    let phrase_lookup = if exact_dictionary_hit.is_none() && is_phrase_like_query(query) {
-        infer_phrase_lookup(state, query).await?
-    } else {
-        None
-    };
-    let is_phrase_query = phrase_lookup.is_some();
-
-    let (prototype, dictionary_entry) = if let Some(lookup) = &phrase_lookup {
-        let host_entry = match lookup.best_host_headword.as_deref() {
-            Some(host) => dictionary::find_by_headword(&state.pool, host).await?,
-            None => None,
-        };
-        (
-            lookup
-                .best_host_headword
-                .clone()
-                .unwrap_or_else(|| query.to_string()),
-            host_entry,
-        )
-    } else if let Some(entry) = exact_dictionary_hit {
+    let (prototype, dictionary_entry) = if let Some(entry) = exact_dictionary_hit {
         if is_form_reference_entry(&entry.raw_data) {
             if let Some(form_entry) = dictionary::find_by_form(&state.pool, query).await? {
                 if form_entry.headword != entry.headword {
@@ -135,14 +105,13 @@ async fn analyze_with_mode(
 
     let existing_entry = match request.entry_id {
         Some(entry_id) => knowledge::find_by_id(&state.pool, entry_id).await?,
-        None if request.force_refresh && is_phrase_query => None,
         None if request.force_refresh => {
             knowledge::find_by_query_text_exact(&state.pool, &prototype).await?
         }
         None => None,
     };
 
-    if !request.force_refresh && !is_phrase_query {
+    if !request.force_refresh {
         if let Some(entry) = knowledge::find_by_query_text_exact(&state.pool, &prototype).await? {
             if prototype != query {
                 knowledge::add_alias(&state.pool, entry.id, query).await?;
@@ -162,7 +131,7 @@ async fn analyze_with_mode(
         }
     }
 
-    if !is_phrase_query && dictionary_entry.is_none() {
+    if dictionary_entry.is_none() {
         tracing::info!(
             "analyze no reliable dictionary candidate: query={query}, mode={}",
             analysis_mode_name(mode)
@@ -220,92 +189,34 @@ async fn analyze_with_mode(
             None,
         )
     } else {
-        tracing::info!(
-            "analyze full ai generation: query={query}, prototype={prototype}, phrase_query={is_phrase_query}"
-        );
-        let generated_result = if is_phrase_query {
-            generate_analysis_with_model(
-                state,
-                query,
-                dictionary_entry.as_ref(),
-                mode,
-                quality_mode,
-                generation_hint,
-                phrase_lookup.as_ref(),
-                request.model_override.as_ref(),
-            )
-            .await
-            .map(|generated| GeneratedFullAnalysis::Legacy(generated))
-        } else {
-            generate_grounded_analysis(
-                state,
-                &prototype,
-                dictionary_entry.as_ref(),
-                quality_mode,
-                generation_hint,
-                request.model_override.as_ref(),
-            )
-            .await
-            .map(GeneratedFullAnalysis::Grounded)
-        };
-
-        match generated_result {
+        tracing::info!("analyze full ai generation: query={query}, prototype={prototype}");
+        match generate_grounded_analysis(
+            state,
+            &prototype,
+            dictionary_entry.as_ref(),
+            quality_mode,
+            generation_hint,
+            request.model_override.as_ref(),
+        )
+        .await
+        {
             Ok(generated) => {
-                let target = if is_phrase_query { query } else { &prototype };
-                if is_phrase_query {
-                    let GeneratedFullAnalysis::Legacy(generated) = generated else {
-                        unreachable!("phrase query should use legacy phrase generation");
-                    };
-                    let (preview, tags, aliases) =
-                        parse_phrase_usage_preview(&generated.content, target)?;
-                    (
-                        build_phrase_preview_analysis(
-                            target,
-                            preview,
-                            phrase_lookup.as_ref(),
-                            dictionary_entry.as_ref(),
-                            tags,
-                            aliases,
-                            quality_mode,
-                            &generated.model,
-                        ),
-                        true,
-                        match quality_mode {
-                            QualityMode::Default => "Flash".to_string(),
-                            QualityMode::Pro => "Pro".to_string(),
-                        },
-                        Some(generated.model),
-                    )
-                } else {
-                    let GeneratedFullAnalysis::Grounded(generated) = generated else {
-                        unreachable!("word query should use grounded generation");
-                    };
-                    let mut parsed = generated.analysis;
-                    parsed.phrase_lookup = phrase_lookup.clone();
-                    (
-                        parsed,
-                        true,
-                        match quality_mode {
-                            QualityMode::Default => "Flash".to_string(),
-                            QualityMode::Pro => "Pro".to_string(),
-                        },
-                        Some(generated.model),
-                    )
-                }
+                let parsed = generated.analysis;
+                (
+                    parsed,
+                    true,
+                    match quality_mode {
+                        QualityMode::Default => "Flash".to_string(),
+                        QualityMode::Pro => "Pro".to_string(),
+                    },
+                    Some(generated.model),
+                )
             }
             Err(err) => {
                 tracing::warn!(
                     "grounded analyze generation failed: query={query}, prototype={prototype}, err={err:#}"
                 );
-                if !is_phrase_query {
-                    return Err(err.context("grounded analysis generation failed"));
-                }
-                (
-                    build_phrase_unavailable_analysis(query, phrase_lookup.as_ref()),
-                    false,
-                    "短语待确认".to_string(),
-                    None,
-                )
+                return Err(err.context("grounded analysis generation failed"));
             }
         }
     };
@@ -315,15 +226,11 @@ async fn analyze_with_mode(
         .map(|entry| entry.headword.clone());
     analysis.model = generated_model.clone();
     analysis.quality_mode = Some(quality_mode);
-    analysis.phrase_lookup = analysis.phrase_lookup.or_else(|| phrase_lookup.clone());
     analysis.dictionary_excerpt = dictionary_entry
         .as_ref()
         .map(|entry| build_dictionary_excerpt(&entry.raw_data));
 
-    if !is_phrase_query
-        && prototype != query
-        && !analysis.aliases.iter().any(|alias| alias == query)
-    {
+    if prototype != query && !analysis.aliases.iter().any(|alias| alias == query) {
         analysis.aliases.push(query.to_string());
     }
     if analysis.tags.is_empty() {
@@ -339,30 +246,7 @@ async fn analyze_with_mode(
         );
         return Ok(AnalyzeResponse {
             entry_id: 0,
-            query_text: if is_phrase_query {
-                query.to_string()
-            } else {
-                prototype
-            },
-            analysis_markdown: analysis.markdown,
-            structured_analysis: analysis.structured,
-            phrase_lookup: analysis.phrase_lookup,
-            phrase_usage_preview: analysis.phrase_usage_preview,
-            attached_phrase_modules: analysis.attached_phrase_modules,
-            source: response_source,
-            model: analysis.model,
-            quality_mode: Some(quality_mode),
-            follow_ups: Vec::new(),
-        });
-    }
-
-    if is_phrase_query {
-        tracing::info!(
-            "analyze keep phrase preview transient: query={query}, prototype={prototype}"
-        );
-        return Ok(AnalyzeResponse {
-            entry_id: 0,
-            query_text: query.to_string(),
+            query_text: prototype,
             analysis_markdown: analysis.markdown,
             structured_analysis: analysis.structured,
             phrase_lookup: analysis.phrase_lookup,
@@ -408,7 +292,7 @@ async fn analyze_with_mode(
         None => knowledge::insert(&state.pool, &new_entry).await?,
     };
     tracing::info!("analyze insert complete: entry_id={}", entry.id);
-    if !is_phrase_query && prototype != query {
+    if prototype != query {
         knowledge::add_alias(&state.pool, entry.id, query).await?;
     }
     update_recent_searches(&state.recent_searches, &entry.query_text).await;

@@ -396,24 +396,6 @@ pub struct AttachedPhraseModule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AttachPhraseRequest {
-    pub phrase_entry_id: Option<i64>,
-    pub host_headword: String,
-    #[serde(default)]
-    pub phrase: Option<String>,
-    #[serde(default)]
-    pub phrase_lookup: Option<PhraseLookupInfo>,
-    #[serde(default)]
-    pub phrase_usage_preview: Option<PhraseUsagePreview>,
-    #[serde(default)]
-    pub analysis_markdown: Option<String>,
-    #[serde(default)]
-    pub model: Option<String>,
-    #[serde(default)]
-    pub quality_mode: Option<QualityMode>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddPhraseModuleRequest {
     pub phrase: String,
     #[serde(default)]
@@ -423,8 +405,7 @@ pub struct AddPhraseModuleRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DetachPhraseRequest {
-    pub host_entry_id: i64,
+pub struct DeletePhraseModuleRequest {
     pub source_phrase_entry_id: i64,
     #[serde(default)]
     pub phrase: Option<String>,
