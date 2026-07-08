@@ -168,10 +168,6 @@ pub struct AnalyzeResponse {
     #[serde(default)]
     pub structured_analysis: Option<StructuredAnalysisDocument>,
     #[serde(default)]
-    pub phrase_lookup: Option<PhraseLookupInfo>,
-    #[serde(default)]
-    pub phrase_usage_preview: Option<PhraseUsagePreview>,
-    #[serde(default)]
     pub attached_phrase_modules: Vec<AttachedPhraseModule>,
     pub source: String,
     pub model: Option<String>,
@@ -213,10 +209,6 @@ pub struct EntryDetailResponse {
     pub analysis_markdown: String,
     #[serde(default)]
     pub structured_analysis: Option<StructuredAnalysisDocument>,
-    #[serde(default)]
-    pub phrase_lookup: Option<PhraseLookupInfo>,
-    #[serde(default)]
-    pub phrase_usage_preview: Option<PhraseUsagePreview>,
     #[serde(default)]
     pub attached_phrase_modules: Vec<AttachedPhraseModule>,
     pub source: String,
@@ -358,10 +350,6 @@ pub struct AnalysisDocument {
     pub aliases: Vec<String>,
     pub prototype: Option<String>,
     #[serde(default)]
-    pub phrase_lookup: Option<PhraseLookupInfo>,
-    #[serde(default)]
-    pub phrase_usage_preview: Option<PhraseUsagePreview>,
-    #[serde(default)]
     pub attached_phrase_modules: Vec<AttachedPhraseModule>,
     pub dictionary_excerpt: Option<serde_json::Value>,
     pub model: Option<String>,
@@ -377,13 +365,6 @@ pub struct PhraseUsageModule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PhraseUsagePreview {
-    pub meaning_zh: String,
-    pub meaning_en: String,
-    pub usage_module: PhraseUsageModule,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttachedPhraseModule {
     pub phrase: String,
     pub host_headword: String,
@@ -391,7 +372,6 @@ pub struct AttachedPhraseModule {
     #[serde(default)]
     pub usage_module: Option<PhraseUsageModule>,
     pub analysis_markdown: String,
-    pub confidence: PhraseLookupConfidence,
     pub attached_at: DateTime<Utc>,
 }
 
@@ -409,30 +389,6 @@ pub struct DeletePhraseModuleRequest {
     pub source_phrase_entry_id: i64,
     #[serde(default)]
     pub phrase: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PhraseHostCandidate {
-    pub headword: String,
-    pub source: String,
-    pub score: f32,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum PhraseLookupConfidence {
-    High,
-    Medium,
-    Low,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PhraseLookupInfo {
-    pub phrase: String,
-    pub best_host_headword: Option<String>,
-    pub confidence: PhraseLookupConfidence,
-    #[serde(default)]
-    pub host_candidates: Vec<PhraseHostCandidate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

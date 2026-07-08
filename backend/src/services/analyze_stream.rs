@@ -9,7 +9,6 @@ use crate::services::dictionary_tags::build_tags;
 use crate::services::query_inference::is_form_reference_entry;
 use crate::services::query_resolution::{
     attached_phrase_modules_from_analysis, build_no_candidate_analysis,
-    phrase_lookup_from_analysis, phrase_usage_preview_from_analysis,
 };
 use crate::services::stream_analyze_runtime::{cached_analysis_markdown, send_meta};
 use crate::services::stream_response::sse_complete;
@@ -34,50 +33,41 @@ pub async fn stream_analyze(
 
     if !request.force_refresh {
         if let Some(entry) = knowledge::find_by_query_text_exact(&state.pool, query).await? {
-            if entry.entry_type == "PHRASE" {
-                tracing::info!(
-                    "stream analyze skip phrase cache preview: query={query}, entry_id={}",
-                    entry.id
-                );
-            } else {
-                send_meta(
-                    &tx,
-                    "analyze",
-                    entry
-                        .analysis
-                        .get("model")
-                        .and_then(Value::as_str)
-                        .unwrap_or(&state.config.ai_models.analyze),
-                    quality_mode,
-                    "知识库",
-                    false,
-                );
-                tx.send(sse_complete(&AnalyzeResponse {
-                    entry_id: entry.id,
-                    query_text: entry.query_text.clone(),
-                    analysis_markdown: cached_analysis_markdown(&entry.analysis),
-                    structured_analysis: crate::services::analysis_preview::structured_analysis(
-                        &entry.analysis,
-                    ),
-                    phrase_lookup: phrase_lookup_from_analysis(&entry.analysis),
-                    phrase_usage_preview: phrase_usage_preview_from_analysis(&entry.analysis),
-                    attached_phrase_modules: attached_phrase_modules_from_analysis(&entry.analysis),
-                    source: "知识库".to_string(),
-                    model: entry
-                        .analysis
-                        .get("model")
-                        .and_then(Value::as_str)
-                        .map(ToString::to_string),
-                    quality_mode: entry
-                        .analysis
-                        .get("quality_mode")
-                        .and_then(|value| serde_json::from_value(value.clone()).ok())
-                        .or(Some(quality_mode)),
-                    follow_ups: Vec::new(),
-                }))
-                .ok();
-                return Ok(());
-            }
+            send_meta(
+                &tx,
+                "analyze",
+                entry
+                    .analysis
+                    .get("model")
+                    .and_then(Value::as_str)
+                    .unwrap_or(&state.config.ai_models.analyze),
+                quality_mode,
+                "知识库",
+                false,
+            );
+            tx.send(sse_complete(&AnalyzeResponse {
+                entry_id: entry.id,
+                query_text: entry.query_text.clone(),
+                analysis_markdown: cached_analysis_markdown(&entry.analysis),
+                structured_analysis: crate::services::analysis_preview::structured_analysis(
+                    &entry.analysis,
+                ),
+                attached_phrase_modules: attached_phrase_modules_from_analysis(&entry.analysis),
+                source: "知识库".to_string(),
+                model: entry
+                    .analysis
+                    .get("model")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string),
+                quality_mode: entry
+                    .analysis
+                    .get("quality_mode")
+                    .and_then(|value| serde_json::from_value(value.clone()).ok())
+                    .or(Some(quality_mode)),
+                follow_ups: Vec::new(),
+            }))
+            .ok();
+            return Ok(());
         }
     }
 
@@ -144,8 +134,6 @@ pub async fn stream_analyze(
                 structured_analysis: crate::services::analysis_preview::structured_analysis(
                     &entry.analysis,
                 ),
-                phrase_lookup: phrase_lookup_from_analysis(&entry.analysis),
-                phrase_usage_preview: phrase_usage_preview_from_analysis(&entry.analysis),
                 attached_phrase_modules: attached_phrase_modules_from_analysis(&entry.analysis),
                 source: "知识库".to_string(),
                 model: entry
@@ -172,8 +160,6 @@ pub async fn stream_analyze(
             query_text: query.to_string(),
             analysis_markdown: analysis.markdown,
             structured_analysis: analysis.structured,
-            phrase_lookup: analysis.phrase_lookup,
-            phrase_usage_preview: analysis.phrase_usage_preview,
             attached_phrase_modules: analysis.attached_phrase_modules,
             source: "未找到可靠候选".to_string(),
             model: None,
@@ -252,8 +238,6 @@ pub async fn stream_analyze(
             query_text: prototype.clone(),
             analysis_markdown: analysis.markdown.clone(),
             structured_analysis: analysis.structured.clone(),
-            phrase_lookup: analysis.phrase_lookup.clone(),
-            phrase_usage_preview: analysis.phrase_usage_preview.clone(),
             attached_phrase_modules: analysis.attached_phrase_modules.clone(),
             source,
             model,
@@ -300,8 +284,6 @@ pub async fn stream_analyze(
             query_text: entry.query_text,
             analysis_markdown: analysis.markdown.clone(),
             structured_analysis: analysis.structured.clone(),
-            phrase_lookup: analysis.phrase_lookup.clone(),
-            phrase_usage_preview: analysis.phrase_usage_preview.clone(),
             attached_phrase_modules: analysis.attached_phrase_modules.clone(),
             source,
             model,

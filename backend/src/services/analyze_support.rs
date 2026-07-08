@@ -1,4 +1,3 @@
-use crate::models::PhraseUsagePreview;
 use crate::services::json_extract_repair::{
     json_candidate, repair_json_inner_quotes, repair_truncated_json,
 };
@@ -9,24 +8,6 @@ use serde::Deserialize;
 pub enum AnalysisMode {
     Full,
     Compact,
-}
-
-pub fn render_phrase_preview_markdown(phrase: &str, preview: &PhraseUsagePreview) -> String {
-    let meaning_en = if preview.meaning_en.trim().is_empty() {
-        String::new()
-    } else {
-        format!(" * *{}*", preview.meaning_en.trim())
-    };
-
-    format!(
-        "### {phrase}\n\n#### 核心释义 (Bedeutung)\n* **Phrase** **{}**{}\n\n#### 应用与例句 (Anwendung & Beispiele)\n\n{}: {}\n{}\n（{}）",
-        preview.meaning_zh.trim(),
-        meaning_en,
-        preview.usage_module.title.trim(),
-        preview.usage_module.explanation.trim(),
-        preview.usage_module.example_de.trim(),
-        preview.usage_module.example_zh.trim(),
-    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

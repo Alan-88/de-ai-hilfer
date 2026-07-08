@@ -13,7 +13,6 @@ use crate::services::dictionary_tags::build_tags;
 use crate::services::query_inference::is_form_reference_entry;
 use crate::services::query_resolution::{
     attached_phrase_modules_from_analysis, build_no_candidate_analysis,
-    phrase_lookup_from_analysis, phrase_usage_preview_from_analysis,
 };
 use crate::state::AppState;
 use anyhow::Result;
@@ -48,24 +47,17 @@ async fn analyze_with_mode(
 
     if !request.force_refresh {
         if let Some(entry) = knowledge::find_by_query_text_exact(&state.pool, query).await? {
-            if entry.entry_type == "PHRASE" {
-                tracing::info!(
-                    "analyze skip phrase cache preview: query={query}, entry_id={}",
-                    entry.id
-                );
-            } else {
-                tracing::info!(
-                    "analyze cache hit by query: query={query}, entry_id={}",
-                    entry.id
-                );
-                update_recent_searches(&state.recent_searches, &entry.query_text).await;
-                return Ok(cached_response(
-                    entry.id,
-                    &entry.query_text,
-                    &entry.analysis,
-                    "知识库",
-                ));
-            }
+            tracing::info!(
+                "analyze cache hit by query: query={query}, entry_id={}",
+                entry.id
+            );
+            update_recent_searches(&state.recent_searches, &entry.query_text).await;
+            return Ok(cached_response(
+                entry.id,
+                &entry.query_text,
+                &entry.analysis,
+                "知识库",
+            ));
         }
     }
 
@@ -142,8 +134,6 @@ async fn analyze_with_mode(
             query_text: query.to_string(),
             analysis_markdown: analysis.markdown,
             structured_analysis: analysis.structured,
-            phrase_lookup: analysis.phrase_lookup,
-            phrase_usage_preview: analysis.phrase_usage_preview,
             attached_phrase_modules: analysis.attached_phrase_modules,
             source: "未找到可靠候选".to_string(),
             model: None,
@@ -173,13 +163,11 @@ async fn analyze_with_mode(
                     tags: vec!["待确认".to_string()],
                     aliases: Vec::new(),
                     prototype: Some(prototype.clone()),
-                phrase_lookup: None,
-                phrase_usage_preview: None,
-                attached_phrase_modules: Vec::new(),
-                dictionary_excerpt: None,
-                model: None,
-                quality_mode: Some(QualityMode::Default),
-            }),
+                    attached_phrase_modules: Vec::new(),
+                    dictionary_excerpt: None,
+                    model: None,
+                    quality_mode: Some(QualityMode::Default),
+                }),
             false,
             if dictionary_entry.is_some() {
                 "generated".to_string()
@@ -249,8 +237,6 @@ async fn analyze_with_mode(
             query_text: prototype,
             analysis_markdown: analysis.markdown,
             structured_analysis: analysis.structured,
-            phrase_lookup: analysis.phrase_lookup,
-            phrase_usage_preview: analysis.phrase_usage_preview,
             attached_phrase_modules: analysis.attached_phrase_modules,
             source: response_source,
             model: analysis.model,
@@ -302,8 +288,6 @@ async fn analyze_with_mode(
         query_text: entry.query_text,
         analysis_markdown: analysis.markdown,
         structured_analysis: analysis.structured,
-        phrase_lookup: analysis.phrase_lookup,
-        phrase_usage_preview: analysis.phrase_usage_preview,
         attached_phrase_modules: analysis.attached_phrase_modules,
         source: response_source,
         model: analysis.model,
@@ -330,8 +314,6 @@ fn cached_response(
         query_text: query_text.to_string(),
         analysis_markdown: analysis_markdown(analysis),
         structured_analysis: crate::services::analysis_preview::structured_analysis(analysis),
-        phrase_lookup: phrase_lookup_from_analysis(analysis),
-        phrase_usage_preview: phrase_usage_preview_from_analysis(analysis),
         attached_phrase_modules: attached_phrase_modules_from_analysis(analysis),
         source: source.to_string(),
         model: analysis
