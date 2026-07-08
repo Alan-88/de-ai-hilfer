@@ -472,8 +472,6 @@ pub(crate) fn build_grounded_document(
         tags: Vec::new(),
         aliases: Vec::new(),
         prototype: Some(target_query.to_string()),
-        phrase_lookup: None,
-        phrase_usage_preview: None,
         attached_phrase_modules: Vec::new(),
         dictionary_excerpt: dictionary_entry.map(|entry| build_dictionary_excerpt(&entry.raw_data)),
         model: Some(model.to_string()),

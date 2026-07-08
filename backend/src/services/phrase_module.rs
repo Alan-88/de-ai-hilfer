@@ -1,17 +1,14 @@
 use crate::ai::{is_hard_failure, AiChatOptions};
 use crate::models::{
     AddPhraseModuleRequest, AnalysisDocument, AnalyzeResponse, AttachedPhraseModule,
-    DeletePhraseModuleRequest, PhraseLookupConfidence, PhraseUsageModule, PhraseUsagePreview,
+    DeletePhraseModuleRequest, PhraseUsageModule,
 };
 use crate::repositories::{follow_up, knowledge};
 use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
 use crate::services::analysis_preview::{analysis_markdown, structured_analysis};
 use crate::services::analyze_runtime::fallback_model_for;
-use crate::services::analyze_support::{extract_json, render_phrase_preview_markdown};
-use crate::services::query_resolution::{
-    attached_phrase_modules_from_analysis, phrase_lookup_from_analysis,
-    phrase_usage_preview_from_analysis,
-};
+use crate::services::analyze_support::extract_json;
+use crate::services::query_resolution::attached_phrase_modules_from_analysis;
 use crate::state::AppState;
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
@@ -243,19 +240,14 @@ fn build_attachment(
     usage_module: Option<PhraseUsageModule>,
 ) -> AttachedPhraseModule {
     let usage_module = usage_module.expect("usage module validated before attachment");
-    let preview = PhraseUsagePreview {
-        meaning_zh: usage_module.title.clone(),
-        meaning_en: String::new(),
-        usage_module: usage_module.clone(),
-    };
+    let analysis_markdown = render_attached_phrase_markdown(phrase, &usage_module);
 
     AttachedPhraseModule {
         phrase: phrase.trim().to_string(),
         host_headword: host_headword.to_string(),
         source_phrase_entry_id: transient_attachment_id(),
         usage_module: Some(usage_module),
-        analysis_markdown: render_phrase_preview_markdown(phrase, &preview),
-        confidence: PhraseLookupConfidence::High,
+        analysis_markdown,
         attached_at: Utc::now(),
     }
 }
@@ -280,8 +272,6 @@ async fn build_response(
         query_text: entry.query_text,
         analysis_markdown: analysis_markdown(&entry.analysis),
         structured_analysis: structured_analysis(&entry.analysis),
-        phrase_lookup: phrase_lookup_from_analysis(&entry.analysis),
-        phrase_usage_preview: phrase_usage_preview_from_analysis(&entry.analysis),
         attached_phrase_modules: attached_phrase_modules_from_analysis(&entry.analysis),
         source: "知识库".to_string(),
         model: entry
@@ -308,6 +298,16 @@ fn first_non_empty(value: &str, fallback: &str) -> String {
 
 fn transient_attachment_id() -> i64 {
     -Utc::now().timestamp_micros()
+}
+
+fn render_attached_phrase_markdown(phrase: &str, usage_module: &PhraseUsageModule) -> String {
+    format!(
+        "### {phrase}\n\n#### 应用与例句 (Anwendung & Beispiele)\n\n{}: {}\n{}\n（{}）",
+        usage_module.title.trim(),
+        usage_module.explanation.trim(),
+        usage_module.example_de.trim(),
+        usage_module.example_zh.trim(),
+    )
 }
 
 fn phrase_module_chat_options() -> AiChatOptions {

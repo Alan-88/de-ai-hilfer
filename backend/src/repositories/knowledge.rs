@@ -99,7 +99,6 @@ pub async fn list_query_texts(pool: &DbPool, limit: i64) -> Result<Vec<String>, 
         r#"
         SELECT query_text
         FROM knowledge_entries
-        WHERE entry_type <> 'PHRASE'
         ORDER BY updated_at DESC
         LIMIT $1
         "#,
@@ -118,7 +117,6 @@ pub async fn list_by_query_texts(
         SELECT id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
         FROM knowledge_entries
         WHERE query_text = ANY($1)
-          AND entry_type <> 'PHRASE'
         "#,
     )
     .bind(queries)
@@ -131,7 +129,6 @@ pub async fn list_all(pool: &DbPool) -> Result<Vec<KnowledgeEntry>, sqlx::Error>
         r#"
         SELECT id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
         FROM knowledge_entries
-        WHERE entry_type <> 'PHRASE'
         ORDER BY query_text ASC
         "#,
     )
@@ -385,9 +382,7 @@ fn push_library_filters(
     normalized_query: &str,
     tab: LibraryQueryTab,
 ) {
-    query.push(
-        " FROM knowledge_entries ke LEFT JOIN learning_progress lp ON lp.entry_id = ke.id WHERE ke.entry_type <> 'PHRASE'",
-    );
+    query.push(" FROM knowledge_entries ke LEFT JOIN learning_progress lp ON lp.entry_id = ke.id WHERE TRUE");
 
     match tab {
         LibraryQueryTab::All => {}

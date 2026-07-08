@@ -362,16 +362,6 @@ pub async fn intelligent_search(
                 query_text: entry.query_text,
                 analysis_markdown: analysis_markdown(&entry.analysis),
                 structured_analysis: structured_analysis(&entry.analysis),
-                phrase_lookup: entry
-                    .analysis
-                    .get("phrase_lookup")
-                    .cloned()
-                    .and_then(|value| serde_json::from_value(value).ok()),
-                phrase_usage_preview: entry
-                    .analysis
-                    .get("phrase_usage_preview")
-                    .cloned()
-                    .and_then(|value| serde_json::from_value(value).ok()),
                 attached_phrase_modules: entry
                     .analysis
                     .get("attached_phrase_modules")

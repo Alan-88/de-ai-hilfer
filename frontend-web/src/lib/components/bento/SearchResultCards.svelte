@@ -33,7 +33,7 @@
     onRegenerate,
     onActionModelChange,
     onSelectRecent,
-    onDetachAttachedPhrase,
+    onDeleteAttachedPhrase,
     onAddPhraseModule,
     onnewFollowUp
   } = $props<{
@@ -50,7 +50,7 @@
     onRegenerate: (mode: QualityMode, hint: string, modelOverride?: AiModelOverride | null) => void;
     onActionModelChange?: (key: string) => void;
     onSelectRecent: (query: string) => void;
-    onDetachAttachedPhrase?: (item: AttachedPhraseModule) => void;
+    onDeleteAttachedPhrase?: (item: AttachedPhraseModule) => void;
     onAddPhraseModule?: (phrase: string) => Promise<void> | void;
     onnewFollowUp?: (item: FollowUpItem) => void;
   }>();
@@ -382,7 +382,7 @@
                 <button
                   class="attached-trash-btn"
                   type="button"
-                  onclick={() => onDetachAttachedPhrase?.(usage.attachment)}
+                  onclick={() => onDeleteAttachedPhrase?.(usage.attachment)}
                   disabled={isUpdatingPhraseAttachment || isStreaming}
                   title="删除这条短语卡片"
                   aria-label={`删除短语卡片：${usage.attachment.phrase}`}

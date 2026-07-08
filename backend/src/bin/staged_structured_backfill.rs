@@ -442,8 +442,7 @@ async fn load_words(state: &AppState, options: &Options) -> Result<Vec<String>> 
         r#"
         select query_text
         from knowledge_entries
-        where entry_type <> 'PHRASE'
-          and analysis ? 'markdown'
+        where analysis ? 'markdown'
           and length(coalesce(analysis->>'markdown','')) > 0
           and not coalesce(
             jsonb_typeof(analysis->'structured'->'grammar_branches') = 'array'

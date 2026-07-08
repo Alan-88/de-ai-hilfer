@@ -100,7 +100,6 @@
               query_text: query,
               analysis_markdown: "",
               structured_analysis: null,
-              phrase_usage_preview: null,
               attached_phrase_modules: [],
               source: qualityMode === "pro" ? "Pro" : "Flash",
               quality_mode: qualityMode,
@@ -282,18 +281,18 @@
     }
   }
 
-  async function handleDetachPhraseHost(item: AttachedPhraseModule) {
+  async function handleDeleteAttachedPhrase(item: AttachedPhraseModule) {
     if (!$s.result || $s.result.entry_id <= 0) return;
 
     try {
       isUpdatingPhraseAttachment = true;
       s.update(state => ({ ...state, isLoading: true, error: "" }));
-      const detached = await deletePhraseModuleFromEntry($s.result.entry_id, {
+      const updated = await deletePhraseModuleFromEntry($s.result.entry_id, {
         source_phrase_entry_id: item.source_phrase_entry_id,
         phrase: item.phrase,
       });
-      s.setQuery(detached.query_text);
-      s.setResult(detached);
+      s.setQuery(updated.query_text);
+      s.setResult(updated);
       void fetchRecentItems();
     } catch (e) {
       s.setError("短语移除失败，请稍后重试。");
@@ -549,7 +548,7 @@
         onActionModelChange={(key) => selectedActionModelKey = key}
         onRegenerate={(mode, hint, modelOverride = null) => handleSearch($s.query, mode, true, hint, true, modelOverride)}
         onSelectRecent={(q) => handleSearch(q, "default", false, "", false)}
-        onDetachAttachedPhrase={handleDetachPhraseHost}
+        onDeleteAttachedPhrase={handleDeleteAttachedPhrase}
         onAddPhraseModule={handleAddPhraseModule}
         onnewFollowUp={handleNewFollowUp}
       />

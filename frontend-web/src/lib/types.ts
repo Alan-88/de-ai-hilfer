@@ -5,32 +5,11 @@ export interface FollowUpItem {
   created_at?: string;
 }
 
-export interface PhraseHostCandidate {
-  headword: string;
-  source: string;
-  score: number;
-}
-
-export type PhraseLookupConfidence = "high" | "medium" | "low";
-
-export interface PhraseLookupInfo {
-  phrase: string;
-  best_host_headword?: string | null;
-  confidence: PhraseLookupConfidence;
-  host_candidates: PhraseHostCandidate[];
-}
-
 export interface PhraseUsageModule {
   title: string;
   explanation: string;
   example_de: string;
   example_zh: string;
-}
-
-export interface PhraseUsagePreview {
-  meaning_zh: string;
-  meaning_en: string;
-  usage_module: PhraseUsageModule;
 }
 
 export interface AttachedPhraseModule {
@@ -39,7 +18,6 @@ export interface AttachedPhraseModule {
   source_phrase_entry_id: number;
   usage_module?: PhraseUsageModule | null;
   analysis_markdown: string;
-  confidence: PhraseLookupConfidence;
   attached_at: string;
 }
 
@@ -133,8 +111,6 @@ export interface AnalyzeResponse {
   query_text: string;
   analysis_markdown: string;
   structured_analysis?: StructuredAnalysisDocument | null;
-  phrase_lookup?: PhraseLookupInfo | null;
-  phrase_usage_preview?: PhraseUsagePreview | null;
   attached_phrase_modules: AttachedPhraseModule[];
   source: "generated" | "知识库" | string;
   model?: string;
@@ -149,8 +125,6 @@ export interface EntryDetailResponse {
   prototype?: string | null;
   analysis_markdown: string;
   structured_analysis?: StructuredAnalysisDocument | null;
-  phrase_lookup?: PhraseLookupInfo | null;
-  phrase_usage_preview?: PhraseUsagePreview | null;
   attached_phrase_modules: AttachedPhraseModule[];
   source: string;
   model?: string | null;
