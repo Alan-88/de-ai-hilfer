@@ -9,8 +9,6 @@ const BUNDLED_PHRASE_MODULE_PROMPT: &str = include_str!("../config/prompts/phras
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PromptConfig {
-    pub prototype_identification_prompt: String,
-    pub spell_checker_prompt: String,
     pub analysis_prompt: String,
     #[serde(default)]
     pub model_a_prompt: String,

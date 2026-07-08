@@ -61,15 +61,14 @@ async fn main() -> anyhow::Result<()> {
         config.ai_models.clone(),
     );
     tracing::info!(
-        "AI routing loaded: default={}, analyze={}, analyze_pro={}, follow_up={}, follow_up_pro={}, intelligent_search={}, spell_check={}, prototype={}, fallback_fast={}, fallback_pro={}",
+        "AI routing loaded: default={}, analyze={}, analyze_pro={}, follow_up={}, follow_up_pro={}, intelligent_search={}, embedding={}, fallback_fast={}, fallback_pro={}",
         config.ai_models.default,
         config.ai_models.analyze,
         config.ai_models.analyze_pro,
         config.ai_models.follow_up,
         config.ai_models.follow_up_pro,
         config.ai_models.intelligent_search,
-        config.ai_models.spell_check,
-        config.ai_models.prototype,
+        config.ai_models.embedding,
         config.ai_models.fallback_fast,
         config.ai_models.fallback_pro
     );
