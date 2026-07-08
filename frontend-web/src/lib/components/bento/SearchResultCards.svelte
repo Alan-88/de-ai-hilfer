@@ -444,11 +444,12 @@
 
   {#if showCustomRegenerate}
     <div class="bento-card card-full custom-regenerate-card" transition:slide>
-      <div class="card-title"><i class="ph-fill ph-sliders-horizontal"></i> 本次动作设置</div>
-      <div class="custom-action-grid">
-        <label class="compact-field">
-          <span>渠道</span>
+      <div class="custom-action-head">
+        <div class="card-title"><i class="ph-fill ph-sliders-horizontal"></i> 本次动作设置</div>
+        <div class="custom-model-controls">
           <select
+            aria-label="渠道"
+            title="渠道"
             value={selectedActionProviderName}
             onchange={(event) => selectActionProvider(event.currentTarget.value)}
             disabled={isStreaming || actionProviderOptions.length === 0}
@@ -457,10 +458,9 @@
               <option value={provider}>{provider}</option>
             {/each}
           </select>
-        </label>
-        <label class="compact-field">
-          <span>模型</span>
           <select
+            aria-label="模型"
+            title="模型"
             value={selectedActionModelKey}
             onchange={(event) => onActionModelChange?.(event.currentTarget.value)}
             disabled={isStreaming || selectedProviderModelOptions.length === 0}
@@ -469,7 +469,7 @@
               <option value={option.key}>{option.model_id}</option>
             {/each}
           </select>
-        </label>
+        </div>
       </div>
       <textarea
         bind:value={customRegenerateHint}
@@ -772,44 +772,49 @@
   .custom-regenerate-card {
     display: flex;
     flex-direction: column;
-    gap: 0.9rem;
-  }
-  .custom-action-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
     gap: 0.75rem;
   }
-  .compact-field {
+  .custom-action-head {
     display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .custom-action-head .card-title {
+    margin-bottom: 0;
+    flex: 0 0 auto;
+  }
+  .custom-model-controls {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.55rem;
     min-width: 0;
+    flex: 1 1 auto;
   }
-  .compact-field span {
-    font-size: 0.72rem;
-    font-weight: 800;
-    color: var(--text-muted);
-  }
-  .compact-field select {
-    width: 100%;
-    min-height: 2.35rem;
+  .custom-model-controls select {
+    min-height: 2.15rem;
     border: 1px solid var(--border-color);
     border-radius: 8px;
     background: var(--bg-color);
     color: var(--text-main);
-    padding: 0 0.7rem;
-    font-size: 0.86rem;
+    padding: 0 0.65rem;
+    font-size: 0.82rem;
     font-weight: 700;
+    min-width: 8.5rem;
+    max-width: 16rem;
   }
+  .custom-model-controls select:first-child { max-width: 10rem; }
+  .custom-model-controls select:last-child { flex: 1 1 12rem; }
   .custom-action-footer {
     display: flex;
     justify-content: flex-end;
+    margin-top: -0.1rem;
   }
   .compact-run-btn {
-    min-height: 2.35rem;
-    padding: 0 0.95rem;
+    min-height: 2.25rem;
+    padding: 0 0.9rem;
     gap: 0.45rem;
-    font-size: 0.86rem;
+    font-size: 0.84rem;
   }
 
   /* 其它卡片微调 */
@@ -892,7 +897,7 @@
     width: 100%;
   }
 
-  .compact-textarea { width: 100%; min-height: 4rem; padding: 0.75rem; border-radius: 8px; background: var(--bg-color); border: 1px solid var(--border-color); font-size: 0.9rem; }
+  .compact-textarea { width: 100%; min-height: 3.4rem; padding: 0.7rem 0.75rem; border-radius: 8px; background: var(--bg-color); border: 1px solid var(--border-color); font-size: 0.9rem; resize: vertical; }
   .phrase-host-card { display: flex; flex-direction: column; gap: 0.9rem; }
   .phrase-meta { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
   .host-chip-list { display: flex; flex-wrap: wrap; gap: 0.75rem; }
@@ -965,7 +970,9 @@
     .card-header, .card-main, .card-side, .card-full { grid-column: span 1; }
     .card-header { flex-direction: row; align-items: center; padding: 1rem; }
     .header-actions { flex-direction: row; }
-    .custom-action-grid { grid-template-columns: 1fr; }
+    .custom-action-head { align-items: flex-start; flex-direction: column; }
+    .custom-model-controls { width: 100%; justify-content: flex-start; }
+    .custom-model-controls select { min-width: 0; }
     .card-title-row {
       align-items: flex-start;
       flex-direction: column;
