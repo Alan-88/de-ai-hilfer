@@ -107,7 +107,7 @@ pub async fn test_ai_model(
             .map(|_| ())
     } else {
         client
-            .chat_model_with_options(
+            .chat_model_connectivity_check(
                 model,
                 "Reply with exactly: ok",
                 "ok",

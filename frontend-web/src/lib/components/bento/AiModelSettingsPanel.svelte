@@ -411,21 +411,30 @@
                     >
                       <button
                         type="button"
-                        class="model-test-btn"
+                        class="model-test-hit"
                         title={testState?.message ?? "测试模型"}
+                        aria-label={`测试模型 ${model}`}
                         disabled={testState?.status === "testing"}
                         onclick={() => testModel(profile, model)}
+                      ></button>
+                      <span class="model-chip-label">{model}</span>
+                      {#if testState?.status === "testing"}
+                        <i class="ph ph-circle-notch spin model-status-icon"></i>
+                      {:else if testState?.status === "ok"}
+                        <i class="ph ph-check-circle model-status-icon"></i>
+                      {:else if testState?.status === "failed"}
+                        <i class="ph ph-warning-circle model-status-icon"></i>
+                      {/if}
+                      <button
+                        type="button"
+                        class="model-remove-btn"
+                        title="移除模型"
+                        aria-label={`移除模型 ${model}`}
+                        onclick={(event) => {
+                          event.stopPropagation();
+                          removeModel(profile, model);
+                        }}
                       >
-                        <span>{model}</span>
-                        {#if testState?.status === "testing"}
-                          <i class="ph ph-circle-notch spin"></i>
-                        {:else if testState?.status === "ok"}
-                          <i class="ph ph-check-circle"></i>
-                        {:else if testState?.status === "failed"}
-                          <i class="ph ph-warning-circle"></i>
-                        {/if}
-                      </button>
-                      <button type="button" class="model-remove-btn" title="移除模型" onclick={() => removeModel(profile, model)}>
                         <i class="ph ph-x"></i>
                       </button>
                     </span>
@@ -618,13 +627,20 @@
     max-width: 100%;
     display: inline-flex;
     align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.45rem 0.35rem 0.55rem;
     border-radius: 8px;
     background: var(--bg-color);
     color: var(--text-main);
     border: 1px solid var(--border-color);
     font-size: 0.78rem;
     font-weight: 700;
-    overflow: hidden;
+  }
+
+  .model-chip {
+    position: relative;
+    min-height: 2rem;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   }
 
   .model-chip.is-ok {
@@ -643,42 +659,54 @@
     border-color: color-mix(in srgb, var(--accent-main) 45%, var(--border-color));
   }
 
-  .model-test-btn, .model-remove-btn {
-    min-height: 2rem;
+  .model-chip:hover {
+    background: color-mix(in srgb, var(--accent-main) 8%, var(--bg-color));
+  }
+
+  .model-test-hit {
+    position: absolute;
+    inset: 0;
     border: 0;
     background: transparent;
-    color: inherit;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font: inherit;
+    cursor: pointer;
   }
 
-  .model-test-btn {
+  .model-test-hit:disabled {
+    cursor: wait;
+  }
+
+  .model-chip-label {
+    position: relative;
     min-width: 0;
-    padding: 0.35rem 0.4rem 0.35rem 0.55rem;
-  }
-
-  .model-test-btn:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent-main) 8%, transparent);
-  }
-
-  .model-test-btn span {
     overflow-wrap: anywhere;
+    pointer-events: none;
+  }
+
+  .model-status-icon {
+    position: relative;
+    pointer-events: none;
   }
 
   .model-remove-btn {
-    padding: 0.35rem 0.5rem;
-    border-left: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+    position: relative;
+    z-index: 1;
+    width: 1.2rem;
+    height: 1.2rem;
+    display: inline-grid;
+    place-items: center;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    margin-left: 0.05rem;
   }
 
   .model-remove-btn:hover {
     color: var(--danger-text);
-    background: color-mix(in srgb, var(--danger-text) 10%, transparent);
+    background: color-mix(in srgb, var(--danger-text) 12%, transparent);
   }
 
   .empty-chip {
-    padding: 0.35rem 0.55rem;
     color: var(--text-muted);
     font-weight: 600;
   }

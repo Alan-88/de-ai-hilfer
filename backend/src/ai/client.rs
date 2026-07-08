@@ -104,6 +104,53 @@ impl AiClient {
             .ok_or_else(|| anyhow!("AI response did not contain message content"))
     }
 
+    pub async fn chat_model_connectivity_check(
+        &self,
+        model: &str,
+        system_prompt: &str,
+        user_message: &str,
+        options: AiChatOptions,
+    ) -> Result<()> {
+        let max_tokens = self.chat_max_tokens(model, options);
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", self.base_url))
+            .bearer_auth(&self.api_key)
+            .timeout(options.timeout)
+            .json(&ChatCompletionRequest {
+                model: model.to_string(),
+                messages: vec![
+                    ChatRequestMessage {
+                        role: "system".to_string(),
+                        content: system_prompt.to_string(),
+                    },
+                    ChatRequestMessage {
+                        role: "user".to_string(),
+                        content: user_message.to_string(),
+                    },
+                ],
+                temperature: options.temperature,
+                max_tokens,
+                stream: None,
+            })
+            .send()
+            .await
+            .context("failed to call AI endpoint")?
+            .error_for_status()
+            .context("AI endpoint returned error status")?;
+
+        let body = response
+            .text()
+            .await
+            .context("failed to read AI response body")?;
+        let response = parse_chat_completion_response(&body)?;
+        if response.choices.is_empty() {
+            return Err(anyhow!("AI response did not contain choices"));
+        }
+
+        Ok(())
+    }
+
     pub async fn chat_model_stream_with_options(
         &self,
         model: &str,
