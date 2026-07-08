@@ -1,7 +1,7 @@
 use crate::ai::{is_hard_failure, AiChatOptions};
 use crate::models::{FollowUpRequest, FollowUpResponse, NewFollowUp, QualityMode};
 use crate::repositories::{follow_up, knowledge};
-use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
+use crate::services::ai_model_resolver::{resolve_task_model_with_override, AiModelTask};
 use crate::services::follow_up_fallback::{build_follow_up_fallback, normalize_answer};
 use crate::services::follow_up_prompt::build_follow_up_prompt;
 use crate::state::AppState;
@@ -25,7 +25,12 @@ pub async fn create(state: &AppState, request: FollowUpRequest) -> Result<Follow
         &history,
     );
 
-    let primary = resolve_task_model(state, AiModelTask::Analyze).await?;
+    let primary = resolve_task_model_with_override(
+        state,
+        AiModelTask::Analyze,
+        request.model_override.as_ref(),
+    )
+    .await?;
     let primary_model = primary.model.as_str();
     let fallback_model = if primary.persisted {
         ""

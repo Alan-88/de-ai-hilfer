@@ -6,7 +6,7 @@
     resolveStructuredAnalysis,
   } from "$lib/analysis/structuredAnalysis";
   import FollowUpCard from "$lib/components/bento/FollowUpCard.svelte";
-  import type { AnalyzeResponse, AttachedPhraseModule, FollowUpItem, PhraseUsageModule, QualityMode, RecentItem } from "$lib/types";
+  import type { AiModelOverride, AnalyzeResponse, AttachedPhraseModule, FollowUpItem, PhraseUsageModule, QualityMode, RecentItem } from "$lib/types";
   import { slide, fade } from "svelte/transition";
   import GrammarFeatureCard from "$lib/components/bento/GrammarFeatureCard.svelte";
   import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
@@ -14,6 +14,10 @@
 
   type StructuredAnalysis = ReturnType<typeof resolveStructuredAnalysis>;
   type AttachedPhraseBlock = AttachedPhraseModule & { structured: StructuredAnalysis };
+  type ActionModelOption = AiModelOverride & {
+    key: string;
+    label: string;
+  };
 
   let {
     result,
@@ -22,8 +26,12 @@
     isUpdatingPhraseAttachment = false,
     isAddingPhraseModule = false,
     recentItems = [],
+    actionModelOptions = [],
+    selectedActionModelKey = "",
+    selectedActionModelOverride = null,
     onAddToLearning,
     onRegenerate,
+    onActionModelChange,
     onSelectRecent,
     onSelectPhraseHost,
     onDetachAttachedPhrase,
@@ -36,8 +44,12 @@
     isUpdatingPhraseAttachment?: boolean;
     isAddingPhraseModule?: boolean;
     recentItems?: RecentItem[];
+    actionModelOptions?: ActionModelOption[];
+    selectedActionModelKey?: string;
+    selectedActionModelOverride?: AiModelOverride | null;
     onAddToLearning: () => void;
     onRegenerate: (mode: QualityMode, hint: string) => void;
+    onActionModelChange?: (key: string) => void;
     onSelectRecent: (query: string) => void;
     onSelectPhraseHost?: (headword: string, mode?: "attach" | "view") => void;
     onDetachAttachedPhrase?: (item: AttachedPhraseModule) => void;
@@ -298,6 +310,19 @@
     </div>
 
     <div class="header-actions">
+      {#if actionModelOptions.length > 0}
+        <select
+          class="action-model-select"
+          value={selectedActionModelKey}
+          onchange={(event) => onActionModelChange?.(event.currentTarget.value)}
+          disabled={isStreaming}
+          title="本次动作使用的模型"
+        >
+          {#each actionModelOptions as option}
+            <option value={option.key}>{option.label}</option>
+          {/each}
+        </select>
+      {/if}
       <div class="action-icons">
         <button class="icon-btn" onclick={() => onRegenerate("default", regenerateHint)} disabled={isStreaming} title="重新生成">
           <i class="ph ph-arrows-clockwise"></i>
@@ -531,6 +556,7 @@
           entryId={result.entry_id}
           history={result.follow_ups}
           disabled={isStreaming}
+          modelOverride={selectedActionModelOverride}
           onnewFollowUp={emitFollowUp}
         />
       </div>
@@ -664,6 +690,17 @@
   .model-name { background: var(--bg-color); color: var(--text-muted); border: 1px solid var(--border-color); }
 
   .header-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 0.75rem; }
+  .action-model-select {
+    width: min(18rem, 100%);
+    min-height: 2.1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-color);
+    color: var(--text-main);
+    padding: 0 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
   .action-icons { display: flex; gap: 0.5rem; }
   .icon-btn {
     width: 2.2rem; height: 2.2rem; border-radius: 50%; background: var(--btn-secondary);

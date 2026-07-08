@@ -98,3 +98,9 @@ pub struct AiModelTestResponse {
     pub success: bool,
     pub message: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiModelOverride {
+    pub provider_name: String,
+    pub model_id: String,
+}

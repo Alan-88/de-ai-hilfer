@@ -151,6 +151,7 @@ pub async fn run_compact_with_source(
             quality_mode: crate::models::QualityMode::Default,
             force_refresh: false,
             entry_id: None,
+            model_override: None,
         },
     )
     .await?;

@@ -156,6 +156,8 @@ pub struct AnalyzeRequest {
     #[serde(default)]
     pub force_refresh: bool,
     pub entry_id: Option<i64>,
+    #[serde(default)]
+    pub model_override: Option<AiModelOverride>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -294,6 +296,8 @@ pub struct FollowUpRequest {
     pub question: String,
     #[serde(default)]
     pub quality_mode: QualityMode,
+    #[serde(default)]
+    pub model_override: Option<AiModelOverride>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

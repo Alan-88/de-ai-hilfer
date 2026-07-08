@@ -1,8 +1,9 @@
 use crate::ai::AiClient;
 use crate::models::{
-    AnalysisDocument, DictionaryRaw, PhraseLookupInfo, QualityMode, StreamMetaPayload,
+    AiModelOverride, AnalysisDocument, DictionaryRaw, PhraseLookupInfo, QualityMode,
+    StreamMetaPayload,
 };
-use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
+use crate::services::ai_model_resolver::{resolve_task_model_with_override, AiModelTask};
 use crate::services::analysis_preview::analysis_markdown;
 use crate::services::analyze_runtime::fallback_model_for;
 use crate::services::analyze_support::{
@@ -77,8 +78,10 @@ pub async fn generate_phrase_preview_with_model(
     generation_hint: Option<&str>,
     phrase_lookup: Option<&PhraseLookupInfo>,
     tx: &UnboundedSender<String>,
+    model_override: Option<&AiModelOverride>,
 ) -> Result<AnalysisDocument> {
-    let primary = resolve_task_model(state, AiModelTask::Phrase).await?;
+    let primary =
+        resolve_task_model_with_override(state, AiModelTask::Phrase, model_override).await?;
     let primary_model = primary.model.as_str();
     let fallback_model = if primary.persisted {
         ""

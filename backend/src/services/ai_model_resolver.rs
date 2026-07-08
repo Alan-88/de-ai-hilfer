@@ -1,5 +1,5 @@
 use crate::ai::AiClient;
-use crate::models::{AiProviderProfileRecord, AiTaskModelSettingRecord};
+use crate::models::{AiModelOverride, AiProviderProfileRecord, AiTaskModelSettingRecord};
 use crate::repositories::ai_settings;
 use crate::state::AppState;
 use anyhow::{anyhow, Result};
@@ -30,6 +30,55 @@ pub async fn resolve_task_model(state: &AppState, task: AiModelTask) -> Result<R
         Some(resolved) => Ok(resolved),
         None => Ok(env_model(state, task)),
     }
+}
+
+pub async fn resolve_task_model_with_override(
+    state: &AppState,
+    task: AiModelTask,
+    model_override: Option<&AiModelOverride>,
+) -> Result<ResolvedAiModel> {
+    match model_override {
+        Some(model_override) => resolve_model_override(state, model_override).await,
+        None => resolve_task_model(state, task).await,
+    }
+}
+
+pub async fn resolve_model_override(
+    state: &AppState,
+    model_override: &AiModelOverride,
+) -> Result<ResolvedAiModel> {
+    let provider_name = model_override.provider_name.trim();
+    let model = model_override.model_id.trim();
+    if provider_name.is_empty() || model.is_empty() {
+        return Err(anyhow!(
+            "model override requires provider_name and model_id"
+        ));
+    }
+
+    let profiles = ai_settings::list_provider_profiles(&state.pool).await?;
+    if profiles.is_empty() {
+        return Ok(ResolvedAiModel {
+            client: state.ai_client.clone(),
+            model: model.to_string(),
+            persisted: true,
+        });
+    }
+
+    let profile = profiles
+        .iter()
+        .find(|profile| profile.name == provider_name)
+        .ok_or_else(|| anyhow!("AI provider profile not found: {provider_name}"))?;
+    if !profile.model_ids.iter().any(|item| item == model) {
+        return Err(anyhow!(
+            "AI model {model} is not registered under provider {provider_name}"
+        ));
+    }
+
+    Ok(ResolvedAiModel {
+        client: AiClient::new(profile.api_key.clone(), profile.base_url.clone()),
+        model: model.to_string(),
+        persisted: true,
+    })
 }
 
 fn resolve_persisted_setting(

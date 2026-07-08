@@ -120,6 +120,7 @@ pub async fn attach_phrase_to_host(
                         quality_mode: QualityMode::Default,
                         force_refresh: false,
                         entry_id: None,
+                        model_override: None,
                     },
                 )
                 .await

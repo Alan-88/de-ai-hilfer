@@ -236,6 +236,12 @@ export interface AnalyzeStreamRequest {
   force_refresh?: boolean;
   entry_id?: number;
   generation_hint?: string;
+  model_override?: AiModelOverride | null;
+}
+
+export interface AiModelOverride {
+  provider_name: string;
+  model_id: string;
 }
 
 export interface DatabaseImportResponse {

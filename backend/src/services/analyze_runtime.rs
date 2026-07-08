@@ -1,6 +1,6 @@
 use crate::ai::is_hard_failure;
-use crate::models::{DictionaryRaw, PhraseLookupInfo, QualityMode};
-use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
+use crate::models::{AiModelOverride, DictionaryRaw, PhraseLookupInfo, QualityMode};
+use crate::services::ai_model_resolver::{resolve_task_model_with_override, AiModelTask};
 use crate::services::analyze_support::{
     analysis_chat_options, build_analysis_prompt, AnalysisMode,
 };
@@ -21,8 +21,10 @@ pub async fn generate_analysis_with_model(
     quality_mode: QualityMode,
     generation_hint: Option<&str>,
     phrase_lookup: Option<&PhraseLookupInfo>,
+    model_override: Option<&AiModelOverride>,
 ) -> Result<GeneratedAnalysis> {
-    let primary = resolve_task_model(state, AiModelTask::Analyze).await?;
+    let primary =
+        resolve_task_model_with_override(state, AiModelTask::Analyze, model_override).await?;
     let primary_model = primary.model.as_str();
     let fallback_model = if primary.persisted {
         ""

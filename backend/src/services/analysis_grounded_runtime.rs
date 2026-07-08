@@ -1,6 +1,10 @@
 use crate::ai::{is_hard_failure, AiChatOptions, AiClient};
-use crate::models::{AnalysisDocument, DictionaryRaw, QualityMode, StructuredAnalysisDocument};
-use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
+use crate::models::{
+    AiModelOverride, AnalysisDocument, DictionaryRaw, QualityMode, StructuredAnalysisDocument,
+};
+use crate::services::ai_model_resolver::{
+    resolve_task_model, resolve_task_model_with_override, AiModelTask,
+};
 use crate::services::analysis_grounded_assembly::assemble_grounded_structured_document;
 use crate::services::analysis_grounded_facts::{
     build_light_dictionary_facts_payload, load_raw_rows_by_headword,
@@ -42,6 +46,7 @@ pub async fn generate_grounded_analysis(
     target_query: &str,
     dictionary_entry: Option<&DictionaryRaw>,
     quality_mode: QualityMode,
+    model_override: Option<&AiModelOverride>,
 ) -> Result<GroundedAnalysis> {
     generate_grounded_analysis_with_stage2_fallback(
         state,
@@ -49,6 +54,7 @@ pub async fn generate_grounded_analysis(
         dictionary_entry,
         quality_mode,
         true,
+        model_override,
     )
     .await
 }
@@ -65,6 +71,7 @@ pub async fn generate_grounded_analysis_strict_primary(
         dictionary_entry,
         quality_mode,
         false,
+        None,
     )
     .await
 }
@@ -75,10 +82,12 @@ async fn generate_grounded_analysis_with_stage2_fallback(
     dictionary_entry: Option<&DictionaryRaw>,
     quality_mode: QualityMode,
     allow_stage2_fallback: bool,
+    model_override: Option<&AiModelOverride>,
 ) -> Result<GroundedAnalysis> {
-    let stage1 = generate_model_a(state, target_query, quality_mode).await?;
+    let stage1 = generate_model_a(state, target_query, quality_mode, model_override).await?;
     let dictionary_facts = stage1.dictionary_facts.as_deref();
-    let stage2_primary = resolve_task_model(state, AiModelTask::Analyze).await?;
+    let stage2_primary =
+        resolve_task_model_with_override(state, AiModelTask::Analyze, model_override).await?;
     let fallback_model = if allow_stage2_fallback && !stage2_primary.persisted {
         fallback_model_for(state, quality_mode)
     } else {
@@ -126,14 +135,16 @@ pub async fn stream_grounded_analysis(
     target_query: &str,
     dictionary_entry: Option<&DictionaryRaw>,
     quality_mode: QualityMode,
+    model_override: Option<&AiModelOverride>,
 ) -> Result<GroundedAnalysis> {
-    let stage1 = generate_model_a(state, target_query, quality_mode).await?;
+    let stage1 = generate_model_a(state, target_query, quality_mode, model_override).await?;
     if tx.is_closed() {
         return Err(anyhow!("stream analyze canceled by client"));
     }
 
     let dictionary_facts = stage1.dictionary_facts.as_deref();
-    let stage2_primary = resolve_task_model(state, AiModelTask::Analyze).await?;
+    let stage2_primary =
+        resolve_task_model_with_override(state, AiModelTask::Analyze, model_override).await?;
     let fallback_model = if stage2_primary.persisted {
         ""
     } else {
@@ -184,13 +195,15 @@ pub(crate) async fn generate_model_a(
     state: &AppState,
     target_query: &str,
     _quality_mode: QualityMode,
+    model_override: Option<&AiModelOverride>,
 ) -> Result<GroundedStage1> {
     let raw_rows = load_raw_rows_by_headword(&state.pool, target_query).await?;
     let dictionary_facts = (!raw_rows.is_empty())
         .then(|| build_light_dictionary_facts_payload(target_query, &raw_rows));
     let prompt = build_model_a_prompt(&state.prompts);
     let user_payload = build_model_a_user_payload(target_query, dictionary_facts.as_deref());
-    let resolved = resolve_task_model(state, AiModelTask::Analyze).await?;
+    let resolved =
+        resolve_task_model_with_override(state, AiModelTask::Analyze, model_override).await?;
     let raw = resolved
         .client
         .chat_model_with_options(

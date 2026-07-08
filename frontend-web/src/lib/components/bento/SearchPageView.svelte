@@ -8,6 +8,7 @@
     analyzeWord,
     attachPhraseToHost,
     detachPhraseFromHost,
+    getAiSettings,
     getRecentEntries,
     getSuggestions,
     intelligentSearch
@@ -19,6 +20,8 @@
   import { searchStore } from "$lib/stores/search";
   import type {
     AnalyzeResponse,
+    AiModelOverride,
+    AiSettingsResponse,
     AttachedPhraseModule,
     DBSuggestion,
     FollowUpItem,
@@ -44,8 +47,15 @@
   let hasMounted = $state(false);
   let mainInputRef = $state<HTMLInputElement | null>(null);
   let advancedInputRef = $state<HTMLInputElement | null>(null);
+  let aiSettings = $state<AiSettingsResponse | null>(null);
+  let selectedActionModelKey = $state("");
 
   const s = searchStore;
+
+  type ActionModelOption = AiModelOverride & {
+    key: string;
+    label: string;
+  };
 
   function focusSoon(target: HTMLInputElement | null) {
     requestAnimationFrame(() => target?.focus());
@@ -56,7 +66,8 @@
     qualityMode: QualityMode = "default",
     forceRefresh = false,
     generationHint = "",
-    useSuggestionDefault = true
+    useSuggestionDefault = true,
+    modelOverride: AiModelOverride | null = null
   ) {
     const rawQuery = term.trim();
     const query = await resolveSearchTarget(rawQuery, {
@@ -122,6 +133,7 @@
           force_refresh: forceRefresh,
           entry_id: existingEntryId,
           generation_hint: generationHint.trim() || undefined,
+          model_override: modelOverride,
         },
         {
           signal: currentSearchController.signal,
@@ -193,6 +205,16 @@
 
   async function fetchRecentItems() {
     recentItems = await getRecentEntries();
+  }
+
+  async function fetchAiSettings() {
+    try {
+      aiSettings = await getAiSettings();
+      selectedActionModelKey = defaultActionModelKey(aiSettings);
+    } catch {
+      aiSettings = null;
+      selectedActionModelKey = "";
+    }
   }
 
   async function fetchSuggestions() {
@@ -391,11 +413,44 @@
   onMount(() => {
     hasMounted = true;
     void fetchRecentItems();
+    void fetchAiSettings();
   });
 
   const isSearching = $derived(Boolean($s.result || $s.isLoading || $s.error || advancedPending));
   // 派生：是否处于专注搜索状态（唤起建议面板时）
   const isSearchFocusing = $derived(showSuggestions && (suggestions.length > 0 || (!$s.query.trim() && recentItems.length > 0)));
+  const actionModelOptions = $derived(buildActionModelOptions(aiSettings));
+  const selectedActionModelOverride = $derived(actionModelOverrideForKey(selectedActionModelKey));
+
+  function buildActionModelOptions(settings: AiSettingsResponse | null): ActionModelOption[] {
+    if (!settings) return [];
+    return settings.profiles.flatMap((profile) =>
+      profile.model_ids
+        .filter((model) => !model.toLowerCase().includes("embedding"))
+        .map((model) => ({
+          key: `${profile.name}:${model}`,
+          label: `${profile.name} / ${model}`,
+          provider_name: profile.name,
+          model_id: model,
+        }))
+    );
+  }
+
+  function defaultActionModelKey(settings: AiSettingsResponse | null): string {
+    if (!settings) return "";
+    const analyze = settings.task_settings.find((setting) => setting.task_key === "analyze");
+    if (analyze?.provider_name && analyze.model_id) {
+      return `${analyze.provider_name}:${analyze.model_id}`;
+    }
+    const firstProfile = settings.profiles[0];
+    const firstModel = firstProfile?.model_ids[0];
+    return firstProfile && firstModel ? `${firstProfile.name}:${firstModel}` : "";
+  }
+
+  function actionModelOverrideForKey(key: string): AiModelOverride | null {
+    const option = actionModelOptions.find((item) => item.key === key);
+    return option ? { provider_name: option.provider_name, model_id: option.model_id } : null;
+  }
 </script>
 
 <div id="page-search" class="search-page-container" class:active={active} class:is-searching={isSearching}>
@@ -530,7 +585,11 @@
         isAddingPhraseModule={isAddingPhraseModule}
         recentItems={recentItems}
         onAddToLearning={addCurrentWordToLearning}
-        onRegenerate={(mode, hint) => handleSearch($s.query, mode, true, hint)}
+        actionModelOptions={actionModelOptions}
+        selectedActionModelKey={selectedActionModelKey}
+        selectedActionModelOverride={selectedActionModelOverride}
+        onActionModelChange={(key) => selectedActionModelKey = key}
+        onRegenerate={(mode, hint) => handleSearch($s.query, mode, true, hint, true, selectedActionModelOverride)}
         onSelectRecent={(q) => handleSearch(q, "default", false, "", false)}
         onSelectPhraseHost={handlePhraseHostSelection}
         onDetachAttachedPhrase={handleDetachPhraseHost}
