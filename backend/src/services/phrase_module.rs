@@ -1,7 +1,7 @@
 use crate::ai::{is_hard_failure, AiChatOptions};
 use crate::models::{
     AddPhraseModuleRequest, AnalysisDocument, AnalyzeResponse, AttachedPhraseModule,
-    PhraseLookupConfidence, PhraseUsageModule, PhraseUsagePreview,
+    DeletePhraseModuleRequest, PhraseLookupConfidence, PhraseUsageModule, PhraseUsagePreview,
 };
 use crate::repositories::{follow_up, knowledge};
 use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
@@ -60,6 +60,51 @@ pub async fn add_phrase_module_to_entry(
     });
 
     host_analysis.attached_phrase_modules = attachments;
+    let updated_analysis = serde_json::to_value(&host_analysis)?;
+    let updated_entry = knowledge::update_analysis(
+        &state.pool,
+        entry.id,
+        entry.lexeme_id,
+        &updated_analysis,
+        &entry.tags,
+        &entry.aliases,
+    )
+    .await?;
+
+    build_response(state, updated_entry).await
+}
+
+pub async fn delete_phrase_module_from_entry(
+    state: &AppState,
+    entry_id: i64,
+    request: DeletePhraseModuleRequest,
+) -> Result<AnalyzeResponse> {
+    let entry = knowledge::find_by_id(&state.pool, entry_id)
+        .await?
+        .ok_or_else(|| anyhow!("knowledge entry not found"))?;
+    let mut host_analysis: AnalysisDocument = serde_json::from_value(entry.analysis.clone())
+        .context("failed to parse host analysis document")?;
+
+    let original_len = host_analysis.attached_phrase_modules.len();
+    let requested_phrase = request
+        .phrase
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    host_analysis.attached_phrase_modules.retain(|item| {
+        let same_source = item.source_phrase_entry_id == request.source_phrase_entry_id;
+        let same_phrase = requested_phrase
+            .map(|phrase| item.phrase.trim().eq_ignore_ascii_case(phrase))
+            .unwrap_or(false);
+        !(same_source || same_phrase)
+    });
+
+    anyhow::ensure!(
+        host_analysis.attached_phrase_modules.len() != original_len,
+        "attached phrase not found on entry"
+    );
+
     let updated_analysis = serde_json::to_value(&host_analysis)?;
     let updated_entry = knowledge::update_analysis(
         &state.pool,

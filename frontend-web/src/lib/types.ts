@@ -207,25 +207,13 @@ export interface IntelligentSearchRequest {
   hint: string;
 }
 
-export interface AttachPhraseRequest {
-  phrase_entry_id?: number | null;
-  host_headword: string;
-  phrase?: string;
-  phrase_lookup?: PhraseLookupInfo | null;
-  phrase_usage_preview?: PhraseUsagePreview | null;
-  analysis_markdown?: string;
-  model?: string;
-  quality_mode?: QualityMode;
-}
-
 export interface AddPhraseModuleRequest {
   phrase: string;
   instruction?: string | null;
   quality_mode?: QualityMode;
 }
 
-export interface DetachPhraseRequest {
-  host_entry_id: number;
+export interface DeletePhraseModuleRequest {
   source_phrase_entry_id: number;
   phrase?: string | null;
 }

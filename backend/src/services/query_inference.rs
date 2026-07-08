@@ -1,8 +1,5 @@
 use crate::ai::AiChatOptions;
-use crate::models::{
-    AnalyzeRequest, AnalyzeResponse, KnowledgeEntry, PhraseHostCandidate, PhraseLookupConfidence,
-    PhraseLookupInfo,
-};
+use crate::models::{AnalyzeRequest, AnalyzeResponse, KnowledgeEntry};
 use crate::repositories::dictionary;
 use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
 use crate::services::analysis_preview::analysis_markdown;
@@ -12,7 +9,6 @@ use crate::state::AppState;
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::HashMap;
 use std::time::Duration;
 
 pub async fn infer_headword_with_hint(
@@ -178,83 +174,6 @@ pub async fn infer_headword_locally(state: &AppState, term: &str) -> Result<Opti
         .map(|(candidate, _)| candidate))
 }
 
-pub fn is_phrase_like_query(value: &str) -> bool {
-    let tokens = tokenize_phrase(value);
-    let token_count = tokens.len();
-    (2..=8).contains(&token_count)
-}
-
-pub async fn infer_phrase_lookup(
-    state: &AppState,
-    phrase: &str,
-) -> Result<Option<PhraseLookupInfo>> {
-    if !is_phrase_like_query(phrase) {
-        return Ok(None);
-    }
-
-    let mut candidates = HashMap::<String, PhraseHostCandidate>::new();
-
-    for token in content_tokens(phrase) {
-        if let Some(entry) = dictionary::find_by_headword(&state.pool, &token).await? {
-            merge_phrase_candidate(
-                &mut candidates,
-                PhraseHostCandidate {
-                    headword: entry.headword,
-                    source: "词典词头".to_string(),
-                    score: 0.98,
-                },
-            );
-            continue;
-        }
-
-        if let Some(entry) = dictionary::find_by_form(&state.pool, &token).await? {
-            merge_phrase_candidate(
-                &mut candidates,
-                PhraseHostCandidate {
-                    headword: entry.headword,
-                    source: "词形还原".to_string(),
-                    score: 0.93,
-                },
-            );
-        }
-    }
-
-    match infer_headword_by_embedding(state, phrase, "").await {
-        Ok(Some(headword)) => merge_phrase_candidate(
-            &mut candidates,
-            PhraseHostCandidate {
-                headword,
-                source: "语义向量".to_string(),
-                score: 0.72,
-            },
-        ),
-        Ok(None) => {}
-        Err(err) => {
-            tracing::warn!("phrase lookup embedding failed: phrase={phrase}, err={err:#}");
-        }
-    }
-
-    let mut host_candidates = candidates.into_values().collect::<Vec<_>>();
-    host_candidates.sort_by(|left, right| {
-        right
-            .score
-            .total_cmp(&left.score)
-            .then(left.headword.cmp(&right.headword))
-    });
-
-    let best_host_headword = host_candidates
-        .first()
-        .map(|candidate| candidate.headword.clone());
-    let confidence = phrase_lookup_confidence(&host_candidates);
-
-    Ok(Some(PhraseLookupInfo {
-        phrase: phrase.trim().to_string(),
-        best_host_headword,
-        confidence,
-        host_candidates,
-    }))
-}
-
 pub fn normalize_for_match(value: &str) -> String {
     value
         .trim()
@@ -262,106 +181,6 @@ pub fn normalize_for_match(value: &str) -> String {
         .chars()
         .flat_map(fold_match_char)
         .collect()
-}
-
-fn merge_phrase_candidate(
-    candidates: &mut HashMap<String, PhraseHostCandidate>,
-    candidate: PhraseHostCandidate,
-) {
-    candidates
-        .entry(candidate.headword.clone())
-        .and_modify(|existing| {
-            if candidate.score > existing.score {
-                *existing = candidate.clone();
-            }
-        })
-        .or_insert(candidate);
-}
-
-fn phrase_lookup_confidence(candidates: &[PhraseHostCandidate]) -> PhraseLookupConfidence {
-    let Some(best) = candidates.first() else {
-        return PhraseLookupConfidence::Low;
-    };
-
-    let gap = candidates
-        .get(1)
-        .map(|next| best.score - next.score)
-        .unwrap_or(best.score);
-
-    if best.score >= 0.95 && gap >= 0.08 {
-        PhraseLookupConfidence::High
-    } else if best.score >= 0.78 {
-        PhraseLookupConfidence::Medium
-    } else {
-        PhraseLookupConfidence::Low
-    }
-}
-
-fn content_tokens(value: &str) -> Vec<String> {
-    tokenize_phrase(value)
-        .into_iter()
-        .filter(|token| !is_phrase_function_token(token))
-        .collect()
-}
-
-fn tokenize_phrase(value: &str) -> Vec<String> {
-    value
-        .split(|ch: char| {
-            !(ch.is_ascii_alphabetic()
-                || matches!(ch, 'ä' | 'ö' | 'ü' | 'Ä' | 'Ö' | 'Ü' | 'ß' | '-' | '\''))
-        })
-        .map(str::trim)
-        .filter(|token| !token.is_empty())
-        .map(ToString::to_string)
-        .collect()
-}
-
-fn is_phrase_function_token(token: &str) -> bool {
-    matches!(
-        normalize_for_match(token).as_str(),
-        "der"
-            | "die"
-            | "das"
-            | "dem"
-            | "den"
-            | "des"
-            | "ein"
-            | "eine"
-            | "einer"
-            | "einem"
-            | "einen"
-            | "von"
-            | "vor"
-            | "fur"
-            | "mit"
-            | "bei"
-            | "nach"
-            | "zu"
-            | "zum"
-            | "zur"
-            | "am"
-            | "im"
-            | "an"
-            | "auf"
-            | "aus"
-            | "uber"
-            | "unter"
-            | "um"
-            | "in"
-            | "ins"
-            | "ans"
-            | "sich"
-            | "mir"
-            | "mich"
-            | "dir"
-            | "dich"
-            | "uns"
-            | "euch"
-            | "ihm"
-            | "ihn"
-            | "ihr"
-            | "ihnen"
-    )
 }
 
 fn fold_match_char(ch: char) -> Vec<char> {

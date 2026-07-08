@@ -6,9 +6,8 @@ import type {
   AiSettingsResponse,
   AiSettingsUpdateRequest,
   AnalyzeResponse,
-  AttachPhraseRequest,
   DatabaseImportResponse,
-  DetachPhraseRequest,
+  DeletePhraseModuleRequest,
   EntryDeleteResponse,
   EntryDetailResponse,
   IntelligentSearchRequest,
@@ -100,17 +99,9 @@ export function intelligentSearch(payload: IntelligentSearchRequest) {
   });
 }
 
-export function attachPhraseToHost(payload: AttachPhraseRequest) {
-  return apiFetch<AnalyzeResponse>(`${API_BASE}/phrases/attach`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-}
-
-export function detachPhraseFromHost(payload: DetachPhraseRequest) {
-  return apiFetch<AnalyzeResponse>(`${API_BASE}/phrases/detach`, {
-    method: "POST",
+export function deletePhraseModuleFromEntry(entryId: number, payload: DeletePhraseModuleRequest) {
+  return apiFetch<AnalyzeResponse>(`${API_BASE}/entries/${entryId}/phrase-modules`, {
+    method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
