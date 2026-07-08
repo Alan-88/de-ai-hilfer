@@ -1,5 +1,6 @@
 use crate::ai::is_hard_failure;
 use crate::models::{DictionaryRaw, PhraseLookupInfo, QualityMode};
+use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
 use crate::services::analyze_support::{
     analysis_chat_options, build_analysis_prompt, AnalysisMode,
 };
@@ -21,8 +22,13 @@ pub async fn generate_analysis_with_model(
     generation_hint: Option<&str>,
     phrase_lookup: Option<&PhraseLookupInfo>,
 ) -> Result<GeneratedAnalysis> {
-    let primary_model = primary_model_for(state, quality_mode);
-    let fallback_model = fallback_model_for(state, quality_mode);
+    let primary = resolve_task_model(state, AiModelTask::Analyze).await?;
+    let primary_model = primary.model.as_str();
+    let fallback_model = if primary.persisted {
+        ""
+    } else {
+        fallback_model_for(state, quality_mode)
+    };
     let prompt = build_analysis_prompt(
         &state.prompts,
         dictionary_entry,
@@ -33,8 +39,8 @@ pub async fn generate_analysis_with_model(
     let options = analysis_chat_options(mode);
 
     for cycle in 1..=2 {
-        match state
-            .ai_client
+        match primary
+            .client
             .chat_model_with_options(primary_model, &prompt, target_query, options)
             .await
         {
@@ -58,8 +64,8 @@ pub async fn generate_analysis_with_model(
                 tracing::warn!(
                     "analyze switching to fallback model after primary retries: primary={primary_model}, fallback={fallback_model}, target={target_query}, err={primary_err:#}"
                 );
-                match state
-                    .ai_client
+                match primary
+                    .client
                     .chat_model_with_options(fallback_model, &prompt, target_query, options)
                     .await
                 {

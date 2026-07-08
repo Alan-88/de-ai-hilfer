@@ -1,4 +1,4 @@
-use crate::ai::{AiClient, AiEmbeddingOptions, AiScene};
+use crate::ai::{AiClient, AiEmbeddingOptions};
 use crate::config::Config;
 use crate::db;
 use crate::embedding_frequency::{compare_headwords, frequency_rank_of, load_frequency_ranks};
@@ -127,7 +127,7 @@ pub async fn run_embedding_backfill(
     let frequency_ranks =
         Arc::new(load_frequency_ranks(&options.frequency_path, &options.frequency_url).await?);
     let model_id = config.ai_models.embedding.clone();
-    let client = AiClient::new(api_key, base_url, config.ai_models.clone());
+    let client = AiClient::new(api_key, base_url);
     let pending_lexemes = dictionary_lexemes::list_pending_lexemes_for_embedding(&pool, &model_id)
         .await
         .context("failed to list pending lexemes for embeddings")?;
@@ -343,6 +343,7 @@ async fn try_embed_records(
         .collect::<Vec<_>>();
     let embeddings = embed_with_retry(
         client,
+        model_id,
         &inputs,
         options,
         input_rate_limiter,
@@ -372,6 +373,7 @@ async fn try_embed_records(
 
 async fn embed_with_retry(
     client: &AiClient,
+    model_id: &str,
     inputs: &[String],
     options: &EmbeddingBackfillOptions,
     input_rate_limiter: Option<&SmoothRateLimiter>,
@@ -391,8 +393,8 @@ async fn embed_with_retry(
                 rate_limiter.acquire(1).await;
             }
             match client
-                .embed_with_options(
-                    AiScene::Embedding,
+                .embed_model_with_options(
+                    model_id,
                     inputs,
                     AiEmbeddingOptions {
                         timeout: options.timeout,

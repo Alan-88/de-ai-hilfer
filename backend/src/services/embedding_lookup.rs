@@ -1,5 +1,6 @@
-use crate::ai::{AiEmbeddingOptions, AiScene};
+use crate::ai::AiEmbeddingOptions;
 use crate::repositories::dictionary_lexemes;
+use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
 use crate::state::AppState;
 use anyhow::Result;
 use std::time::Duration;
@@ -15,10 +16,11 @@ pub async fn infer_headword_by_embedding(
     hint: &str,
 ) -> Result<Option<String>> {
     let embedding_input = build_embedding_query_input(term, hint);
-    let embedding = state
-        .ai_client
-        .embed_with_options(
-            AiScene::Embedding,
+    let resolved = resolve_task_model(state, AiModelTask::Embedding).await?;
+    let embedding = resolved
+        .client
+        .embed_model_with_options(
+            &resolved.model,
             &[embedding_input],
             AiEmbeddingOptions {
                 timeout: Duration::from_secs(12),
@@ -36,7 +38,7 @@ pub async fn infer_headword_by_embedding(
 
     let lexeme_candidates = dictionary_lexemes::search_lexemes_by_embedding(
         &state.pool,
-        &state.config.ai_models.embedding,
+        &resolved.model,
         &embedding,
         EMBEDDING_CANDIDATE_LIMIT,
     )

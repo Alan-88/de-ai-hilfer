@@ -2,8 +2,8 @@ use crate::models::{
     AnalyzeRequest, AnalyzeResponse, FollowUpItem, NewKnowledgeEntry, QualityMode,
 };
 use crate::repositories::{dictionary, dictionary_lexemes, knowledge};
+use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
 use crate::services::analysis_grounded_runtime::stream_grounded_analysis;
-use crate::services::analyze_runtime::primary_model_for;
 use crate::services::dictionary_facts::dictionary_pos;
 use crate::services::dictionary_tags::build_tags;
 use crate::services::query_inference::{
@@ -247,10 +247,11 @@ pub async fn stream_analyze(
             }
         }
     } else {
+        let resolved_meta = resolve_task_model(&state, AiModelTask::Analyze).await?;
         send_meta(
             &tx,
             "analyze",
-            primary_model_for(&state, quality_mode),
+            &resolved_meta.model,
             quality_mode,
             if quality_mode == QualityMode::Pro {
                 "Pro"

@@ -1,3 +1,4 @@
+pub mod ai_model_resolver;
 pub mod ai_settings;
 pub mod analysis_grounded_assembly;
 pub mod analysis_grounded_backfill;

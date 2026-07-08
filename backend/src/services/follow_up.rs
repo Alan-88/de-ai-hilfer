@@ -1,6 +1,7 @@
 use crate::ai::{is_hard_failure, AiChatOptions};
 use crate::models::{FollowUpRequest, FollowUpResponse, NewFollowUp, QualityMode};
 use crate::repositories::{follow_up, knowledge};
+use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
 use crate::services::follow_up_fallback::{build_follow_up_fallback, normalize_answer};
 use crate::services::follow_up_prompt::build_follow_up_prompt;
 use crate::state::AppState;
@@ -24,10 +25,15 @@ pub async fn create(state: &AppState, request: FollowUpRequest) -> Result<Follow
         &history,
     );
 
-    let primary_model = primary_model_for(state, request.quality_mode);
-    let fallback_model = fallback_model_for(state, request.quality_mode);
-    let result = match state
-        .ai_client
+    let primary = resolve_task_model(state, AiModelTask::Analyze).await?;
+    let primary_model = primary.model.as_str();
+    let fallback_model = if primary.persisted {
+        ""
+    } else {
+        fallback_model_for(state, request.quality_mode)
+    };
+    let result = match primary
+        .client
         .chat_model_with_options(
             primary_model,
             &system_prompt,
@@ -46,8 +52,8 @@ pub async fn create(state: &AppState, request: FollowUpRequest) -> Result<Follow
                 "follow-up switching to fallback model: primary={primary_model}, fallback={fallback_model}, entry_id={}, err={err:#}",
                 request.entry_id
             );
-            let answer = state
-                .ai_client
+            let answer = primary
+                .client
                 .chat_model_with_options(
                     fallback_model,
                     &system_prompt,
@@ -94,13 +100,6 @@ pub async fn create(state: &AppState, request: FollowUpRequest) -> Result<Follow
         model,
         quality_mode: Some(request.quality_mode),
     })
-}
-
-fn primary_model_for(state: &AppState, quality_mode: QualityMode) -> &str {
-    match quality_mode {
-        QualityMode::Default => state.config.ai_models.follow_up.as_str(),
-        QualityMode::Pro => state.config.ai_models.follow_up_pro.as_str(),
-    }
 }
 
 fn fallback_model_for(state: &AppState, quality_mode: QualityMode) -> &str {

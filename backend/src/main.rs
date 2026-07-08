@@ -59,7 +59,6 @@ async fn main() -> anyhow::Result<()> {
             .openai_base_url
             .clone()
             .unwrap_or_else(|| "https://api.openai.com/v1".to_string()),
-        config.ai_models.clone(),
     );
     tracing::info!(
         "AI routing loaded: default={}, analyze={}, analyze_pro={}, follow_up={}, follow_up_pro={}, intelligent_search={}, embedding={}, fallback_fast={}, fallback_pro={}",

@@ -1,5 +1,6 @@
 use crate::ai::{is_hard_failure, AiChatOptions, AiClient};
 use crate::models::{AnalysisDocument, DictionaryRaw, QualityMode, StructuredAnalysisDocument};
+use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
 use crate::services::analysis_grounded_assembly::assemble_grounded_structured_document;
 use crate::services::analysis_grounded_facts::{
     build_light_dictionary_facts_payload, load_raw_rows_by_headword,
@@ -18,7 +19,7 @@ use crate::services::analysis_structure_seed::build_structure_seed;
 use crate::services::analysis_structure_transform::{
     merge_structured_with_seed, normalize_structured_analysis,
 };
-use crate::services::analyze_runtime::{fallback_model_for, primary_model_for};
+use crate::services::analyze_runtime::fallback_model_for;
 use crate::services::analyze_support::{extract_json, extract_json_with_report};
 use crate::services::dictionary_render::build_dictionary_excerpt;
 use crate::services::stream_analyze_runtime::StreamedMarkdown;
@@ -77,16 +78,19 @@ async fn generate_grounded_analysis_with_stage2_fallback(
 ) -> Result<GroundedAnalysis> {
     let stage1 = generate_model_a(state, target_query, quality_mode).await?;
     let dictionary_facts = stage1.dictionary_facts.as_deref();
-    let fallback_model = allow_stage2_fallback
-        .then(|| fallback_model_for(state, quality_mode))
-        .unwrap_or_default();
+    let stage2_primary = resolve_task_model(state, AiModelTask::Analyze).await?;
+    let fallback_model = if allow_stage2_fallback && !stage2_primary.persisted {
+        fallback_model_for(state, quality_mode)
+    } else {
+        ""
+    };
     let stage2 = generate_stage2_markdown(
-        &state.ai_client,
+        &stage2_primary.client,
         &state.prompts,
         target_query,
         dictionary_facts,
         &stage1.output,
-        primary_model_for(state, quality_mode),
+        &stage2_primary.model,
         fallback_model,
         quality_mode,
     )
@@ -129,15 +133,21 @@ pub async fn stream_grounded_analysis(
     }
 
     let dictionary_facts = stage1.dictionary_facts.as_deref();
+    let stage2_primary = resolve_task_model(state, AiModelTask::Analyze).await?;
+    let fallback_model = if stage2_primary.persisted {
+        ""
+    } else {
+        fallback_model_for(state, quality_mode)
+    };
     let stage2 = stream_stage2_markdown(
-        &state.ai_client,
+        &stage2_primary.client,
         tx,
         &state.prompts,
         target_query,
         dictionary_facts,
         &stage1.output,
-        primary_model_for(state, quality_mode),
-        fallback_model_for(state, quality_mode),
+        &stage2_primary.model,
+        fallback_model,
         quality_mode,
     )
     .await?;
@@ -173,17 +183,22 @@ pub async fn stream_grounded_analysis(
 pub(crate) async fn generate_model_a(
     state: &AppState,
     target_query: &str,
-    quality_mode: QualityMode,
+    _quality_mode: QualityMode,
 ) -> Result<GroundedStage1> {
     let raw_rows = load_raw_rows_by_headword(&state.pool, target_query).await?;
     let dictionary_facts = (!raw_rows.is_empty())
         .then(|| build_light_dictionary_facts_payload(target_query, &raw_rows));
     let prompt = build_model_a_prompt(&state.prompts);
     let user_payload = build_model_a_user_payload(target_query, dictionary_facts.as_deref());
-    let model = primary_model_for(state, quality_mode);
-    let raw = state
-        .ai_client
-        .chat_model_with_options(model, &prompt, &user_payload, model_a_chat_options())
+    let resolved = resolve_task_model(state, AiModelTask::Analyze).await?;
+    let raw = resolved
+        .client
+        .chat_model_with_options(
+            &resolved.model,
+            &prompt,
+            &user_payload,
+            model_a_chat_options(),
+        )
         .await?;
     let output = extract_json::<ModelAOutput>(&raw).map(normalize_model_a_output)?;
     if output.entries.is_empty() {
@@ -363,22 +378,26 @@ pub(crate) async fn structure_and_assemble(
     })
     .to_string();
 
-    let structure_model = structure_model_override
-        .map(ToString::to_string)
-        .or_else(|| {
-            std::env::var("AI_MODEL_STRUCTURE")
-                .ok()
-                .map(|value| value.trim().to_string())
-        })
-        .or_else(|| {
-            std::env::var("STRUCTURE_ARCHIVE_MODEL")
-                .ok()
-                .map(|value| value.trim().to_string())
-        })
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "minimax-m2.5".to_string());
+    let resolved_structure = match structure_model_override {
+        Some(model) => ResolvedStructureClient {
+            client: state.ai_client.clone(),
+            model: model.to_string(),
+        },
+        None => {
+            let resolved = resolve_task_model(state, AiModelTask::Structure).await?;
+            ResolvedStructureClient {
+                client: resolved.client,
+                model: resolved.model,
+            }
+        }
+    };
+    let structure_model = if resolved_structure.model.trim().is_empty() {
+        "minimax-m2.5".to_string()
+    } else {
+        resolved_structure.model
+    };
     let raw = generate_structure_with_retry_policy(
-        &state.ai_client,
+        &resolved_structure.client,
         target_query,
         &structure_model,
         &structure_prompt,
@@ -454,4 +473,9 @@ pub(crate) fn structure_chat_options() -> AiChatOptions {
 pub(crate) struct GroundedStage1 {
     pub dictionary_facts: Option<String>,
     pub output: ModelAOutput,
+}
+
+struct ResolvedStructureClient {
+    client: AiClient,
+    model: String,
 }

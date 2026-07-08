@@ -2,6 +2,7 @@ use crate::models::{
     AiProviderProfileView, AiSettingsResponse, AiSettingsUpdateRequest, AiTaskModelSettingView,
 };
 use crate::repositories::ai_settings;
+use crate::services::ai_model_resolver::env_structure_model;
 use crate::state::AppState;
 use anyhow::{anyhow, Result};
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -168,7 +169,7 @@ fn env_backed_settings(state: &AppState) -> AiSettingsResponse {
                 model_id: None,
                 inherit_task_key: Some(TASK_ANALYZE.to_string()),
             },
-            direct_task(TASK_STRUCTURE, &profile_name, &structure_model(state)),
+            direct_task(TASK_STRUCTURE, &profile_name, &env_structure_model(state)),
             direct_task(
                 TASK_EMBEDDING,
                 &profile_name,
@@ -212,23 +213,11 @@ fn env_model_ids(state: &AppState) -> Vec<String> {
     models.insert(state.config.ai_models.embedding.clone());
     models.insert(state.config.ai_models.fallback_fast.clone());
     models.insert(state.config.ai_models.fallback_pro.clone());
-    models.insert(structure_model(state));
+    models.insert(env_structure_model(state));
     models
         .into_iter()
         .filter(|model| !model.is_empty())
         .collect()
-}
-
-fn structure_model(state: &AppState) -> String {
-    std::env::var("AI_MODEL_STRUCTURE")
-        .ok()
-        .filter(|model| !model.trim().is_empty())
-        .or_else(|| {
-            std::env::var("STRUCTURE_ARCHIVE_MODEL")
-                .ok()
-                .filter(|model| !model.trim().is_empty())
-        })
-        .unwrap_or_else(|| state.config.ai_models.fallback_fast.clone())
 }
 
 fn direct_task(task_key: &str, provider_name: &str, model_id: &str) -> AiTaskModelSettingView {
