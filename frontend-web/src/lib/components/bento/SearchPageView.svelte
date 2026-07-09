@@ -584,12 +584,28 @@
 
   .has-suggestions { border-bottom-left-radius: 0; border-bottom-right-radius: 0; box-shadow: var(--shadow-hover); }
 
+  .search-form { border-radius: inherit; overflow: hidden; }
   .input-row { display: flex; align-items: center; padding: 0.5rem 0.5rem 0.5rem 1.5rem; gap: 1rem; border-radius: inherit; }
   .input-row input { flex: 1; background: transparent; font-size: 1.25rem; color: var(--text-main); height: 3.5rem; }
 
-  .main-row { position: relative; z-index: 2; border-top-left-radius: 28px; border-top-right-radius: 28px; }
+  .main-row {
+    position: relative;
+    z-index: 2;
+    border-top-left-radius: 28px;
+    border-top-right-radius: 28px;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
   .main-row.is-single-row { border-bottom-left-radius: 28px; border-bottom-right-radius: 28px; }
-  .sub-row { border-top: 1px solid var(--border-color); padding: 0.85rem 1.5rem; background: var(--bg-color); }
+  .sub-row {
+    border-top: 1px solid var(--border-color);
+    padding: 0.85rem 1.5rem;
+    background: var(--bg-color);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-bottom-left-radius: inherit;
+    border-bottom-right-radius: inherit;
+  }
   .sub-row input { font-size: 1.05rem; height: 2.5rem; }
 
   .actions { display: flex; align-items: center; gap: 0.5rem; }
@@ -659,12 +675,22 @@
 
   .panel-header { padding: 0.75rem 1.5rem; font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; background: var(--bg-color); }
 
-  .suggestion-list { max-height: 420px; overflow-y: auto; }
+  .suggestion-list {
+    max-height: 420px;
+    overflow-y: auto;
+    border-bottom-left-radius: inherit;
+    border-bottom-right-radius: inherit;
+    background: var(--card-bg);
+  }
   .suggestion-item {
     width: 100%; padding: 1.1rem 1.5rem; display: flex; align-items: flex-start;
     gap: 1.25rem; border-bottom: 1px solid var(--border-color); background: transparent; text-align: left;
   }
-  .suggestion-item:last-child { border-bottom: none; }
+  .suggestion-item:last-child {
+    border-bottom: none;
+    border-bottom-left-radius: inherit;
+    border-bottom-right-radius: inherit;
+  }
   .suggestion-item:hover { background: var(--btn-secondary); }
   .suggestion-item i { margin-top: 0.3rem; color: var(--text-muted); font-size: 1.1rem; }
   .text-content { display: flex; flex-direction: column; gap: 0.25rem; }
