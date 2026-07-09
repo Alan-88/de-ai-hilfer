@@ -1,5 +1,6 @@
 use crate::models::{
-    LearningProgressMapResponse, LearningProgressView, LearningSessionResponse,
+    LearningProgressMapResponse, LearningProgressView, LearningReviewV3Request,
+    LearningSessionResponse, LearningSessionV3Response, LearningStartSessionRequest,
     LearningStatsResponse,
 };
 use crate::services::learning;
@@ -41,12 +42,43 @@ pub async fn add_word(
         .map_err(internal_error)
 }
 
+pub async fn start_session_v3(
+    State(state): State<AppState>,
+    Json(body): Json<LearningStartSessionRequest>,
+) -> Result<Json<LearningSessionV3Response>, (StatusCode, String)> {
+    learning::start_session_v3(&state, body.limit_new_words)
+        .await
+        .map(Json)
+        .map_err(internal_error)
+}
+
+pub async fn get_session_next_v3(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<LearningSessionV3Response>, (StatusCode, String)> {
+    learning::get_session_next_v3(&state, &session_id)
+        .await
+        .map(Json)
+        .map_err(internal_error)
+}
+
 pub async fn review_word(
     State(state): State<AppState>,
     Path(entry_id): Path<i64>,
     Json(body): Json<ReviewBody>,
 ) -> Result<Json<LearningProgressView>, (StatusCode, String)> {
     learning::submit_review(&state, entry_id, body.quality)
+        .await
+        .map(Json)
+        .map_err(internal_error)
+}
+
+pub async fn review_word_v3(
+    State(state): State<AppState>,
+    Path((session_id, entry_id)): Path<(String, i64)>,
+    Json(body): Json<LearningReviewV3Request>,
+) -> Result<Json<LearningSessionV3Response>, (StatusCode, String)> {
+    learning::submit_review_v3(&state, &session_id, entry_id, body.rating)
         .await
         .map(Json)
         .map_err(internal_error)

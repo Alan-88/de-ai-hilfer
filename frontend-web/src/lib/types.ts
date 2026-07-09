@@ -284,7 +284,11 @@ export interface LearningProgressView {
   stability: number;
   difficulty: number;
   state: number;
+  lapses?: number;
 }
+
+export type LearningWordPhase = "new" | "review" | "intraday";
+export type LearningRecallRating = "known" | "fuzzy" | "forgotten";
 
 export interface LearningSessionWord {
   entry_id: number;
@@ -293,6 +297,8 @@ export interface LearningSessionWord {
   structured_analysis?: StructuredAnalysisDocument | null;
   repetitions_left: number;
   progress: LearningProgressView | null;
+  phase?: LearningWordPhase | null;
+  appearance_count_today?: number | null;
 }
 
 export interface LearningSessionResponse {
@@ -300,6 +306,12 @@ export interface LearningSessionResponse {
   completed_count: number;
   total_count: number;
   is_completed: boolean;
+}
+
+export interface LearningSessionV3Response extends LearningSessionResponse {
+  session_id: string;
+  business_date: string;
+  intraday_queue_count: number;
 }
 
 export interface LearningProgressMapResponse {

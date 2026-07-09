@@ -263,9 +263,9 @@ pub async fn apply_restore_plan(
         sqlx::query(
             r#"
             INSERT INTO learning_progress (
-                entry_id, stability, difficulty, elapsed_days, scheduled_days, state, last_review_at, due_date, review_count
+                entry_id, stability, difficulty, elapsed_days, scheduled_days, state, last_review_at, due_date, review_count, lapses
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
         .bind(progress.entry_id)
@@ -277,6 +277,7 @@ pub async fn apply_restore_plan(
         .bind(progress.last_review_at)
         .bind(progress.due_date)
         .bind(progress.review_count)
+        .bind(progress.lapses)
         .execute(&mut *tx)
         .await?;
     }

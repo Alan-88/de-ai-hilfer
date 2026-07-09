@@ -1,17 +1,16 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import LearningFlashcard from "$lib/components/bento/LearningFlashcard.svelte";
-  import { getLearningSession, getLearningStats, submitReview } from "$lib/learningApi";
+  import { getLearningStats, startLearningSession, submitLearningReviewV3 } from "$lib/learningApi";
   import type {
-    LearningSessionResponse,
-    LearningSessionWord,
+    LearningRecallRating,
+    LearningSessionV3Response,
     LearningStatsResponse,
-    ReviewQuality,
   } from "$lib/types";
 
   let { active = false } = $props();
 
-  let sessionState = $state<LearningSessionResponse | null>(null);
+  let sessionState = $state<LearningSessionV3Response | null>(null);
   let stats = $state<LearningStatsResponse | null>(null);
   let isLoading = $state(false);
   let hasLoaded = $state(false);
@@ -19,12 +18,12 @@
   let error = $state("");
   let maxSessionSize = $state(0);
 
-  async function loadNextWord() {
+  async function loadSession() {
     isLoading = true;
     error = "";
 
     try {
-      const [nextSession, nextStats] = await Promise.all([getLearningSession(), getLearningStats()]);
+      const [nextSession, nextStats] = await Promise.all([startLearningSession(), getLearningStats()]);
       sessionState = nextSession;
       stats = nextStats;
       if (nextSession.total_count > maxSessionSize) {
@@ -38,14 +37,16 @@
     }
   }
 
-  async function handleReviewed(quality: ReviewQuality) {
+  async function handleReviewed(rating: LearningRecallRating) {
     const currentWord = sessionState?.current_word;
-    if (!currentWord || isSubmitting) return;
+    const currentSessionId = sessionState?.session_id;
+    if (!currentWord || !currentSessionId || isSubmitting) return;
     isSubmitting = true;
 
     try {
-      await submitReview(currentWord.entry_id, quality);
-      await loadNextWord();
+      const nextSession = await submitLearningReviewV3(currentSessionId, currentWord.entry_id, rating);
+      sessionState = nextSession;
+      stats = await getLearningStats();
     } catch (reviewError) {
       error = reviewError instanceof Error ? reviewError.message : "提交复习失败";
     } finally {
@@ -54,11 +55,11 @@
   }
 
   onMount(() => {
-    if (active) void loadNextWord();
+    if (active) void loadSession();
   });
 
   // 这里的派生状态
-  const reviewedCount = $derived(maxSessionSize > 0 ? Math.max(maxSessionSize - (sessionState?.total_count ?? 0), 0) : 0);
+  const reviewedCount = $derived(sessionState?.completed_count ?? 0);
   const sessionProgress = $derived(maxSessionSize > 0 ? (reviewedCount / maxSessionSize) * 100 : (sessionState?.is_completed ? 100 : 0));
 </script>
 
@@ -81,8 +82,8 @@
     <div class="num">{stats?.due_today ?? 0}</div>
   </div>
   <div class="bento-card stat-card">
-    <div class="label">平均稳定性</div>
-    <div class="num">{(stats?.average_stability ?? 0).toFixed(2)}</div>
+    <div class="label">日内队列</div>
+    <div class="num">{sessionState?.intraday_queue_count ?? 0}</div>
   </div>
 </div>
 
@@ -99,7 +100,7 @@
   {:else if error}
     <div class="message-surface error">
       <p>{error}</p>
-      <button class="btn-secondary" onclick={loadNextWord} style="margin-top: 1rem;">
+      <button class="btn-secondary" onclick={loadSession} style="margin-top: 1rem;">
         <i class="ph ph-arrows-clockwise"></i> 重试
       </button>
     </div>
