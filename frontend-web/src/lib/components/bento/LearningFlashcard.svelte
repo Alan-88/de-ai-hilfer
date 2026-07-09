@@ -1,22 +1,28 @@
 <script lang="ts">
   import { resolveStructuredAnalysis } from "$lib/analysis/structuredAnalysis";
   import { buildLearningEnhancements } from "$lib/learningEnhance";
-  import type { LearningSessionWord, ReviewQuality } from "$lib/types";
+  import type { LearningRecallRating, LearningSessionWord } from "$lib/types";
 
   let { wordData, isSubmitting = false, onRate } = $props<{
     wordData: LearningSessionWord;
     isSubmitting: boolean;
-    onRate: (q: ReviewQuality) => void;
+    onRate: (q: LearningRecallRating) => void;
   }>();
 
-  const ratingOptions: Array<{ label: string; value: ReviewQuality; className: string }> = [
-    { label: "完全忘记", value: 0 as ReviewQuality, className: "rate-btn hard" },
-    { label: "提示后记起", value: 2 as ReviewQuality, className: "rate-btn" },
-    { label: "犹豫但正确", value: 4 as ReviewQuality, className: "rate-btn" },
-    { label: "完美回忆", value: 5 as ReviewQuality, className: "rate-btn easy" },
-  ];
+  const ratingOptions = $derived([
+    {
+      label: wordData.phase === "new" ? "不认识" : "忘记",
+      value: "forgotten",
+      className: "rate-btn hard",
+    },
+    { label: "模糊", value: "fuzzy", className: "rate-btn" },
+    { label: "认识", value: "known", className: "rate-btn easy" },
+  ] satisfies Array<{ label: string; value: LearningRecallRating; className: string }>);
 
-  function learningStateLabel(state?: number | null) {
+  function learningStateLabel(phase?: string | null, state?: number | null) {
+    if (phase === "new") return "新词";
+    if (phase === "review") return "复习";
+    if (phase === "intraday") return "今日重现";
     switch (state) {
       case 1: return "学习中";
       case 2: return "复习期";
@@ -55,7 +61,7 @@
 <div class="flashcard-shell" class:revealed={showingAnswer}>
   <div class="bento-card flashcard">
     <div class="flashcard-meta">
-      <span class="pill">{learningStateLabel(wordData.progress?.state)} · {wordData.repetitions_left} 次待记</span>
+      <span class="pill">{learningStateLabel(wordData.phase, wordData.progress?.state)} · 第 {wordData.appearance_count_today ?? 1} 次</span>
       <span class="pill">上次: {formatDate(wordData.progress?.last_reviewed_at)}</span>
     </div>
 
@@ -182,7 +188,7 @@
 
   .rating-bar {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 0.75rem;
     animation: fadeIn 0.5s ease;
   }

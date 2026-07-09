@@ -23,7 +23,7 @@ use staged_structured_backfill_support::{
     write_report, AbArtifact, Command, Options, QueuePaths, ReadyArtifact, StageCase, StageReport,
     PIPELINE_VERSION,
 };
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task::JoinSet;
@@ -54,6 +54,7 @@ async fn main() -> Result<()> {
         prompts,
         ai_client,
         recent_searches: Arc::new(Mutex::new(VecDeque::new())),
+        learning_sessions: Arc::new(Mutex::new(HashMap::new())),
     };
 
     let options = Options::from_env();

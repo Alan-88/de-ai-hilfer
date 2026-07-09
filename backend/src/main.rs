@@ -16,7 +16,7 @@ use axum::{
     Router,
 };
 use state::AppState;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
@@ -78,6 +78,7 @@ async fn main() -> anyhow::Result<()> {
         prompts,
         ai_client,
         recent_searches: Arc::new(Mutex::new(VecDeque::with_capacity(20))),
+        learning_sessions: Arc::new(Mutex::new(HashMap::new())),
     };
 
     // 构建路由
@@ -142,12 +143,24 @@ async fn main() -> anyhow::Result<()> {
             get(handlers::learning::get_session),
         )
         .route(
+            "/api/v1/learning/session/v3/start",
+            post(handlers::learning::start_session_v3),
+        )
+        .route(
+            "/api/v1/learning/session/v3/:session_id/next",
+            get(handlers::learning::get_session_next_v3),
+        )
+        .route(
             "/api/v1/learning/add/:entry_id",
             post(handlers::learning::add_word),
         )
         .route(
             "/api/v1/learning/review/v2/:entry_id",
             post(handlers::learning::review_word),
+        )
+        .route(
+            "/api/v1/learning/session/v3/:session_id/review/:entry_id",
+            post(handlers::learning::review_word_v3),
         )
         .route(
             "/api/v1/learning/progress",

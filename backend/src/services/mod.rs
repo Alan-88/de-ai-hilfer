@@ -36,6 +36,7 @@ pub mod follow_up_stream;
 pub mod json_extract_repair;
 pub mod knowledge_snapshot;
 pub mod learning;
+pub mod learning_session;
 pub mod library;
 pub mod management;
 pub mod phrase_module;

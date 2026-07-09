@@ -11,7 +11,7 @@ use de_ai_hilfer::services::prewarm_selection::select_headwords_for_prewarm;
 use de_ai_hilfer::state::AppState;
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -82,6 +82,7 @@ async fn main() -> Result<()> {
         prompts,
         ai_client,
         recent_searches: Arc::new(Mutex::new(VecDeque::with_capacity(20))),
+        learning_sessions: Arc::new(Mutex::new(HashMap::new())),
     };
 
     let limit = env_usize("PREWARM_LIMIT", 500);

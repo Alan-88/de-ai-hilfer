@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
@@ -114,6 +114,8 @@ pub struct LearningProgress {
     pub last_review_at: Option<DateTime<Utc>>,
     pub due_date: DateTime<Utc>,
     pub review_count: i32,
+    #[serde(default)]
+    pub lapses: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,6 +130,14 @@ pub enum Rating {
     Hard = 2,
     Good = 3,
     Easy = 4,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LearningRecallRating {
+    Known,
+    Fuzzy,
+    Forgotten,
 }
 
 impl Rating {
@@ -401,6 +411,7 @@ pub struct LearningProgressView {
     pub stability: f32,
     pub difficulty: f32,
     pub state: i32,
+    pub lapses: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -412,6 +423,10 @@ pub struct LearningSessionWord {
     pub structured_analysis: Option<StructuredAnalysisDocument>,
     pub repetitions_left: i32,
     pub progress: Option<LearningProgressView>,
+    #[serde(default)]
+    pub phase: Option<String>,
+    #[serde(default)]
+    pub appearance_count_today: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -419,6 +434,32 @@ pub struct LearningSessionResponse {
     pub current_word: Option<LearningSessionWord>,
     pub completed_count: i32,
     pub total_count: i32,
+    pub is_completed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningStartSessionRequest {
+    #[serde(default = "default_learning_new_limit")]
+    pub limit_new_words: i64,
+}
+
+fn default_learning_new_limit() -> i64 {
+    5
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningReviewV3Request {
+    pub rating: LearningRecallRating,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearningSessionV3Response {
+    pub session_id: String,
+    pub business_date: NaiveDate,
+    pub current_word: Option<LearningSessionWord>,
+    pub completed_count: i32,
+    pub total_count: i32,
+    pub intraday_queue_count: i32,
     pub is_completed: bool,
 }
 
