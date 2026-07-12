@@ -116,6 +116,7 @@
     display: flex;
     width: 100%;
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
   }
 
@@ -123,18 +124,21 @@
     flex: 1;
     position: relative;
     overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: none;
     padding: 2rem;
     display: flex;
     flex-direction: column;
     align-items: center;
+    scrollbar-gutter: stable;
   }
 
   /* 升级版主题切换器样式 */
   .theme-switcher-group {
-    position: absolute;
+    position: fixed;
     top: 1.5rem;
     right: 1.5rem;
-    z-index: 100;
+    z-index: 200;
   }
 
   .theme-switch-track {
@@ -204,7 +208,7 @@
 
   .page-container {
     width: 100%;
-    max-width: 960px;
+    max-width: var(--page-content-width);
     animation: fadeIn 0.3s ease;
   }
 
@@ -215,7 +219,7 @@
 
   /* 侧边栏/导航基础样式从 app.css 逐步迁移到这里 */
   .sidebar {
-    width: 240px;
+    width: var(--desktop-sidebar-width);
     background-color: var(--sidebar-bg);
     padding: 2rem 1.25rem;
     display: flex;
@@ -279,6 +283,11 @@
     }
     .main-area {
       padding: 1.5rem 1rem calc(4rem + env(safe-area-inset-bottom));
+    }
+    .theme-switcher-group {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
     }
   }
 </style>

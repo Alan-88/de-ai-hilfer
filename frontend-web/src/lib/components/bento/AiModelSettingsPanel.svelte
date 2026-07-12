@@ -520,10 +520,15 @@
   }
 
   .section-head {
+    position: sticky;
+    top: 1rem;
+    z-index: 10;
     display: flex;
     justify-content: space-between;
     gap: 1rem;
     align-items: flex-start;
+    padding: 0.5rem 0;
+    background: var(--card-bg);
   }
 
   .section-head h2 {
@@ -817,6 +822,7 @@
 
   @media (max-width: 760px) {
     .section-head {
+      position: static;
       flex-direction: column;
     }
 

@@ -308,10 +308,11 @@
     position: relative;
     padding: 3rem 2rem;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 
   .detail-close-floating {
-    position: absolute;
+    position: fixed;
     top: 1.5rem;
     right: 1.5rem;
     width: 3rem;
