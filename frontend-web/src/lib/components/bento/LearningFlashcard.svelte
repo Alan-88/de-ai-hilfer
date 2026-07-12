@@ -143,9 +143,8 @@
 {/if}
 
 <style>
-  .flashcard-shell { display: flex; flex: 1; flex-direction: column; gap: 1rem; width: min(940px, 100%); min-height: 0; margin: 0 auto; }
-  .flashcard { flex: 1; min-height: 0; overflow: hidden; padding: 0; }
-  .flashcard:hover { transform: none; box-shadow: var(--shadow-sm); }
+  .flashcard-shell { width: 100%; min-height: 0; }
+  .flashcard { height: clamp(540px, calc(100vh - 230px), 680px); overflow: hidden; padding: 0; }
   .recall-surface { width: 100%; height: 100%; padding: clamp(1.5rem, 3vw, 2.5rem); border-radius: inherit; background: transparent; color: var(--text-main); text-align: inherit; }
   .meta { display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: var(--text-muted); font-size: 0.8rem; font-weight: 700; }
   .recall-content { height: calc(100% - 1rem); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(4.5rem, 11vh, 7rem); text-align: center; }
@@ -162,7 +161,7 @@
   .word-intro { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 190px; padding: 1.5rem 0; }
   .word-intro > span { margin-top: 0.4rem; color: var(--text-muted); font-size: 0.82rem; font-weight: 700; }
 
-  .rating-bar { display: grid; flex: 0 0 auto; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+  .rating-bar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; margin-top: 1rem; }
   .rating-bar button { min-height: 52px; border-radius: var(--radius-md); background: var(--btn-secondary); color: var(--btn-secondary-text); font-weight: 800; }
   .rating-bar button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
   .rating-bar button:disabled { cursor: wait; opacity: 0.55; }
@@ -170,6 +169,7 @@
   .rating-bar .known { background: var(--success-bg); color: var(--success-text); }
 
   @media (max-width: 600px) {
+    .flashcard { height: calc(100dvh - 250px); min-height: 500px; }
     .recall-surface { padding: 1.25rem; }
     .answer-shell { padding: 1.1rem 1rem 0; }
     .meta { gap: 0.5rem; font-size: 0.72rem; }
