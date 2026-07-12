@@ -1,17 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import LearningFlashcard from "$lib/components/bento/LearningFlashcard.svelte";
-  import { getLearningStats, startLearningSession, submitLearningReviewV3 } from "$lib/learningApi";
-  import type {
-    LearningRecallRating,
-    LearningSessionV3Response,
-    LearningStatsResponse,
-  } from "$lib/types";
+  import { startLearningSession, submitLearningReviewV3 } from "$lib/learningApi";
+  import type { LearningRecallRating, LearningSessionV3Response } from "$lib/types";
 
   let { active = false } = $props();
 
   let sessionState = $state<LearningSessionV3Response | null>(null);
-  let stats = $state<LearningStatsResponse | null>(null);
   let isLoading = $state(false);
   let hasLoaded = $state(false);
   let isSubmitting = $state(false);
@@ -23,12 +18,9 @@
     error = "";
 
     try {
-      const [nextSession, nextStats] = await Promise.all([startLearningSession(), getLearningStats()]);
+      const nextSession = await startLearningSession();
       sessionState = nextSession;
-      stats = nextStats;
-      if (nextSession.total_count > maxSessionSize) {
-        maxSessionSize = nextSession.total_count;
-      }
+      maxSessionSize = Math.max(maxSessionSize, nextSession.total_count);
       hasLoaded = true;
     } catch (loadError) {
       error = loadError instanceof Error ? loadError.message : "获取学习会话失败";
@@ -42,11 +34,10 @@
     const currentSessionId = sessionState?.session_id;
     if (!currentWord || !currentSessionId || isSubmitting) return;
     isSubmitting = true;
+    error = "";
 
     try {
-      const nextSession = await submitLearningReviewV3(currentSessionId, currentWord.entry_id, rating);
-      sessionState = nextSession;
-      stats = await getLearningStats();
+      sessionState = await submitLearningReviewV3(currentSessionId, currentWord.entry_id, rating);
     } catch (reviewError) {
       error = reviewError instanceof Error ? reviewError.message : "提交复习失败";
     } finally {
@@ -58,126 +49,69 @@
     if (active) void loadSession();
   });
 
-  // 这里的派生状态
   const reviewedCount = $derived(sessionState?.completed_count ?? 0);
-  const sessionProgress = $derived(maxSessionSize > 0 ? (reviewedCount / maxSessionSize) * 100 : (sessionState?.is_completed ? 100 : 0));
+  const sessionProgress = $derived(maxSessionSize > 0
+    ? (reviewedCount / maxSessionSize) * 100
+    : sessionState?.is_completed ? 100 : 0);
 </script>
 
-<header class="page-header">
-  <h1>沉浸复习</h1>
-  <p>先回忆，再揭晓答案。把节奏压回到主动提取，而不是被动浏览。</p>
-</header>
+<div class="learning-page">
+  <header class="page-header"><h1>沉浸复习</h1></header>
 
-<div class="stats-grid">
-  <div class="bento-card stat-card">
-    <div class="label">当前轮次</div>
-    <div class="num">{maxSessionSize > 0 ? `${reviewedCount}/${maxSessionSize}` : "0/0"}</div>
-  </div>
-  <div class="bento-card stat-card">
-    <div class="label">学习中</div>
-    <div class="num">{stats?.total_words ?? 0}</div>
-  </div>
-  <div class="bento-card stat-card">
-    <div class="label">今日待复习</div>
-    <div class="num">{stats?.due_today ?? 0}</div>
-  </div>
-  <div class="bento-card stat-card">
-    <div class="label">日内队列</div>
-    <div class="num">{sessionState?.intraday_queue_count ?? 0}</div>
-  </div>
-</div>
+  <main class="session-shell">
+    <div class="progress-row">
+      <div class="progress" aria-label="本轮学习进度"><span style:width={`${sessionProgress}%`}></span></div>
+      <strong>{reviewedCount} / {maxSessionSize}</strong>
+    </div>
 
-<div class="flashcard-container">
-  <div class="progress-bar-wrapper">
-    <div class="progress-fill" style="width: {sessionProgress}%"></div>
-  </div>
-
-  {#if isLoading && !hasLoaded}
-    <div class="bento-card loading-card">
-      <div class="skeleton-block" style="width: 40%; height: 2rem;"></div>
-      <div class="skeleton-block" style="margin-top: 2rem; height: 10rem;"></div>
+    <div class="card-stage">
+      {#if isLoading && !hasLoaded}
+        <div class="bento-card loading-card">
+          <div class="skeleton-block" style="width: 34%; height: 2.5rem;"></div>
+          <div class="skeleton-block" style="width: 58%; height: 1rem;"></div>
+        </div>
+      {:else if error}
+        <div class="message-surface error state-card">
+          <p>{error}</p>
+          <button class="btn-secondary" onclick={loadSession}><i class="ph ph-arrows-clockwise"></i> 重试</button>
+        </div>
+      {:else if sessionState?.is_completed}
+        <div class="surface-card empty-state">
+          <i class="ph-fill ph-check-circle"></i>
+          <p>今天的内容已全部学完</p>
+        </div>
+      {:else if sessionState?.current_word}
+        <LearningFlashcard
+          wordData={sessionState.current_word}
+          isSubmitting={isSubmitting}
+          onRate={handleReviewed}
+        />
+      {/if}
     </div>
-  {:else if error}
-    <div class="message-surface error">
-      <p>{error}</p>
-      <button class="btn-secondary" onclick={loadSession} style="margin-top: 1rem;">
-        <i class="ph ph-arrows-clockwise"></i> 重试
-      </button>
-    </div>
-  {:else if sessionState?.is_completed}
-    <div class="surface-card empty-state">
-      <i class="ph-fill ph-check-circle"></i>
-      <p>今天的内容已全部学完！</p>
-      <p class="small-copy">你可以去词库继续添加新词，或稍后再来。</p>
-    </div>
-  {:else if sessionState?.current_word}
-    <LearningFlashcard 
-      wordData={sessionState.current_word} 
-      isSubmitting={isSubmitting} 
-      onRate={handleReviewed} 
-    />
-  {/if}
+  </main>
 </div>
 
 <style>
-  .page-header { width: 100%; margin-bottom: 2.5rem; }
-  .page-header h1 { font-size: 2.25rem; font-weight: 800; margin-bottom: 0.5rem; }
-  .page-header p { color: var(--text-muted); font-size: 1.1rem; }
-
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1.25rem;
-    width: 100%;
-    margin-bottom: 2.5rem;
-  }
-
-  .stat-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 1.5rem;
-    text-align: center;
-  }
-
-  .stat-card .label { font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-  .stat-card .num { font-size: 2rem; font-weight: 800; color: var(--accent-main); margin-top: 0.5rem; }
-
-  .flashcard-container {
-    width: 100%;
-    max-width: 640px;
-    margin: 0 auto;
-  }
-
-  .progress-bar-wrapper {
-    width: 100%;
-    height: 8px;
-    background: var(--btn-secondary);
-    border-radius: var(--radius-full);
-    margin-bottom: 2rem;
-    overflow: hidden;
-  }
-
-  .progress-fill {
-    height: 100%;
-    background: var(--accent-main);
-    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 4rem 2rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .empty-state i { font-size: 4rem; color: var(--success-text); }
-  .empty-state p { font-size: 1.25rem; font-weight: 600; }
+  .learning-page { display: flex; flex-direction: column; width: 100%; height: calc(100dvh - 4rem); overflow: hidden; }
+  .page-header { flex: 0 0 auto; margin-bottom: 1.2rem; }
+  .page-header h1 { font-size: 1.75rem; font-weight: 800; }
+  .session-shell { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+  .progress-row { display: flex; flex: 0 0 auto; align-items: center; gap: 1rem; width: min(940px, 100%); margin: 0 auto 1rem; }
+  .progress { flex: 1; height: 8px; overflow: hidden; border-radius: var(--radius-full); background: var(--btn-secondary); }
+  .progress span { display: block; height: 100%; background: var(--accent-main); transition: width 240ms ease; }
+  .progress-row > strong { min-width: 52px; color: var(--text-muted); font-size: 0.88rem; font-variant-numeric: tabular-nums; text-align: right; }
+  .card-stage { display: flex; flex: 1; min-height: 0; }
+  .loading-card, .state-card, .empty-state { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; width: min(940px, 100%); margin: 0 auto; }
+  .loading-card { min-height: 0; }
+  .state-card button { margin-top: 0.5rem; }
+  .empty-state { text-align: center; }
+  .empty-state i { color: var(--success-text); font-size: 4rem; }
+  .empty-state p { font-size: 1.2rem; font-weight: 700; }
 
   @media (max-width: 768px) {
-    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .learning-page { height: calc(100dvh - 7rem - env(safe-area-inset-bottom)); }
+    .page-header { margin-bottom: 0.9rem; }
+    .page-header h1 { font-size: 1.55rem; }
+    .progress-row { margin-bottom: 0.75rem; }
   }
 </style>

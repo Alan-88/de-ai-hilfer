@@ -421,6 +421,8 @@ pub struct LearningSessionWord {
     pub analysis_markdown: String,
     #[serde(default)]
     pub structured_analysis: Option<StructuredAnalysisDocument>,
+    #[serde(default)]
+    pub attached_phrase_modules: Vec<AttachedPhraseModule>,
     pub repetitions_left: i32,
     pub progress: Option<LearningProgressView>,
     #[serde(default)]
