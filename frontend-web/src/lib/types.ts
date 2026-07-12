@@ -295,6 +295,7 @@ export interface LearningSessionWord {
   query_text: string;
   analysis_markdown: string;
   structured_analysis?: StructuredAnalysisDocument | null;
+  attached_phrase_modules?: AttachedPhraseModule[];
   repetitions_left: number;
   progress: LearningProgressView | null;
   phase?: LearningWordPhase | null;

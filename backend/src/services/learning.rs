@@ -9,6 +9,7 @@ use crate::services::learning_session::{
     session_item, should_complete_today, LearningPhase, LearningSessionItem,
     LearningSessionRuntime, MAX_INTRADAY_APPEARANCES,
 };
+use crate::services::query_resolution::attached_phrase_modules_from_analysis;
 use crate::state::AppState;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, Local, NaiveDate, NaiveTime, TimeZone, Utc};
@@ -44,6 +45,7 @@ pub async fn get_session(
         query_text: entry.query_text,
         analysis_markdown: analysis_markdown(&entry.analysis),
         structured_analysis: structured_analysis(&entry.analysis),
+        attached_phrase_modules: attached_phrase_modules_from_analysis(&entry.analysis),
         repetitions_left: estimate_repetitions_left(&progress),
         progress: Some(progress_to_view(&progress)),
         phase: None,
@@ -282,6 +284,7 @@ fn item_to_word(item: &LearningSessionItem) -> LearningSessionWord {
         query_text: item.entry.query_text.clone(),
         analysis_markdown: analysis_markdown(&item.entry.analysis),
         structured_analysis: structured_analysis(&item.entry.analysis),
+        attached_phrase_modules: attached_phrase_modules_from_analysis(&item.entry.analysis),
         repetitions_left: (MAX_INTRADAY_APPEARANCES - item.appearance_count_today).max(0),
         progress: Some(progress_to_view(&item.progress)),
         phase: Some(item.phase.as_str().to_string()),

@@ -1,111 +1,118 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { resolveStructuredAnalysis } from "$lib/analysis/structuredAnalysis";
-  import { buildLearningEnhancements } from "$lib/learningEnhance";
-  import type { LearningRecallRating, LearningSessionWord } from "$lib/types";
+  import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
+  import LearningAnalysisContent from "$lib/components/bento/LearningAnalysisContent.svelte";
+  import type { GrammarBranch, LearningRecallRating, LearningSessionWord } from "$lib/types";
 
   let { wordData, isSubmitting = false, onRate } = $props<{
     wordData: LearningSessionWord;
     isSubmitting: boolean;
-    onRate: (q: LearningRecallRating) => void;
+    onRate: (rating: LearningRecallRating) => void;
   }>();
 
+  let showingAnswer = $state(false);
+  let contentElement = $state<HTMLDivElement | null>(null);
+  let wordElement = $state<HTMLHeadingElement | null>(null);
+  let usageElement = $state<HTMLElement | null>(null);
+  let dockedTitle = $state(false);
+  let activeGrammarBranch = $state<GrammarBranch | null>(null);
+  let popoverTriggerRect = $state<DOMRect | null>(null);
+
+  const structured = $derived(resolveStructuredAnalysis(
+    wordData.analysis_markdown,
+    wordData.structured_analysis,
+    wordData.query_text,
+  ));
+  const headword = $derived(structured.headword || wordData.query_text);
+  const primaryPartOfSpeech = $derived(structured.meanings[0]?.partOfSpeech ?? structured.grammarBranches[0]?.pos ?? "");
   const ratingOptions = $derived([
     {
       label: wordData.phase === "new" ? "不认识" : "忘记",
       value: "forgotten",
-      className: "rate-btn hard",
+      className: "forgotten",
     },
-    { label: "模糊", value: "fuzzy", className: "rate-btn" },
-    { label: "认识", value: "known", className: "rate-btn easy" },
+    { label: "模糊", value: "fuzzy", className: "fuzzy" },
+    { label: "认识", value: "known", className: "known" },
   ] satisfies Array<{ label: string; value: LearningRecallRating; className: string }>);
 
-  function learningStateLabel(phase?: string | null, state?: number | null) {
-    if (phase === "new") return "新词";
-    if (phase === "review") return "复习";
-    if (phase === "intraday") return "今日重现";
-    switch (state) {
-      case 1: return "学习中";
-      case 2: return "复习期";
-      case 3: return "重学";
-      default: return "新词";
-    }
+  $effect(() => {
+    wordData.entry_id;
+    showingAnswer = false;
+    dockedTitle = false;
+    activeGrammarBranch = null;
+    usageElement = null;
+  });
+
+  function learningStateLabel() {
+    if (wordData.phase === "new") return "新词";
+    if (wordData.phase === "review") return "复习";
+    if (wordData.phase === "intraday") return "今日重现";
+    return "学习";
   }
 
   function formatDate(value?: string | null) {
-    if (!value) return "首次复习";
-    return new Intl.DateTimeFormat("zh-CN", {
-      month: "numeric", day: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    }).format(new Date(value));
+    if (!value) return "首次出现";
+    return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(new Date(value));
   }
 
-  const structured = $derived(
-    resolveStructuredAnalysis(
-      wordData.analysis_markdown,
-      wordData.structured_analysis,
-      wordData.query_text
-    )
-  );
-  const enhancement = $derived(buildLearningEnhancements(wordData.analysis_markdown, wordData.query_text));
-  const primaryMeaning = $derived(structured.meanings[0]);
-  const primaryExample = $derived(structured.examples[0] ?? enhancement.examples[0] ?? null);
-  
-  let showingAnswer = $state(false);
+  function handleScroll() {
+    if (!contentElement || !wordElement) return;
+    const boundary = contentElement.getBoundingClientRect().top;
+    const wordTop = wordElement.getBoundingClientRect().top;
+    if (!dockedTitle && wordTop <= boundary) dockedTitle = true;
+    if (dockedTitle && wordTop > boundary + 12) dockedTitle = false;
+  }
 
-  // 当 wordData 改变时重置显示状态
-  $effect(() => {
-    if (wordData) showingAnswer = false;
-  });
+  async function revealAnswer() {
+    showingAnswer = true;
+    await tick();
+    requestAnimationFrame(() => {
+      if (!contentElement) return;
+      const top = usageElement
+        ? usageElement.getBoundingClientRect().top
+          - contentElement.getBoundingClientRect().top
+          + contentElement.scrollTop
+        : 0;
+      contentElement.scrollTo({ top, behavior: "auto" });
+      handleScroll();
+    });
+  }
+
+  function openGrammar(branch: GrammarBranch, triggerRect: DOMRect) {
+    activeGrammarBranch = branch;
+    popoverTriggerRect = triggerRect;
+  }
 </script>
 
-<div class="flashcard-shell" class:revealed={showingAnswer}>
+<section class="flashcard-shell" aria-label={`${headword} 学习卡片`}>
   <div class="bento-card flashcard">
-    <div class="flashcard-meta">
-      <span class="pill">{learningStateLabel(wordData.phase, wordData.progress?.state)} · 第 {wordData.appearance_count_today ?? 1} 次</span>
-      <span class="pill">上次: {formatDate(wordData.progress?.last_reviewed_at)}</span>
-    </div>
-
-    <div class="flashcard-front">
-      <h2>{wordData.query_text}</h2>
-      {#if !showingAnswer}
-        <button class="btn-primary show-btn" onclick={() => showingAnswer = true}>
-          <i class="ph ph-eye"></i> 查看解析
-        </button>
-      {/if}
-    </div>
-
-    {#if showingAnswer}
-      <div class="flashcard-back">
-        <div class="meanings-row">
-          {#if primaryMeaning}
-            <span class="pos-tag">{primaryMeaning.partOfSpeech}</span>
-            <span class="zh-main">{primaryMeaning.chinese}</span>
-          {/if}
-          {#if structured.grammarRows[0]}
-             <span class="grammar-pill">{structured.grammarRows[0].value}</span>
-          {/if}
+    {#if !showingAnswer}
+      <button class="recall-surface" aria-label={`查看 ${headword} 的答案`} onclick={revealAnswer}>
+        <div class="meta"><span>{learningStateLabel()} · 第 {wordData.appearance_count_today ?? 1} 次</span><span>上次：{formatDate(wordData.progress?.last_reviewed_at)}</span></div>
+        <div class="recall-content">
+          <h2>{headword}</h2>
+          <div class="recall-prompt"><strong>回忆词义与用法</strong><span>点击卡片查看答案</span></div>
         </div>
-
-        <div class="detail-section">
-          {#if primaryExample}
-            <div class="example-box">
-              <div class="de-text">{primaryExample.de}</div>
-              {#if primaryExample.zh}
-                <div class="zh-text">{primaryExample.zh}</div>
-              {/if}
-            </div>
-          {/if}
-
-          {#if enhancement.quiz}
-            <div class="quiz-box">
-              <p class="quiz-q"><strong>测验：</strong>{enhancement.quiz.question}</p>
-              <div class="quiz-options">
-                {#each enhancement.quiz.options as option}
-                  <span class="opt-pill">{option}</span>
-                {/each}
-              </div>
-            </div>
-          {/if}
+      </button>
+    {:else}
+      <div class="answer-shell">
+        <div class="meta answer-meta">
+          <span>{learningStateLabel()} · 第 {wordData.appearance_count_today ?? 1} 次</span>
+          <strong class:visible={dockedTitle}>{headword}</strong>
+          <span>上次：{formatDate(wordData.progress?.last_reviewed_at)}</span>
+        </div>
+        <div class="scroll-content" bind:this={contentElement} onscroll={handleScroll}>
+          <header class="word-intro">
+            <h2 bind:this={wordElement}>{headword}</h2>
+            {#if primaryPartOfSpeech}<span>{primaryPartOfSpeech}</span>{/if}
+          </header>
+          <LearningAnalysisContent
+            analysis={structured}
+            attachedPhraseModules={wordData.attached_phrase_modules ?? []}
+            onGrammarOpen={openGrammar}
+            bind:usageElement
+          />
         </div>
       </div>
     {/if}
@@ -114,101 +121,59 @@
   {#if showingAnswer}
     <div class="rating-bar">
       {#each ratingOptions as option}
-        <button 
-          class={option.className} 
-          disabled={isSubmitting} 
+        <button
+          class={option.className}
+          disabled={isSubmitting}
           onclick={() => onRate(option.value)}
-        >
-          {option.label}
-        </button>
+        >{option.label}</button>
       {/each}
     </div>
   {/if}
-</div>
+</section>
+
+{#if activeGrammarBranch}
+  <GrammarBranchPopover
+    branch={activeGrammarBranch}
+    triggerRect={popoverTriggerRect}
+    onClose={() => {
+      activeGrammarBranch = null;
+      popoverTriggerRect = null;
+    }}
+  />
+{/if}
 
 <style>
-  .flashcard-shell { width: 100%; display: flex; flex-direction: column; gap: 1.5rem; }
-  
-  .flashcard {
-    min-height: 420px;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    padding: 2.5rem;
-    background: var(--card-bg);
-    transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
+  .flashcard-shell { display: flex; flex: 1; flex-direction: column; gap: 1rem; width: min(940px, 100%); min-height: 0; margin: 0 auto; }
+  .flashcard { flex: 1; min-height: 0; overflow: hidden; padding: 0; }
+  .flashcard:hover { transform: none; box-shadow: var(--shadow-sm); }
+  .recall-surface { width: 100%; height: 100%; padding: clamp(1.5rem, 3vw, 2.5rem); border-radius: inherit; background: transparent; color: var(--text-main); text-align: inherit; }
+  .meta { display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: var(--text-muted); font-size: 0.8rem; font-weight: 700; }
+  .recall-content { height: calc(100% - 1rem); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(4.5rem, 11vh, 7rem); text-align: center; }
+  h2 { font-size: clamp(3rem, 5vw, 4.4rem); font-weight: 800; line-height: 1.1; letter-spacing: 0; }
+  .recall-prompt { display: grid; gap: 0.45rem; color: var(--text-muted); }
+  .recall-prompt strong { color: var(--text-main); font-size: 1.08rem; }
+  .recall-prompt span { font-size: 0.9rem; }
 
-  .flashcard-meta {
-    display: flex;
-    justify-content: space-between;
-    width: 100%;
-    margin-bottom: 2rem;
-  }
-  .pill { font-size: 0.8rem; font-weight: 700; color: var(--text-muted); background: var(--btn-secondary); padding: 0.3rem 0.6rem; border-radius: var(--radius-sm); }
+  .answer-shell { height: 100%; display: flex; flex-direction: column; padding: 1.5rem clamp(1.5rem, 3vw, 2.5rem) 0; }
+  .answer-meta { position: relative; flex: 0 0 auto; min-height: 42px; padding-bottom: 0.8rem; }
+  .answer-meta > strong { position: absolute; left: 50%; bottom: 0.8rem; max-width: 52%; overflow: hidden; transform: translateX(-50%) translateY(3px); color: var(--text-main); font-size: 1.8rem; line-height: 1.15; opacity: 0; text-overflow: ellipsis; white-space: nowrap; transition: opacity 140ms ease, transform 140ms ease; pointer-events: none; }
+  .answer-meta > strong.visible { transform: translateX(-50%) translateY(0); opacity: 1; }
+  .scroll-content { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+  .word-intro { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 190px; padding: 1.5rem 0; }
+  .word-intro > span { margin-top: 0.4rem; color: var(--text-muted); font-size: 0.82rem; font-weight: 700; }
 
-  .flashcard-front {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-  }
-
-  .flashcard-front h2 { font-size: 3.5rem; font-weight: 800; margin-bottom: 2rem; letter-spacing: -0.02em; }
-  
-  .show-btn { padding: 1rem 2.5rem; font-size: 1.1rem; box-shadow: var(--shadow-sm); }
-
-  .flashcard-back {
-    animation: slideUpFade 0.4s ease forwards;
-    width: 100%;
-  }
-
-  @keyframes slideUpFade {
-    from { opacity: 0; transform: translateY(15px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .meanings-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1.5rem; }
-  .pos-tag { background: var(--accent-main); color: white; padding: 0.2rem 0.6rem; border-radius: 6px; font-weight: 800; font-size: 0.9rem; }
-  .zh-main { font-size: 1.5rem; font-weight: 700; color: var(--text-main); }
-  .grammar-pill { color: var(--accent-main); font-weight: 700; font-family: var(--font-serif); }
-
-  .detail-section { display: flex; flex-direction: column; gap: 1.25rem; }
-  
-  .example-box { background: var(--bg-color); padding: 1.25rem; border-radius: var(--radius-md); }
-  .de-text { font-size: 1.15rem; font-weight: 600; line-height: 1.5; color: var(--text-main); }
-  .zh-text { font-size: 0.95rem; color: var(--text-muted); margin-top: 0.5rem; }
-
-  .quiz-box { border: 1px dashed var(--border-color); padding: 1.15rem; border-radius: var(--radius-md); }
-  .quiz-q { margin-bottom: 0.75rem; font-size: 0.95rem; }
-  .quiz-options { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-  .opt-pill { font-size: 0.85rem; padding: 0.25rem 0.5rem; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-muted); }
-
-  .rating-bar {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.75rem;
-    animation: fadeIn 0.5s ease;
-  }
-
-  .rate-btn {
-    padding: 1.1rem 0.5rem;
-    border-radius: var(--radius-md);
-    font-weight: 700;
-    font-size: 0.95rem;
-    background: var(--btn-secondary);
-    color: var(--btn-secondary-text);
-    box-shadow: var(--shadow-sm);
-  }
-
-  .rate-btn:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
-  .rate-btn.easy { background: var(--success-bg); color: var(--success-text); }
-  .rate-btn.hard { background: var(--danger-bg); color: var(--danger-text); }
+  .rating-bar { display: grid; flex: 0 0 auto; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+  .rating-bar button { min-height: 52px; border-radius: var(--radius-md); background: var(--btn-secondary); color: var(--btn-secondary-text); font-weight: 800; }
+  .rating-bar button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .rating-bar button:disabled { cursor: wait; opacity: 0.55; }
+  .rating-bar .forgotten { background: var(--danger-bg); color: var(--danger-text); }
+  .rating-bar .known { background: var(--success-bg); color: var(--success-text); }
 
   @media (max-width: 600px) {
-    .rating-bar { grid-template-columns: repeat(2, 1fr); }
-    .flashcard-front h2 { font-size: 2.5rem; }
+    .recall-surface { padding: 1.25rem; }
+    .answer-shell { padding: 1.1rem 1rem 0; }
+    .meta { gap: 0.5rem; font-size: 0.72rem; }
+    .answer-meta > strong { font-size: 1.35rem; }
+    .rating-bar { gap: 0.5rem; }
   }
 </style>
