@@ -92,24 +92,23 @@
 </div>
 
 <style>
-  .learning-page { display: flex; flex-direction: column; width: 100%; height: calc(100dvh - 4rem); overflow: hidden; }
+  .learning-page { width: min(1040px, calc(100vw - 304px)); margin-left: 50%; transform: translateX(-50%); }
   .page-header { flex: 0 0 auto; margin-bottom: 1.2rem; }
   .page-header h1 { font-size: 1.75rem; font-weight: 800; }
-  .session-shell { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-  .progress-row { display: flex; flex: 0 0 auto; align-items: center; gap: 1rem; width: min(940px, 100%); margin: 0 auto 1rem; }
+  .session-shell { width: min(940px, 100%); margin: 0 auto; }
+  .progress-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
   .progress { flex: 1; height: 8px; overflow: hidden; border-radius: var(--radius-full); background: var(--btn-secondary); }
   .progress span { display: block; height: 100%; background: var(--accent-main); transition: width 240ms ease; }
   .progress-row > strong { min-width: 52px; color: var(--text-muted); font-size: 0.88rem; font-variant-numeric: tabular-nums; text-align: right; }
-  .card-stage { display: flex; flex: 1; min-height: 0; }
-  .loading-card, .state-card, .empty-state { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; width: min(940px, 100%); margin: 0 auto; }
-  .loading-card { min-height: 0; }
+  .card-stage { min-height: 0; }
+  .loading-card, .state-card, .empty-state { display: flex; height: clamp(540px, calc(100vh - 230px), 680px); flex-direction: column; align-items: center; justify-content: center; gap: 1rem; }
   .state-card button { margin-top: 0.5rem; }
   .empty-state { text-align: center; }
   .empty-state i { color: var(--success-text); font-size: 4rem; }
   .empty-state p { font-size: 1.2rem; font-weight: 700; }
 
   @media (max-width: 768px) {
-    .learning-page { height: calc(100dvh - 7rem - env(safe-area-inset-bottom)); }
+    .learning-page { width: 100%; margin-left: 0; transform: none; }
     .page-header { margin-bottom: 0.9rem; }
     .page-header h1 { font-size: 1.55rem; }
     .progress-row { margin-bottom: 0.75rem; }
