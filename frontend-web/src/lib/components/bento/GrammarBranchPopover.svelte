@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { GrammarBranch } from "$lib/types";
-  import { fade, scale } from "svelte/transition";
+  import { scale } from "svelte/transition";
   import { backOut } from "svelte/easing";
   import { onMount, tick } from "svelte";
 
@@ -104,7 +104,6 @@
     return meanings.map(m => m.zh).filter(Boolean).join("；");
   }
 
-  // 气泡定位逻辑：使用 absolute 定位使其跟随页面滚动
   let popoverStyle = $state("visibility: hidden;");
   let arrowStyle = $state("");
   let transformOrigin = $state("center top");
@@ -115,48 +114,22 @@
     await tick();
 
     const padding = 12;
+    const gap = 8;
     const cardWidth = 320;
-    const viewportWidth = window.innerWidth;
+    const cardHeight = popoverRef.offsetHeight;
+    const anchorX = triggerRect.right;
+    const anchorY = triggerRect.top + triggerRect.height / 2;
 
-    // 计算基于 Viewport 的 left
-    let left = triggerRect.left + (triggerRect.width / 2) - (cardWidth / 2);
-    if (left + cardWidth > viewportWidth - padding) left = viewportWidth - cardWidth - padding;
-    if (left < padding) left = padding;
+    const left = Math.max(padding, Math.min(anchorX + gap, window.innerWidth - cardWidth - padding));
+    const top = Math.min(Math.max(padding, anchorY - cardHeight / 2), window.innerHeight - cardHeight - padding);
+    popoverStyle = `left: ${left}px; top: ${top}px; width: ${cardWidth}px; visibility: visible;`;
 
-    // 获取定位父级（.search-page-container 或 body）
-    const container = document.getElementById("page-search") || document.body;
-    const containerRect = container.getBoundingClientRect();
-
-    // 转换为基于定位父级的 absolute 坐标
-    let absoluteLeft = left - containerRect.left;
-
-    let top = triggerRect.bottom + 8;
-    let placement: 'bottom' | 'top' = 'bottom';
-
-    // 预估高度进行边界检查
-    if (top + 300 > window.innerHeight && triggerRect.top > 300) {
-      placement = 'top';
-    }
-
-    // 使用 absolute 定位
-    if (placement === 'bottom') {
-      let absoluteTop = triggerRect.bottom - containerRect.top + 8;
-      popoverStyle = `left: ${absoluteLeft}px; top: ${absoluteTop}px; width: ${cardWidth}px; visibility: visible;`;
-    } else {
-      // 位于上方时
-      let absoluteBottom = containerRect.height - (triggerRect.top - containerRect.top) + 8;
-      popoverStyle = `left: ${absoluteLeft}px; bottom: ${absoluteBottom}px; width: ${cardWidth}px; visibility: visible;`;
-    }
-
-    // 箭头位置（基于气泡内部坐标）
-    const arrowLeft = triggerRect.left + (triggerRect.width / 2) - left;
-    transformOrigin = `${arrowLeft}px ${placement === 'bottom' ? '0' : '100%'}`;
-
-    if (placement === 'bottom') {
-      arrowStyle = `left: ${arrowLeft}px; top: -6px; border-top: 1px solid var(--border-color); border-left: 1px solid var(--border-color);`;
-    } else {
-      arrowStyle = `left: ${arrowLeft}px; bottom: -6px; border-bottom: 1px solid var(--border-color); border-right: 1px solid var(--border-color);`;
-    }
+    const originX = Math.min(Math.max(0, anchorX - left), cardWidth);
+    const originY = Math.min(Math.max(0, anchorY - top), cardHeight);
+    transformOrigin = `${originX}px ${originY}px`;
+    arrowStyle = left > anchorX
+      ? `left: -6px; top: ${originY}px; border-left: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color);`
+      : "display: none;";
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -171,6 +144,7 @@
   }
 
   onMount(() => {
+    popoverRef.showPopover();
     updatePosition();
     window.addEventListener("keydown", handleKeydown);
     window.addEventListener("resize", onClose, { once: true });
@@ -192,6 +166,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="popover-card"
+  popover="manual"
   bind:this={popoverRef}
   style="{popoverStyle} transform-origin: {transformOrigin};"
   onclick={(e) => e.stopPropagation()}
@@ -224,7 +199,9 @@
 
 <style>
   .popover-card {
-    position: absolute;
+    position: fixed;
+    inset: auto;
+    margin: 0;
     background: color-mix(in srgb, var(--card-bg) 70%, transparent);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
@@ -246,7 +223,7 @@
     width: 14px;
     height: 14px;
     background: color-mix(in srgb, var(--card-bg) 75%, transparent);
-    transform: translateX(-50%) rotate(45deg);
+    transform: translate(-50%, -50%) rotate(45deg);
     border-radius: 4px 0 0 0; /* 尖端微圆润 */
     z-index: -1;
   }
@@ -286,6 +263,7 @@
     padding: 0.4rem 1.5rem 1.25rem 1.5rem; /* 显著减少顶部垂直留白 */
     max-height: 45vh;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 
   .field-grid {

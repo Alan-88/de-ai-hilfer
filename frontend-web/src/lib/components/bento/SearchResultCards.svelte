@@ -526,7 +526,7 @@
 <style>
   .bento-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 1.25rem;
     width: 100%;
     max-width: 1400px;
@@ -540,7 +540,7 @@
     grid-column: span 4; display: flex; justify-content: space-between; align-items: flex-end;
     padding: 1.5rem 2rem;
   }
-  .header-main-info { display: flex; flex-direction: column; gap: 0.4rem; }
+  .header-main-info { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
 
   .title-row { display: flex; align-items: baseline; gap: 0.8rem; }
   .word-title { font-size: 2.2rem; font-weight: 800; color: var(--text-main); letter-spacing: -0.02em; margin: 0; }
@@ -755,7 +755,7 @@
 
   .compact-textarea { width: 100%; min-height: 4rem; padding: 0.75rem; border-radius: 8px; background: var(--bg-color); border: 1px solid var(--border-color); font-size: 0.9rem; resize: vertical; }
   @media (max-width: 900px) {
-    .bento-grid { grid-template-columns: 1fr; }
+    .bento-grid { grid-template-columns: minmax(0, 1fr); }
     .card-header, .card-main, .card-side, .card-full { grid-column: span 1; }
     .card-header { flex-direction: row; align-items: center; padding: 1rem; }
     .header-actions { flex-direction: row; }
@@ -766,5 +766,11 @@
       align-items: flex-start;
       flex-direction: column;
     }
+  }
+
+  @media (max-width: 600px) {
+    .card-header { align-items: stretch; flex-direction: column; gap: 1rem; }
+    .header-actions { align-items: center; flex-direction: row; justify-content: flex-end; }
+    .title-row, .meta-row { flex-wrap: wrap; }
   }
 </style>

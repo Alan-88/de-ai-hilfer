@@ -170,28 +170,31 @@
     <h1>知识词库</h1>
     <p>管理你已发现的德语宝库。当前视图共有 {totalCount} 个词条。</p>
   </div>
-  
+
+</header>
+
+<div class="library-controls">
   <div class="header-toolbar">
     <div class="search-bar surface-card">
       <i class="ph ph-magnifying-glass"></i>
       <input bind:value={filterText} placeholder="搜索词条..." />
     </div>
   </div>
-</header>
 
-<div class="tabs-row">
-  <button class="tab-btn" class:active={activeTab === 'all'} onclick={() => activeTab = 'all'}>
-    全部 <span class="count">{allCount}</span>
-  </button>
-  <button class="tab-btn" class:active={activeTab === 'learning'} onclick={() => activeTab = 'learning'}>
-    学习中 <span class="count">{Object.keys(progressMap).length}</span>
-  </button>
-  <button class="tab-btn" class:active={activeTab === 'review'} onclick={() => activeTab = 'review'}>
-    待复习
-  </button>
-  <button class="tab-btn" class:active={activeTab === 'new'} onclick={() => activeTab = 'new'}>
-    新词
-  </button>
+  <div class="tabs-row">
+    <button class="tab-btn" class:active={activeTab === 'all'} onclick={() => activeTab = 'all'}>
+      全部 <span class="count">{allCount}</span>
+    </button>
+    <button class="tab-btn" class:active={activeTab === 'learning'} onclick={() => activeTab = 'learning'}>
+      学习中 <span class="count">{Object.keys(progressMap).length}</span>
+    </button>
+    <button class="tab-btn" class:active={activeTab === 'review'} onclick={() => activeTab = 'review'}>
+      待复习
+    </button>
+    <button class="tab-btn" class:active={activeTab === 'new'} onclick={() => activeTab = 'new'}>
+      新词
+    </button>
+  </div>
 </div>
 
 <div class="library-container">
@@ -252,16 +255,18 @@
 {/if}
 
 <style>
-  .page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; gap: 2rem; }
+  .page-header { margin-bottom: 1rem; }
   .header-main h1 { font-size: 2.25rem; font-weight: 800; margin-bottom: 0.5rem; }
   .header-main p { color: var(--text-muted); }
 
-  .header-toolbar { display: flex; gap: 0.75rem; align-items: center; }
+  .library-controls { position: sticky; top: -2rem; z-index: 80; display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: calc(100vw - var(--desktop-sidebar-width)); height: var(--desktop-top-chrome-height); margin-left: calc((100% - (100vw - var(--desktop-sidebar-width))) / 2); margin-bottom: 2rem; padding: 0 max(1rem, calc((100vw - var(--desktop-sidebar-width) - var(--page-content-width)) / 2 + 1rem)); border-bottom: 1px solid var(--border-color); background: var(--bg-color); }
+  .header-toolbar { display: flex; flex: 0 0 auto; gap: 0.75rem; align-items: center; order: 2; }
   .search-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 1.25rem; border-radius: var(--radius-full); width: 280px; }
   .search-bar input { background: transparent; width: 100%; color: var(--text-main); }
   .search-bar i { color: var(--text-muted); font-size: 1.1rem; }
 
-  .tabs-row { display: flex; gap: 0.5rem; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); overflow-x: auto; }
+  .tabs-row { display: flex; flex: 1; gap: 0.5rem; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .tabs-row::-webkit-scrollbar { display: none; }
   .tab-btn { padding: 0.6rem 1.25rem; border-radius: var(--radius-md); background: transparent; color: var(--text-muted); font-weight: 700; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; }
   .tab-btn.active { background: var(--btn-secondary); color: var(--accent-main); }
   .tab-btn .count { font-size: 0.75rem; opacity: 0.6; background: var(--border-color); padding: 0.1rem 0.4rem; border-radius: 4px; }
@@ -278,10 +283,17 @@
   .global-loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.5); backdrop-filter: blur(2px); z-index: 2000; display: flex; align-items: center; justify-content: center; }
   .spinner { width: 2.5rem; height: 2.5rem; border: 3px solid var(--btn-secondary); border-top-color: var(--accent-main); border-radius: 50%; animation: spin 1s linear infinite; }
 
+  @media (min-width: 769px) and (max-width: 1200px) {
+    .library-controls { padding-right: 7.25rem; }
+    .search-bar { width: 220px; }
+  }
+
   @media (max-width: 768px) {
-    .page-header { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
+    .library-controls { position: static; align-items: stretch; flex-direction: column; width: 100%; height: auto; margin-left: 0; padding: 0; border-bottom: 0; background: transparent; }
     .header-toolbar { width: 100%; }
     .search-bar { flex: 1; }
+    .tabs-row { order: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.25rem; width: 100%; padding-bottom: 0.4rem; overflow-x: hidden; }
+    .tab-btn { justify-content: center; padding-inline: 0.4rem; }
     .results-footer { flex-direction: column; align-items: stretch; }
   }
 </style>
