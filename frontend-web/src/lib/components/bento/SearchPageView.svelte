@@ -12,7 +12,13 @@
     getSuggestions,
     intelligentSearch
   } from "$lib/queryApi";
+  import AnalysisRetryCard from "$lib/components/bento/AnalysisRetryCard.svelte";
   import SearchResultCards from "$lib/components/bento/SearchResultCards.svelte";
+  import {
+    actionModelOverrideForKey,
+    buildActionModelOptions,
+    defaultActionModelKey,
+  } from "$lib/ai/actionModels";
   import { markdownToPlainText, renderMarkdownHtml } from "$lib/analysis/structuredAnalysis";
   import { shouldPreferDirectAnalyze } from "$lib/search/searchExecution";
   import { streamAnalyze } from "$lib/streamApi";
@@ -48,12 +54,16 @@
   let advancedInputRef = $state<HTMLInputElement | null>(null);
   let aiSettings = $state<AiSettingsResponse | null>(null);
   let selectedActionModelKey = $state("");
+  let failedAnalysis = $state<FailedAnalysisRequest | null>(null);
 
   const s = searchStore;
 
-  type ActionModelOption = AiModelOverride & {
-    key: string;
-    label: string;
+  type FailedAnalysisRequest = {
+    query: string;
+    qualityMode: QualityMode;
+    forceRefresh: boolean;
+    generationHint: string;
+    modelOverride: AiModelOverride | null;
   };
 
   function focusSoon(target: HTMLInputElement | null) {
@@ -73,6 +83,16 @@
       enabled: useSuggestionDefault && !forceRefresh && !generationHint.trim(),
     });
     if (!query) return;
+
+    const failedRequest: FailedAnalysisRequest = {
+      query,
+      qualityMode,
+      forceRefresh,
+      generationHint,
+      modelOverride,
+    };
+    const resultBeforeRequest = $s.result;
+    failedAnalysis = null;
 
     currentSearchController?.abort();
     currentSearchController = new AbortController();
@@ -155,17 +175,23 @@
             });
           },
           onComplete: (payload) => {
+            failedAnalysis = null;
             s.update(state => ({ ...state, result: payload, activeModel: payload.model ?? state.activeModel }));
             void fetchRecentItems();
           },
           onError: (payload) => {
-            s.setError(payload.message);
+            setAnalysisFailure(payload.message, failedRequest, resultBeforeRequest);
           },
         }
       );
     } catch (searchError) {
       if (!(searchError instanceof DOMException && searchError.name === "AbortError")) {
-        s.setError(searchError instanceof Error ? searchError.message : "查询失败");
+        const message = searchError instanceof Error ? searchError.message : "查询失败";
+        if (preferDirectAnalyze) {
+          s.setError(message);
+        } else {
+          setAnalysisFailure(message, failedRequest, resultBeforeRequest);
+        }
       }
     } finally {
       s.update(state => ({ ...state, isLoading: false, isStreaming: false }));
@@ -178,6 +204,7 @@
       return;
     }
     isAdvancedLoading = true;
+    failedAnalysis = null;
     s.setError("");
     advancedPending = null;
     try {
@@ -329,6 +356,33 @@
     advancedPending = null;
     showAdvanced = false;
     advancedHint = "";
+    failedAnalysis = null;
+  }
+
+  function setAnalysisFailure(
+    message: string,
+    request: FailedAnalysisRequest,
+    previousResult: AnalyzeResponse | null,
+  ) {
+    failedAnalysis = request;
+    s.update(state => ({
+      ...state,
+      error: message,
+      result: request.forceRefresh ? previousResult : null,
+    }));
+  }
+
+  function retryFailedAnalysis(modelOverride: AiModelOverride | null) {
+    const request = failedAnalysis;
+    if (!request) return;
+    void handleSearch(
+      request.query,
+      request.qualityMode,
+      request.forceRefresh,
+      request.generationHint,
+      false,
+      modelOverride,
+    );
   }
 
   async function cancelSearch() {
@@ -374,40 +428,9 @@
   // 派生：是否处于专注搜索状态（唤起建议面板时）
   const isSearchFocusing = $derived(showSuggestions && (suggestions.length > 0 || (!$s.query.trim() && recentItems.length > 0)));
   const actionModelOptions = $derived(buildActionModelOptions(aiSettings));
-  const selectedActionModelOverride = $derived(actionModelOverrideForKey(selectedActionModelKey));
-
-  function buildActionModelOptions(settings: AiSettingsResponse | null): ActionModelOption[] {
-    if (!settings) return [];
-    return settings.profiles.flatMap((profile) =>
-      profile.model_ids
-        .filter((model) => !looksLikeEmbeddingModel(model))
-        .map((model) => ({
-          key: `${profile.name}:${model}`,
-          label: `${profile.name} / ${model}`,
-          provider_name: profile.name,
-          model_id: model,
-        }))
-    );
-  }
-
-  function defaultActionModelKey(settings: AiSettingsResponse | null): string {
-    if (!settings) return "";
-    const analyze = settings.task_settings.find((setting) => setting.task_key === "analyze");
-    if (analyze?.provider_name && analyze.model_id && !looksLikeEmbeddingModel(analyze.model_id)) {
-      return `${analyze.provider_name}:${analyze.model_id}`;
-    }
-    const firstOption = buildActionModelOptions(settings)[0];
-    return firstOption?.key ?? "";
-  }
-
-  function actionModelOverrideForKey(key: string): AiModelOverride | null {
-    const option = actionModelOptions.find((item) => item.key === key);
-    return option ? { provider_name: option.provider_name, model_id: option.model_id } : null;
-  }
-
-  function looksLikeEmbeddingModel(model: string): boolean {
-    return model.toLowerCase().includes("embedding");
-  }
+  const selectedActionModelOverride = $derived(
+    actionModelOverrideForKey(actionModelOptions, selectedActionModelKey)
+  );
 </script>
 
 <div id="page-search" class="search-page-container" class:active={active} class:is-searching={isSearching}>
@@ -516,7 +539,17 @@
   </div>
 
   <div class="result-area" class:visible={isSearching}>
-    {#if $s.error}
+    {#if $s.error && failedAnalysis}
+      <AnalysisRetryCard
+        message={$s.error}
+        options={actionModelOptions}
+        selectedKey={selectedActionModelKey}
+        disabled={$s.isLoading}
+        onModelChange={(key) => selectedActionModelKey = key}
+        onRetryOriginal={() => retryFailedAnalysis(failedAnalysis?.modelOverride ?? null)}
+        onRetrySelected={() => retryFailedAnalysis(selectedActionModelOverride)}
+      />
+    {:else if $s.error}
       <div class="message-surface error" transition:fade>{$s.error}</div>
     {/if}
 
