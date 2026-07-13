@@ -6,6 +6,7 @@ pub struct Config {
     pub database_url: String,
     pub server_host: String,
     pub server_port: u16,
+    pub agent_api_token: Option<String>,
     pub openai_api_key: Option<String>,
     pub openai_base_url: Option<String>,
     pub ai_models: AiModelConfig,
@@ -38,6 +39,7 @@ impl Config {
                 .unwrap_or_else(|| "8000".to_string())
                 .parse()
                 .unwrap_or(8000),
+            agent_api_token: expanded_env_var("DEAI_API_TOKEN"),
             openai_api_key: expanded_env_var("OPENAI_API_KEY"),
             openai_base_url: expanded_env_var("OPENAI_BASE_URL"),
             ai_models,

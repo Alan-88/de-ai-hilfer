@@ -12,7 +12,8 @@ mod state;
 mod structured_analysis_models;
 
 use axum::{
-    routing::{get, post},
+    middleware,
+    routing::{get, post, put},
     Router,
 };
 use state::AppState;
@@ -81,9 +82,34 @@ async fn main() -> anyhow::Result<()> {
         learning_sessions: Arc::new(Mutex::new(HashMap::new())),
     };
 
+    let agent_routes = Router::new()
+        .route("/lexemes/resolve", get(handlers::agent_api::resolve_lexeme))
+        .route(
+            "/lexemes/:lexeme_id",
+            get(handlers::agent_api::inspect_lexeme),
+        )
+        .route(
+            "/lexemes/:lexeme_id/initialize",
+            post(handlers::agent_api::initialize_lexeme),
+        )
+        .route("/learning", get(handlers::agent_api::list_learning))
+        .route(
+            "/learning/:entry_id",
+            put(handlers::agent_api::add_learning).delete(handlers::agent_api::remove_learning),
+        )
+        .route(
+            "/learning/:entry_id/reset",
+            post(handlers::agent_api::reset_learning),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            handlers::agent_api::authorize,
+        ));
+
     // 构建路由
     let app = Router::new()
         .route("/health", get(health_check))
+        .nest("/api/v1/agent", agent_routes)
         .route("/api/v1/analyze", post(handlers::analyze::analyze_word))
         .route(
             "/api/v1/analyze/stream",

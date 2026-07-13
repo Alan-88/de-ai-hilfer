@@ -1,3 +1,4 @@
+pub mod agent_api;
 pub mod ai_settings;
 pub mod dictionary;
 pub mod dictionary_lexemes;

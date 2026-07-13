@@ -1,3 +1,4 @@
+pub mod agent_api;
 pub mod ai_settings;
 pub mod analyze;
 pub mod follow_up;

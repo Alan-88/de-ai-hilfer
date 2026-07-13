@@ -1,3 +1,4 @@
+pub mod agent_api;
 pub mod ai_model_resolver;
 pub mod ai_settings;
 pub mod analysis_grounded_assembly;
