@@ -1,5 +1,5 @@
 use crate::models::{DatabaseBackupPayload, DatabaseImportResponse};
-use crate::repositories::{follow_up, knowledge, learning, management};
+use crate::repositories::{follow_up, knowledge, learning, management, reading};
 use crate::state::AppState;
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -11,6 +11,9 @@ pub async fn export_database(state: &AppState) -> Result<String> {
         knowledge_entries: knowledge::list_all(&state.pool).await?,
         follow_ups: follow_up::list_all(&state.pool).await?,
         learning_progress: learning::list_all_progress(&state.pool).await?,
+        reading_folders: reading::list_folders(&state.pool).await?,
+        reading_articles: reading::list_articles_for_backup(&state.pool).await?,
+        reading_article_bookmarks: reading::list_bookmarks_for_backup(&state.pool).await?,
     };
 
     serde_json::to_string_pretty(&payload).context("failed to serialize database backup")
@@ -31,10 +34,11 @@ pub async fn import_database(
 
     Ok(DatabaseImportResponse {
         message: format!(
-            "已导入 {} 个词条、{} 条追问和 {} 条学习进度",
+            "已导入 {} 个词条、{} 条追问、{} 条学习进度和 {} 篇文章",
             payload.knowledge_entries.len(),
             payload.follow_ups.len(),
-            payload.learning_progress.len()
+            payload.learning_progress.len(),
+            payload.reading_articles.len()
         ),
     })
 }

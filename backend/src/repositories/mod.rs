@@ -9,3 +9,4 @@ pub mod knowledge_write;
 pub mod learning;
 pub mod learning_order;
 pub mod management;
+pub mod reading;

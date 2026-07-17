@@ -15,7 +15,7 @@ Let the CLI read `DEAI_API_URL` and `DEAI_API_TOKEN` from the process environmen
 
 ## Article workflow
 
-1. Extract potentially useful surface forms with their local sentences. Keep sentences in the task context only; never send or persist them through the CLI.
+1. Extract potentially useful surface forms with their local sentences. Keep sentences in the task context only; never send or persist them through vocabulary commands. The explicit reading-article import below is the only exception.
 2. Preserve occurrence boundaries. Identical spelling in multiple positions may represent different lexemes.
 3. Resolve forms in one read-only batch:
 
@@ -45,6 +45,19 @@ printf '%s' '[123,456]' | ./tools/deai lexeme inspect --stdin
 ```
 
 10. Re-inspect the affected lexemes and report actual final states. Do not claim success from an earlier command alone.
+
+## Reading article import
+
+Only persist an article when the user explicitly requests it. Bookmarks belong directly in the body as `[surface](headword)`, and the backend rejects the whole import if any headword does not resolve to one complete entry.
+
+```bash
+./tools/deai article list
+./tools/deai article get 123
+printf '%s' '{"title":"Reisen","body":"Ich plane meine [Reisen](Reise).","folder_id":null}' \
+  | ./tools/deai article import --stdin --yes
+```
+
+Do not guess or silently rewrite a failing bookmark. Report the backend validation error and leave the article unpersisted.
 
 ## Safety
 

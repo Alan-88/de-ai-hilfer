@@ -2,49 +2,38 @@
   import { resolveStructuredAnalysis, type StructuredAnalysis } from "$lib/analysis/structuredAnalysis";
   import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
   import LearningAnalysisContent from "$lib/components/bento/LearningAnalysisContent.svelte";
-  import { getEntryDetail } from "$lib/queryApi";
-  import type { EntryDetailResponse, GrammarBranch } from "$lib/types";
+  import { addWordToLearning } from "$lib/learningApi";
+  import { analyzeWord, getEntryDetail, getSuggestions } from "$lib/queryApi";
+  import type { AnalyzeResponse, EntryDetailResponse, GrammarBranch } from "$lib/types";
 
-  let { selectedKey, open = false, onClose } = $props<{
+  let { selectedKey, selectedEntryId, open = false, onClose } = $props<{
     selectedKey: string;
+    selectedEntryId: number | null;
     open?: boolean;
     onClose: () => void;
   }>();
 
-  const entryIds: Record<string, number> = {
-    Pauschalreise: 2565,
-    Reise: 1266,
-    "übernachten": 2055,
-    erholen: 2563,
-    bequem: 1094,
-  };
-
   const cache = new Map<number, EntryDetailResponse>();
-  let query = $state("Pauschalreise");
-  let entry = $state<EntryDetailResponse | null>(null);
+  let query = $state("");
+  let entry = $state<EntryDetailResponse | AnalyzeResponse | null>(null);
   let analysis = $state<StructuredAnalysis | null>(null);
   let error = $state("");
-  let loading = $state(true);
+  let loading = $state(false);
+  let learningAdded = $state(false);
   let requestId = 0;
   let activeGrammarBranch = $state<GrammarBranch | null>(null);
   let popoverTriggerRect = $state<DOMRect | null>(null);
 
   $effect(() => {
-    if (selectedKey) void showResult(selectedKey);
+    if (selectedEntryId) void showEntry(selectedEntryId, selectedKey);
+    else if (selectedKey) showUnavailable(selectedKey);
   });
 
-  async function showResult(key: string) {
+  async function showEntry(entryId: number, key: string) {
     const currentRequest = ++requestId;
     query = key;
     activeGrammarBranch = null;
-    const entryId = entryIds[key];
-    if (!entryId) {
-      entry = null;
-      analysis = null;
-      loading = false;
-      error = `${key} 尚未初始化`;
-      return;
-    }
+    learningAdded = false;
     loading = true;
     error = "";
     try {
@@ -63,11 +52,57 @@
     }
   }
 
-  function submitSearch() {
-    const normalized = query.trim().toLowerCase();
-    const key = Object.keys(entryIds).find((item) => item.toLowerCase() === normalized);
-    if (key) void showResult(key);
-    else error = "未找到可靠候选";
+  function showUnavailable(key: string) {
+    requestId += 1;
+    query = key;
+    entry = null;
+    analysis = null;
+    loading = false;
+    error = `${key} 对应的完整词条已不可用`;
+  }
+
+  async function submitSearch() {
+    const term = query.trim();
+    if (!term) return;
+    const currentRequest = ++requestId;
+    loading = true;
+    error = "";
+    learningAdded = false;
+    try {
+      const suggestions = await getSuggestions(term);
+      const candidate = suggestions.suggestions[0];
+      if (!candidate) throw new Error("未找到可靠候选");
+      if (candidate.entry_id > 0) {
+        const next = cache.get(candidate.entry_id) ?? await getEntryDetail(candidate.entry_id);
+        cache.set(candidate.entry_id, next);
+        if (currentRequest !== requestId) return;
+        entry = next;
+      } else {
+        const next = await analyzeWord(candidate.query_text);
+        if (currentRequest !== requestId) return;
+        entry = next;
+      }
+      query = entry.query_text;
+      analysis = resolveStructuredAnalysis(entry.analysis_markdown, entry.structured_analysis, entry.query_text);
+      if (!analysis) throw new Error("词条缺少结构化释义");
+    } catch (cause) {
+      if (currentRequest !== requestId) return;
+      entry = null;
+      analysis = null;
+      error = cause instanceof Error ? cause.message : "词条加载失败";
+    } finally {
+      if (currentRequest === requestId) loading = false;
+    }
+  }
+
+  async function addLearning() {
+    if (!entry) return;
+    try {
+      await addWordToLearning(entry.entry_id);
+      learningAdded = true;
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : "加入复习失败";
+    }
   }
 
   function openGrammar(branch: GrammarBranch, triggerRect: DOMRect) {
@@ -78,7 +113,7 @@
 
 <aside class="lookup-rail" class:mobile-open={open} aria-label="查词栏">
   <header class="lookup-head">
-    <form onsubmit={(event) => { event.preventDefault(); submitSearch(); }}>
+    <form onsubmit={(event) => { event.preventDefault(); void submitSearch(); }}>
       <i class="ph ph-magnifying-glass"></i>
       <input bind:value={query} aria-label="查询单词" autocomplete="off" />
       <button type="submit" aria-label="查询"><i class="ph ph-arrow-right"></i></button>
@@ -95,11 +130,11 @@
       <section class="word-head">
         <div class="word-title-row">
           <h2>{analysis.headword || entry.query_text}</h2>
-          <button class="open-entry" aria-label="打开完整词条"><i class="ph ph-arrow-square-out"></i></button>
+          <span class="entry-spacer"></span>
         </div>
         <div class="word-meta-row">
           {#if analysis.phonetic}<span class="word-phonetic">{analysis.phonetic}</span>{/if}
-          <button class="learning-action"><i class="ph ph-target"></i> 加入复习</button>
+          <button class:added={learningAdded} class="learning-action" onclick={() => void addLearning()}><i class={learningAdded ? "ph ph-check" : "ph ph-target"}></i> {learningAdded ? "已加入" : "加入复习"}</button>
         </div>
       </section>
 
@@ -137,8 +172,8 @@
   .word-title-row, .word-meta-row { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 0.8rem; }
   .word-head h2 { margin: 0; color: var(--text-main); font-size: 2.15rem; line-height: 1.12; letter-spacing: -0.035em; }
   .word-phonetic { min-width: 0; color: var(--text-muted); font-family: "Arial Unicode MS", "Lucida Sans Unicode", sans-serif; font-size: 0.86rem; line-height: 1.6; }
-  .open-entry { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--btn-secondary); color: var(--text-main); }
   .learning-action { display: flex; min-width: 112px; min-height: 36px; flex: 0 0 auto; align-items: center; justify-content: center; gap: 0.4rem; padding: 0 0.9rem; border-radius: var(--radius-full); background: var(--accent-main); color: white; font-weight: 800; }
+  .learning-action.added { background: color-mix(in srgb, var(--accent-main) 72%, #4f8665); }
   .empty-result { display: flex; align-items: center; gap: 0.65rem; padding: 1rem; border: 1px dashed var(--border-color); border-radius: var(--radius-md); color: var(--text-muted); }
   .loading-result { display: flex; justify-content: center; gap: 0.4rem; padding: 3rem 0; }
   .loading-result span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); animation: pulse 900ms ease-in-out infinite alternate; }

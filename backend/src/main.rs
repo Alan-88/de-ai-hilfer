@@ -6,6 +6,7 @@ mod dictionary_lexeme_models;
 mod handlers;
 mod models;
 mod prompts;
+mod reading_models;
 mod repositories;
 mod services;
 mod state;
@@ -147,6 +148,41 @@ async fn main() -> anyhow::Result<()> {
             post(handlers::query::intelligent_search),
         )
         .route("/api/v1/status", get(handlers::query::get_status))
+        .route("/api/v1/reading", get(handlers::reading::index))
+        .route(
+            "/api/v1/reading/folders",
+            post(handlers::reading::create_folder),
+        )
+        .route(
+            "/api/v1/reading/folders/:folder_id",
+            put(handlers::reading::update_folder).delete(handlers::reading::delete_folder),
+        )
+        .route(
+            "/api/v1/reading/articles",
+            post(handlers::reading::create_article),
+        )
+        .route(
+            "/api/v1/reading/articles/:article_id",
+            get(handlers::reading::get_article)
+                .put(handlers::reading::save_article)
+                .delete(handlers::reading::delete_article),
+        )
+        .route(
+            "/api/v1/reading/articles/:article_id/title",
+            put(handlers::reading::rename_article),
+        )
+        .route(
+            "/api/v1/reading/articles/:article_id/folder",
+            put(handlers::reading::move_article),
+        )
+        .route(
+            "/api/v1/reading/articles/:article_id/status",
+            put(handlers::reading::set_article_status),
+        )
+        .route(
+            "/api/v1/reading/articles/:article_id/opened",
+            put(handlers::reading::mark_article_opened),
+        )
         .route(
             "/api/v1/ai-settings",
             get(handlers::ai_settings::get_ai_settings)

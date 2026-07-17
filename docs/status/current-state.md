@@ -1,0 +1,1456 @@
+# Current State
+
+最后更新：2026-07-17
+
+## 阶段判断
+
+项目已经从“重构主链路恢复”进入“迭代与收口”阶段。
+
+这意味着：
+
+- 查词主功能已经可用，不再属于纯骨架状态。
+- 当前工作的重点是稳定性、数据安全和功能增强。
+- 旧表退役迁移已开始，不再默认接受“继续长期兼容 `dictionary_raw(headword PK)`”。
+- 如果后续要增加恢复范围之外的新功能，需要先得到用户确认。
+- 仓库发布准备已开始收口：
+  - README 正在从“运行说明型”改写为“技术展示型”
+  - 同时补简历/面试向的项目说明，不再默认面向普通用户部署
+
+## 最新收口状态（2026-07-17）
+
+### 文章学习正式链路（2026-07-17）
+
+- 实验页已迁为正式入口：
+  - `/learn/articles`：文件夹目录与文章列表。
+  - `/learn/articles/:id`：文章正文与常驻窄版查词栏。
+  - `/reading-lab`、`/learn/directory-lab` 及对应实验命名已退役。
+- 新增文章持久化表：`reading_folders`、`reading_articles`、`reading_article_bookmarks`。
+  - 文件夹使用 `parent_id` 支持多层。
+  - 文章只保留 `未读完 / 已完成` 二态。
+  - 正文中的 `[表层词形](原型)` 是书签事实来源；书签表仅是每次保存时重建的查询索引。
+  - 删除知识词条不会删除正文书签；再次保存时仍会重新校验目标。
+- 新增 `/api/v1/reading` 系列接口，覆盖目录读取、文件夹 CRUD、文章 CRUD、移动、状态切换和阅读时间记录。
+- 创建或编辑文章时会逐个验证当前正文书签：
+  - 原型必须命中字典 lexeme。
+  - 必须已有包含结构化释义的知识词条。
+  - 无命中、未初始化或歧义都会返回具体书签位置并拒绝整篇保存，不做自动猜测。
+  - 正文与派生索引在同一数据库事务内提交。
+- 目录 UI 已接入真实 API：
+  - 桌面拖动文章或文件夹改变归属。
+  - 文章可拖到左侧 `未读完 / 已完成` 改变状态，原文件夹不变。
+  - 右键 / 长按菜单支持编辑正文、重命名、删除和二态切换。
+  - 标题由用户填写；导入成功后直接进入文章阅读页。
+- 阅读页已移除硬编码词条映射：正文书签直接携带后端确认的 `entry_id`，右栏复用正式结构化词条渲染、前端缓存和“加入复习”接口；右栏手动查询使用现有候选与普通查词链路。
+- 学习导航保持全局名称“沉浸复习”，内部模式改为“文章学习 / 单词背诵”。
+- 现有数据库导出 / 恢复已纳入文章、文件夹和派生书签索引。
+- 尚未实现：在渲染态正文中直接选择单词并生成书签、移动端“移动到文件夹”选择器；第一版仍通过编辑正文语法管理书签。
+
+### Agent 学习导入底座（2026-07-13）
+
+- 新增受 `DEAI_API_TOKEN` 保护的 `/api/v1/agent` 接口：
+  - 表层词形候选检索
+  - 按 `lexeme_id` 查询字典 / 知识词条 / 学习状态
+  - 按确定 lexeme 初始化词条，复用正式 A/B/C 链路
+  - 学习计划列表、加入、移除和重置
+- 新增仓库内 CLI `tools/deai`：
+  - 只通过 HTTP API 操作，不直连数据库
+  - 支持参数批量与 stdin JSON 数组
+  - 支持 `article list/get/import`；文章导入从 stdin 读取 `{title, body, folder_id}`，写操作同样要求 `--yes`
+  - 批量逐项报告错误
+  - 所有写操作要求显式 `--yes`
+  - 本地开发默认读取 `backend/.env` 中的 CLI URL 与 Token
+- 新增仓库级 Skill `.agents/skills/deai-learning-import`：
+  - 词汇筛选时的文章 context 仅供 Agent 判断 form-of；只有用户明确要求保存阅读文章时，才通过独立文章命令持久化正文
+  - 必须在用户确认原型和动作后才初始化或加入学习
+  - 无可靠候选时停止，不触发隐藏 AI 推断
+- 已完成真实只读验证：`ging -> gehen`、`hätte -> haben`；错误 Token 返回 401。
+- 已完成学习写链路往返验证：对原本未加入学习的 `gehen` 执行 `add -> reset -> remove`，最终恢复 `not_added`，未新增知识词条或残留学习进度。
+
+### 前端滚动结构（2026-07-12）
+
+- 查词结果和词库控制区已采用不透明顶边栏：吸顶后覆盖内容区顶部，正文不会从保护层后透出；临时 `/scroll-lab` 已在方案确认后删除。
+- 桌面查词结果与词库控制区已统一为 `92px` 顶部 chrome：背景和底部分隔线从侧栏右缘贯穿到视口右缘，返回键、业务控制区与主题切换器共享约 `46px` 中心线，但业务组件仍保持独立。
+- 1100px 中等桌面宽度下会为右侧主题切换器保留安全区；查词搜索主体和词库搜索框不会与全局控件重叠，也不会产生横向溢出。
+- 全局桌面滚动条已改为原生轻量样式，透明轨道、低对比圆角滑块，并兼容 `canvas` / `canvas-dark`；触屏设备继续使用系统滚动表现。
+- 主内容区启用稳定滚动槽，降低滚动条出现时的横向跳动。
+- 根页面已锁定滚动，桌面和移动端只允许 `.main-area` 纵向滚动；使用 `100dvh` 适配动态视口，并禁止滚动链与横向主页面滚动，避免整页及固定控件随根滚动位移。
+- 查词移动端已修正搜索输入与结果网格的真实横向溢出；词库移动端 Tab 改为四等分布局，中窄桌面的局部 Tab 滑动不再显示滚动轨道。
+- 桌面端主题切换保持固定；移动端仍随页面滚走，避免遮挡内容。
+- 查词结果态的搜索框从结果出现时即进入统一顶部 chrome，并保持 sticky；移动端不固定。
+- 词库搜索与分类 Tab 合并为桌面 sticky 控制带，吸顶后进入统一顶部 chrome；移动端保持普通文档流。
+- 词库详情关闭按钮不再随抽屉内容滚走。
+- AI 模型配置的保存 / 重载操作在配置卡片范围内 sticky。
+- 正式学习页已采用“页面不滚、答案卡内部滚动、评分操作留在外部”的结构。
+
+### 正式学习页迁移（2026-07-12）
+
+- `/learn` 已从四张统计卡 + 小型学习卡迁移为标题、单条进度和居中主卡；回忆态整卡点击揭晓，答案态只在卡片内部滚动，三档评分固定在卡片下方。
+- 正式页的桌面外壳已按最终布局实验方案收口：页面框架 `1040px`、进度与卡片框架 `940px`、卡片高度限制为 `540–680px`，不再使用 `flex: 1` 吃满剩余视口。
+- 揭晓答案后仅首次自动定位“应用与例句”，允许继续向上查看核心释义与语法；没有用法内容时回到卡片顶部。
+- 答案直接消费 V3 学习接口中的真实 `structured_analysis`，保留核心释义、语法分支、应用与例句、深度解析、词汇网络；额外挂载短语并入应用与例句，不另设模块。
+- 语法不占用独立大卡：词性标志承载及物 / 反身 / 性别等身份，点击释义行复用既有语法浮窗。
+- 学习 V2 / V3 响应已补 `attached_phrase_modules`；真实 V3 只读请求确认字段下发为数组。当前学习队列没有带挂载短语的样本，因此非空视觉合并仍待后续自然样本复核。
+- 桌面、移动端、`canvas` 与 `canvas-dark` 已完成真实接口浏览器验证；测试未点击评分，`learning_review_logs` 与 `learning_progress` 均未变化。
+- 正式页人工审查通过后，`/learn/layout-lab`、`/learn/mock` 及其专用原型组件和硬编码样本已删除。
+
+### 学习引擎 V3（2026-07-09）
+
+- 学习模块已从“单次评分后立刻跨天排程”的薄层，升级为 V3 会话式学习引擎：
+  - 当天第一次反馈立即提交长期 FSRS。
+  - 当天后续再次出现只影响日内复现，不再改写长期排程。
+  - 新词使用 `认识 / 模糊 / 不认识`。
+  - 复习词使用 `认识 / 模糊 / 忘记`。
+  - 日界线按业务日 `04:00` 处理。
+- 新增 V3 接口：
+  - `POST /api/v1/learning/session/v3/start`
+  - `GET /api/v1/learning/session/v3/:session_id/next`
+  - `POST /api/v1/learning/session/v3/:session_id/review/:entry_id`
+- 长期状态继续落在 `learning_progress`：
+  - 新增 `lapses`
+  - `due_date` 改为按业务日 04:00 对齐
+- 新增 `learning_review_logs`，记录每次点击：
+  - session
+  - entry
+  - rating
+  - phase
+  - 是否当天第一次出现
+  - 今日出现次数
+  - 是否触发长期提交
+- 单次 session 的日内队列第一版保存在后端内存；重启会丢当前半轮 session，但不会丢长期学习进度或点击日志。
+- 前端学习页已切到 V3：
+  - 三档评分
+  - 显示 `新词 / 复习 / 今日重现`
+  - 显示今日第几次出现
+  - 进度使用后端 `completed_count`
+  - 页面只保留本轮进度，不再额外请求统计接口
+- 已完成验证：
+  - `cargo check`
+  - `cargo test services::learning_session::tests`
+  - `pnpm --dir frontend-web check`
+  - 容器重建成功
+  - 临时词条真实 API 烟测：`start -> review(known) -> log=1 -> 删除临时词条级联清理`
+
+## 上一轮收口状态（2026-07-08）
+
+- 结构化普通词条覆盖已完成：
+  - `knowledge_entries = 2161`
+  - `grammar_branches ready = 2161`
+  - `structured_archive = 0`
+  - `PHRASE = 0`
+- “主词条内添加短语卡片”已完成运行验证：
+  - 新入口：`POST /api/v1/entries/:entry_id/phrase-modules`
+  - 新 prompt：`backend/config/prompts/phrase_module.md`
+  - 新链路只生成一张结构化 `usage_module`，不调用完整 A/B/C，也不依赖 Markdown -> JSON 抽取。
+  - 前端入口位于“应用与例句”卡片右上角。
+  - 短语卡删除已修复：新临时 `source_phrase_entry_id` 改为 JS 安全整数范围内的微秒时间戳；删除请求同时带 `phrase` 兜底，兼容此前纳秒时间戳造成的前端精度丢失问题。
+- 模型配置系统已开始落地第一阶段：
+  - 新增 `GET /api/v1/ai-settings`
+  - 新增 `PUT /api/v1/ai-settings`
+  - 当前负责供应商 Profile 与任务默认模型的持久化管理。
+  - 当数据库中尚未保存配置时，接口会返回环境变量推导出的兜底视图。
+  - 在线 AI 调用已接入统一 resolver：
+    - 查词 / Model A / Model B 使用 `analyze`
+    - 主词条内短语卡片使用 `phrase`
+    - Model C 结构化抽取使用 `structure`
+    - embedding 检索使用 `embedding`
+    - 联想搜索 AI 推断使用 `intelligent_search`
+    - 追问在动作级模型选择 UI 未落地前，默认沿用 `analyze`
+  - 设置页 UI 已落地到 `frontend-web/src/lib/components/bento/AiModelSettingsPanel.svelte`：
+    - 支持维护供应商 Profile、Base URL、API Key、模型 id 列表与默认 Profile。
+    - 支持维护查词、短语、结构化输出、Embedding、联想搜索的任务默认模型。
+    - 短语把“沿用查词”作为 Profile 下拉选项之一，而不是单独开关。
+    - 后端仍需要一个默认 Profile 兜底，但前端不再暴露该内部概念；保存时自动让第一个 Profile 成为兜底项。
+    - API Key 不再显示预览片段；留空表示“不修改当前密钥”。
+    - 由环境变量推导出的虚拟 Profile 首次保存时，如果前端未填写 API Key，后端会沿用当前环境变量中的 API Key 落库，避免为了改模型而重复输入密钥。
+    - 结构化输出没有显式环境变量时，默认回到 `minimax-m2.5`，不再误用 `glm-4.7-flash` 作为结构化默认模型。
+    - 模型 id 芯片已支持即时测活：
+      - 点击芯片正文调用 `POST /api/v1/ai-settings/test-model`。
+      - 测活只验证供应商连接、鉴权、模型 id 与 endpoint 可用性；不把“是否生成普通正文 content”作为成功条件。
+      - 成功 / 失败只改变本次 UI 状态，不写库、不阻止保存。
+      - 只有点击芯片右侧 `x` 才删除模型，避免整张芯片误触删除。
+  - 动作级模型选择已完成基础版：
+    - 查词结果头部提供本次动作模型下拉。
+    - 重新生成与追问默认选中查词模型，但可临时切换到任一已配置非 embedding 模型。
+    - 该选择只随本次动作请求发送，不写回全局设置。
+    - 后端只接受已配置 Profile + model id，不接受前端传入 API Key / Base URL。
+    - 查词卡片头部已移除常驻长模型下拉；默认刷新按钮始终按原配置重跑，滑杆入口提供“渠道 + 模型 + 可选额外提示词”的本次动作设置。
+    - 滑杆入口里的额外提示词已接入普通词 A/B/C 新链路，但只作用于 Model B / Stage 2 的学习内容生成；Model A 释义/语法骨架与 Model C 结构化抽取不消费该提示词。
+    - 模型痕迹展示只保留模型名，不再把 `Flash/Pro` 触发链路当作生成模型展示。
+  - 主分析失败后的显式恢复入口已完成：
+    - 可按原设置重试。
+    - 可按“渠道 + 模型”换模型重试。
+    - 新查询失败会移除流式半成品；已有词条重新生成失败会恢复原内容。
+    - 追问失败继续保留原问题，可使用现有本次动作模型设置后重新发送。
+  - 学习模块整理作为后续大阶段，不建议在配置系统未收口前启动。
+- 模型配置系统的当前共识与待讨论分歧已记录在：
+  - `docs/iterations/2026-07-08-model-config-planning.md`
+- 普通查词中的隐藏 AI 拼写纠错 / 原型识别兜底已退役：
+  - 搜索框直接回车或点击搜索时，前端会优先使用当前候选列表的第一项。
+  - 如果没有可靠候选，后端返回“未找到可靠候选”，不再静默调用 AI 猜测并写库。
+  - 显式 AI 推断入口保留在“联想搜索”，后续配置系统不再暴露“纠错模型 / 原型识别模型”。
+
+## 运行拓扑
+
+- 前端：`frontend-web/`，SvelteKit 构建为静态站点，由容器内 `nginx` 提供服务。
+- 后端：`backend/`，Rust + Axum API。
+- 部署：根目录 [`compose.yaml`](../../compose.yaml) 负责双容器部署。
+  - `frontend` 同时连接内部 `app` 网络与外部 `caddy_net`
+  - `backend` 由 `frontend` 反代访问，不再依赖通用主机名 `backend`
+- 反代：由外部 Caddy 网关暴露域名。
+- 数据库：PostgreSQL + `pgvector`。
+- 环境变量：
+  - `backend/.env` 中拆分维护 `DB_USER`、`DB_PASSWORD` 等数据库变量。
+  - 容器启动时再组装 `DATABASE_URL`。
+
+## 已确认可用的功能
+
+- `analyze` 主链路已接通，支持流式返回。
+- `analyze` 已有“模型失败 -> 字典确定性兜底”路径。
+- `knowledge_entries` 已补第一阶段身份迁移：
+  - 新增可空 `lexeme_id`
+  - 新写入条目会优先绑定 `dictionary_lexemes.id`
+  - 历史普通词条当前已完成一轮自动回填，当前库内统计为 `2145 / 2145` 已解析
+  - `prototype` 仍保留作兼容展示字段，但不再应被视为最终身份字段
+  - 2026-04-10 已新增“知识快照导出 / restore dry-run / 正式 restore”工具链：
+    - 可先导出现有 `knowledge_entries + learning_progress`
+    - 再在任意当前词典状态下重新解析 `prototype -> lexeme_id`
+    - 最后按新 `lexeme_id` 回灌，不再复用旧 lexeme id
+  - 当前库上已完成一次真实 dry-run 验证：
+    - `knowledge_entries`: `2145 / 2145` 可恢复
+    - `learning_progress`: `3 / 3` 可保留
+    - `rejected`: `0`
+  - 这说明后续可以走：
+    - 导出快照
+    - 全量重建 `dictionary_lexemes`
+    - 全量重建 `dictionary_lexeme_embeddings`
+    - 再恢复已预热知识库
+    - 无需为这 `2145` 条重新调用大模型
+- 低置信或临时兜底结果不会污染知识库。
+- `follow-up` 已接通，支持模型回答与规则兜底。
+- `intelligent_search` 已有多层推断链路：
+  - 直接知识库命中
+  - 字典直命中
+  - 变形识别
+  - 模糊拼写匹配
+  - embedding 检索
+  - AI 推断
+  - AI 不可用时返回明确 pending，而不是误导性结果
+- 普通 `analyze / analyze_stream` 已不再调用隐藏的拼写纠错 / 原型识别模型：
+  - exact headword、词形还原仍保留。
+  - 全局短语判断 / 短语宿主候选已退役。
+  - 未命中可靠候选时直接返回 no-candidate 状态，不写入 `knowledge_entries`。
+  - 需要 AI 辅助找词时，走显式 `intelligent_search` / 联想搜索。
+- 词典 embedding 已初始化完成，运行时检索已接入 `intelligent_search`。
+- 需要明确区分当前两层能力：
+  - 当前 embedding 主要用于“找词头 / 猜 headword”
+  - 还没有做成“检索相关解释后参与生成”的完整 RAG
+- 短语能力已收口为“主词条内添加短语卡片”：
+  - 主搜索不再识别 phrase-like query，不再生成短语预览页，不再猜宿主主词。
+  - 唯一保留入口位于普通词条“应用与例句”卡片右上角。
+  - 新增短语卡片接口：`POST /api/v1/entries/:entry_id/phrase-modules`
+  - 删除短语卡片接口：`DELETE /api/v1/entries/:entry_id/phrase-modules`
+  - 后端使用独立窄 prompt `backend/config/prompts/phrase_module.md`
+  - 该链路只生成一张结构化 `usage_module`，不再生成整篇短语 Markdown 词解。
+  - 新增短语卡片仍作为 `attached_phrase_modules` 随宿主词条返回，前端直接展示在“应用与例句”区。
+  - 旧 `/api/v1/phrases/attach` 与 `/api/v1/phrases/detach` 已退役。
+- 首页与查询配套接口已可用：
+  - `/api/v1/entries/recent`
+  - `/api/v1/entries/all`
+  - `/api/v1/suggestions`
+  - `/api/v1/status`
+- Web 端已具备：
+  - 搜索
+  - 候选词
+  - 最近记录
+  - 分析展示
+  - 追问
+  - 联想找词
+  - 词库浏览
+  - 学习入口
+  - 数据管理入口
+- 查词页本轮又补一处交互收口：
+  - 普通单词结果头部重新显示英文释义
+  - 对明显已落库的查询，前端会优先走普通 JSON 命中，而不是默认走 SSE
+  - 这是为了降低平板浏览器或外网链路下“缓存命中但前端长时间停留在分析中”的概率
+- 分析渲染链路本轮已补齐两处稳定性问题：
+  - “深度解析与避坑”现在可识别有序编号标题（如 `1. **标题**：...`）
+  - 知识词库详情中的“完整分析内容”已改为结构化展示，并保留 Markdown 原文调试入口
+- 分析展示链路已升级为“双阶段结构化归档”并完成主链路收口：
+  - 主分析模型继续生成 Markdown
+  - 第二阶段新增 `minimax-m2.5` 负责把 Markdown 抽取为 `structured`
+  - `knowledge_entries.analysis` 现在同时保留：
+    - `markdown`
+    - `structured`
+  - 2026-05-19 已完成全库普通词结构化覆盖：
+    - `grammar_branches` 当前为 `2161 / 2161`
+  - 2026-05-19 已移除运行时 `structured_archive`：
+    - 正式 `analyze / analyze_stream` 不再做历史 Markdown 的后台补修
+    - 数据库中的 `analysis.structured_archive` 已全量清空
+    - 第二阶段结构化失败观测保留在实验 / backfill 工具链，不再进入正式查询返回与持久化主链路
+  - 2026-05-19 已清理迁移期实验入口：
+    - `compare_model_a*`
+    - `compare_stage2*`
+    - `dry_run_structured_backfill*`
+    均已从仓库移除
+  - 当前保留的结构化离线工具只剩：
+    - `cargo run --bin audit_structured_entries`
+    - `cargo run --bin staged_structured_backfill`
+    - `backend/scripts/staged_backfill_worker.sh`
+    - `backend/scripts/normalize_transitive_government.sh`
+  - 2026-06-12 已完成结构化链路 prompt 存放位置收口：
+    - Model A prompt: `backend/config/prompts/model_a.md`
+    - Model B / Stage 2 prompt: `backend/config/prompts/stage2.md`
+    - Model C structure prompt: `backend/config/prompts/structure.md`
+    - `backend/config/prompts/default.yaml` 继续保留同名字段作为 override；字段为空时后端会读取同目录 `.md` 文件。
+    - Rust 代码只保留 prompt 装配、schema 注入和 user payload 构造，不再内嵌大段 prompt 正文。
+  - 搜索结果、词库详情、学习卡片前端都已改为：
+    - 优先消费后端 `structured_analysis`
+    - 没有时才 fallback 到旧 Markdown 解析
+  - 主词条前端已默认启用 `grammar_branches` 展示，不再依赖 `?grammarPreview=1`
+  - 当前仍保留一条 Markdown fallback：
+    - `attached_phrase_modules` 作为短语挂载补充块，仍可能读取 `analysis_markdown`
+    - 新增主词条内短语卡片入口已经不依赖该 fallback
+    - 旧全局短语挂载路径已退役，不再作为正式兼容目标
+  - 已完成真实回归：
+    - `künftig` 首次缓存命中后成功补全 `structured`
+    - `/api/v1/entries/2561` 可直接返回 `structured_analysis`
+    - `/api/v1/analyze/stream` 的 `complete` 事件也已携带 `structured_analysis`
+  - 2026-04-26 至 2026-05-18 曾补“失败可观测 + 有限重试”：
+    - `analysis.structured_archive` 会记录第二阶段状态、次数、最后错误与时间
+    - 历史旧词条补结构化失败不再无限重试
+    - 当前自动上限为 `3` 次，之后状态进入 `retry_exhausted`
+    - 已用真实样本 `pauschal` 验证：
+      - 可写回失败原因
+      - 第 3 次失败后停止继续打上游
+      - 第 4 次查询可直接返回缓存结果
+    - 已补本地代理链路回归：
+      - `zelten`
+        - 缓存命中且 `structured = null` 时，`/api/v1/analyze` 可在 `0.01s` 级返回
+        - `/api/v1/analyze/stream` 的 `complete` 事件可在约 `45ms` 到达
+        - 第二阶段失败 3 次后进入 `retry_exhausted`，后续查询继续秒回
+      - `Anfrage`
+        - 新生成词条仍走主模型完整分析
+        - 首次返回时已可携带首轮模型直接产出的 `structured`
+  - 2026-04-26 已继续收口第二阶段稳定性：
+    - 取消第二阶段固定 `max_tokens = 900`
+    - 结构化 prompt 改为“紧凑 JSON + 最小稳定抽取”导向
+    - `extract_json` 新增轻量截断修复，会在尾部坏 JSON 场景下尝试回退到最近可闭合前缀
+    - 真实缓存样本回归：
+      - `pauschal`：清空 `structured` 后再次查询，后台一次补回成功
+      - `Anfrage`：清空 `structured` 后再次查询，后台一次补回成功
+      - `künftig`：清空 `structured` 后再次查询，后台一次补回成功
+  - 2026-04-26 已继续重写第二阶段结构化 schema 与抽取策略：
+    - 第二阶段 prompt 不再要求“挑重点”“最多 2 条”“最有价值”
+    - 当前改为纯抽取导向：
+      - 保持原顺序
+      - 不压缩
+      - 不二次总结
+      - 不允许把 `词源` 并入别的段落
+    - `词汇网络` 已升级为对象结构：
+      - `word_network.family[]`
+      - `word_network.synonyms[]`
+      - `word_network.antonyms[]`
+      - 每项包含：
+        - `term`
+        - `part_of_speech`
+        - `chinese`
+        - `english`
+        - `note`
+    - 2026-05-19 起，正式前后端展示链路已不再依赖旧版 `family/synonyms/antonyms: string[]`
+    - 当前对外结构以 `word_network` 为准
+  - 已补“结构化质量闸门”：
+    - 如果 Markdown 明显有“应用与例句 / 语法详情 / 词汇网络 / 深度解析与避坑”
+    - 但第二阶段抽取得到的 `structured` 过稀、缺关键块或漏掉 `词源`
+    - 则后端直接判该次结构化失败，不再把半残 JSON 当成功结果写回
+  - 2026-05-01 已继续补第二阶段兼容与保真：
+    - `AiClient` 的非流式响应解码已放宽：
+      - 可兼容 `message.content = null`
+      - 可兼容 `message.content = [...]` 的分段文本形态
+      - 解码失败时会保留响应 body 预览，便于定位具体 provider 变体
+    - `extract_json` 的修复顺序已调整为：
+      - 直接解析
+      - 内部引号修复
+      - 内部引号 + 截断修复
+      - 纯截断修复
+    - 结构化质量闸门已从“只看块是否存在”收紧为“检查覆盖率”：
+      - `usage_modules` 需要覆盖 Markdown 中的全部完整模块
+      - `deep_insights` 需要覆盖全部顶层小节
+      - `word_network` 需要覆盖词族 / 同义词 / 反义词各子区块
+      - `grammar_rows` 需要覆盖语法表格行；若某行本质被抽到 `collocations[]`，也视为语义覆盖
+    - 这一步的目标是拦住“parse 成功但内容悄悄漏掉”的假成功，而不是只拦硬错误
+  - 2026-05-02 已把 dry-run 报告升级为可人工审查：
+    - 设置 `STRUCTURED_BACKFILL_DRY_RUN_INCLUDE_FULL=1` 后，报告会包含原始 Markdown 与完整 `structured` JSON
+    - 当前报告：`backend/tmp/structured_backfill_dry_run_20260502_063333.json`
+    - 本轮样本中 `künftig / Anfrage / vertragen` 结构化成功
+    - `Auge / Pauschalreise` 失败为 provider timeout，需要与 prompt 质量问题分开归类
+    - 当前仍不启动正式 backfill，先审查 full payload 是否存在静默漏解
+  - 2026-05-02 已纠偏 A/B/C 新链路实验对象：
+    - 确认此前 Model C 调试曾误用旧生产 Markdown 作为输入，不能代表新链路质量
+    - `compare_stage2` 现已把 Model B 收窄为只输出“应用与例句 / 词汇网络 / 深度解析与避坑”
+    - Stage 1 的 `meanings / grammar` 由测试端 assembler 合入最终结构
+    - 当前纠偏只发生在离线实验脚本，不影响线上 `analyze`
+    - 已用 `helfen / gefallen / Anfrage / während / Band / künftig / pauschal / erholen / übersetzen` 做小样本回放，Model B 原文未再输出核心释义、音标或语法详情
+    - `übersetzen` 暴露出词汇网络扁平化问题后，已强制 Model B 输出 `词族 / 同义词 / 反义词` 三个分组并完成复测
+  - 2026-05-02 已继续收口 A/B/C 实验提示词与结构化闸门：
+    - Model A / Model B / Model C prompt 中的对话上下文式措辞已改为稳定输入输出契约
+    - `Stage 1 / Model B / 角色边界` 等表达收敛为 `Branch Skeleton / 输出边界 / 排除范围`
+    - 保留既有微调约束，但不再把“历史讨论上下文”作为无状态 prompt 的隐含前提
+    - `词汇网络` 质量闸门已补：
+      - 扁平列表但无 `词族 / 同义词 / 反义词` 分桶会失败
+      - 显式 `无高价值项` 不再误判为漏抽
+      - 原文有可见条目但结构化三桶全空会失败
+    - C0 预解析已修复加粗列表标题残留 `**` 的问题
+    - `usage_modules.explanation` 已补安全换行归一化；`deep_insights.content_markdown` 保留原 Markdown 层次不压平
+  - 2026-05-17 已完成 Model C provider 与吞吐基准：
+    - `gpt-4o-mini` 在 C-only 基准中已通过人工抽查与 20 词稳定性验证
+    - 单路 `20` 词、`0s` 间隔：`20/20 success`
+    - 双路 `2 x 10`：`20/20 success`
+    - 四路 `4 x 5`：`20/20 success`
+    - 当前正式 staged backfill 已改为默认使用 `gpt-4o-mini`
+    - `run_c` 已支持单协调器内的有界并发消费，避免多 worker 抢同一队列
+    - shell worker 默认按 `BACKFILL_C_CONCURRENCY=4` 并发消费 C 阶段
+  - 2026-05-18 已继续定位 backfill 吞吐瓶颈并修复队列键冲突：
+    - `prepare_ab` 原先的队列 slug 在大小写不敏感文件系统上会让 `Klasse/klasse`、`Tropfen/tropfen` 等词条撞名
+    - 已改为基于原始 UTF-8 字节的十六进制队列键，避免大小写变体互相覆盖
+    - 已确认该问题造成的是少量漏回填/空转，不是串词写库；全库 `query_text != structured.headword` 扫描结果为 `0`
+    - `prepare_ab` 已补步骤级耗时埋点：
+      - 当前观测下，单词级 `stage1 + stage2` 多在 `17s - 32s`
+      - 旧 worker 的 `45s` prepare 间隔本身是重要拖慢因素
+    - 隔离 canary 已验证：
+      - `prepare_ab` 串行：8 词成功
+      - `prepare_ab` 2 并发：8 词成功，零 deferred
+      - `prepare_ab` 4 并发：8 词成功，零 deferred
+    - 正式 worker 下一步按 `prepare_ab 4 并发 + 0s 间隔` 方向推进
+  - 2026-05-10 已补 Model A 语法规范化规则：
+    - 若动词 branch 的 `transitivity` 为 `transitive` 或 `both`
+    - 且 `governs_cases` 为空数组
+    - 后端规范化层会补默认直接宾语支配格 `accusative`
+    - 该规则不覆盖已有 `dative / genitive / prepositional` 等显式支配信息
+    - 现有已结构化记录通过 `backend/scripts/normalize_transitive_government.sh` 做轻量修补，不重跑 Model A/B/C
+  - 2026-05-03 已将历史 Markdown -> `structured` 的 backfill runner 工程化：
+    - Model C 结构化抽取 prompt 已外置到 `backend/config/prompts/structure.md`
+    - runner 默认 dry-run，只有显式 `STRUCTURED_BACKFILL_APPLY=true` 才写库
+    - apply 只写成功结构化结果，不把 timeout / empty response 等上游波动写成持久失败状态
+    - 原始 `analysis.markdown` 保持不变，只补 `analysis.structured` 与 `analysis.structured_archive`
+    - 当前已完成小批写库验证，库内 `structured` object 数量为 `26`
+    - 最近一批剩余失败样本 `speichern` 已在 2026-05-04 补跑成功，当前失败队列清空
+    - runner 已增加 provider transient failure 控制：
+      - timeout
+      - 429 / too many requests / rate limit
+      - empty response
+      - 502 / 503 / 504 等上游不可用
+    - 这些错误会先等待退避重试；若最终仍失败，报告记为 `skipped_transient`，不计入普通 `failure_count`
+  - 2026-05-04 已纠偏结构化主线：
+    - 暂停继续扩大“旧 Markdown -> structured”历史 backfill
+    - 当前验证目标切回 A/B/C 新链路：
+      - Model A 产出 branch skeleton
+      - Model B 产出用法 / 词汇网络 / 深度解析 Markdown
+      - Model C 负责结构化抽取
+    - `StructuredAnalysisDocument` 已新增 `grammar_branches`
+  - 2026-05-07 已把普通词正式生成链路切到 A/B/C：
+    - Model A 生成 `grammar_branches` / 语法骨架 JSON。
+    - Model B 只生成 `应用与例句 / 词汇网络 / 深度解析与避坑` Markdown。
+    - Model C 将 Model B Markdown 抽取为结构化模块。
+    - 后端 assembler 将 Model A 的 `grammar_branches` 与 Model C 的模块结构合成最终 `structured`。
+    - 流式与非流式普通词查询已共用该链路；stream 只负责 SSE 传输，不再拥有独立内容规格。
+    - 如果 A/B/C 任一阶段失败，普通词生成直接返回错误，不再落入字典兜底并写库。
+    - 已验证失败止损：`helfen` 首次 canary 返回 SSE `error` 后，`/api/v1/entries?q=helfen` 仍为空。
+    - 已验证成功路径：
+      - `helfen` 通过 `/api/v1/analyze/stream` 生成并落库为 `entry_id=2571`，返回 `grammar_branches / usage_modules / word_network / deep_insights`。
+      - `glitzern` 通过 `/api/v1/analyze` 非流式生成并落库为 `entry_id=2572`，返回完整 A/B/C 结构。
+      - 缓存命中时 `/api/v1/analyze` 可直接返回知识库结构化结果，不再重复调用 Model C。
+    - 历史 backfill 已完成 `regenerate_abc` 小批 canary：
+      - `Anfrage`
+      - `erholen`
+      - `pauschal`
+      - `Unterkunft`
+      - `zelten`
+      - `Pauschalreise`
+      - `künftig`
+      - `Vielfalt`
+      - `derselbe`
+    - 当前数据库中 `grammar_branches` 覆盖约 `20 / 2161`，仍有约 `2141` 条普通历史词条缺新分支结构。
+    - 后续应按 5-10 条小批继续推进，不直接全量。
+    - `compare_stage2` 的 grounded markdown assembly 已保留 Model A branches
+    - 已用 `vertragen` 完成真实验证并写库：
+      - `stage1_parse_ok = true`
+      - `grounded_markdown.parse_ok = true`
+      - `grounded_markdown.structure_quality_ok = true`
+      - `grammar_branches.length = 1`
+      - selector: `Verb · stark`
+    - 后端容器已重建，`/api/v1/analyze` 已能返回 `structured_analysis.grammar_branches`
+    - 2026-05-06 已补后端列表态 preview：
+      - `/api/v1/entries/recent`、词库分页与知识库 suggestion 仍返回纯文本 `preview`
+      - 该 preview 会优先读取 `analysis.structured.grammar_branches`
+      - 输出定位是“列表扫读摘要”，不是前端 branch UI 的文本版
+      - 跨词性或可分 / 不可分、名词性别等强区分分支会保留多个入口
+      - 同词性弱分支会压缩合并中文义项，避免列表态变成小号语法卡片
+      - 前端 `SearchResultCards` / `LibraryEntryDetailPanel` 的 branch UI 仍负责交互式展示、分支按钮与 popover
+      - 后续开发不得把后端 preview 规则和前端 branch UI 规则混为同一层逻辑
+    - 首次写库遗留的 `analysis.markdown` JSON code fence 污染已修复：
+      - `compare_stage2` apply 现在同时写入本轮 grounded Markdown
+      - `vertragen` 已重新 apply
+      - API 返回的 `analysis_markdown` 不再是 JSON 包裹文本
+  - 2026-05-02 已扩大 A/B/C 实验样本：
+    - 已覆盖普通动词、状态/动作动词、可分/反身动词、多分支名词、形容词/副词、连词、介词
+    - 通过样本包括：
+      - `helfen / liegen / Band / übersetzen / während / Anfrage / pauschal`
+      - `künftig / erholen`
+      - `stehen / setzen / vorstellen / Anzug / schnell`
+      - `Reise / See / für`
+    - `weil` 能生成 Markdown，但结构化或 Stage2 调用出现 timeout / 400，先归为上游或网关稳定性问题继续观察
+    - 已发现并修复实验脚本层 Model A 解析容错：
+      - grammar 字段可接受 `string / array / null`
+      - 避免 `Reise` 这类“合法 JSON 但字段类型漂移”导致 Stage1 整体失败
+    - 内容质量仍有待后续小幅 prompt 约束：
+      - 避免把 `Dativ` 翻成错误中文格名
+      - 避免把屈折形式误判为比较级
+      - usage module 的搭配标题必须自然、可直接复用
+    - 已继续小步补 Model B prompt 质量约束：
+      - 德语格位术语固定映射
+      - 形容词屈折与比较级区分
+      - usage title 必须自然可复用
+      - 例句翻译必须忠实对应德语例句，尤其禁止把音乐语境的 `spielen` 错译为“打球”
+  - 2026-05-02 已继续追加小批次验证：
+    - `spielen / sitzen`
+    - `stellen / legen / alt`
+    - `weil / obwohl / für / mit`
+    - 9 个样本均通过 Stage1、grounded markdown 与结构化质量闸门
+    - 暂未发现 Model B 回吐核心释义、IPA 或语法详情
+    - `für` 的结构化阶段仍触发过内部引号 repair，说明 Model C 坏 JSON 风险仍需继续观察
+  - 2026-05-02 已给离线 `compare_stage2` 的 Model C 调用补 transient retry：
+    - timeout、429、5xx、连接错误、明显 rate limit 文本会在同一词条内重试
+    - JSON parse 失败和质量闸门失败不自动重跑，避免掩盖真实结构化问题
+    - 复测 `weil / für` 均通过；`für` 仍触发内部引号 repair，继续作为结构化干净度风险观察
+  - 2026-05-02 已修复 C0 词汇网络预解析的一类字段错位：
+    - `Substantiv, f.` 这类内部带逗号的词性不再把 `f.` 误塞进中文释义
+    - `nah` 重跑后 `die Nähe` 已正确抽成“名词 / 附近/亲近 / proximity/closeness”
+  - 2026-05-02 又修复 C0 词汇网络无方括号条目的字段错位：
+    - `die Leitung (noun, ...)` 这类格式会优先按首个 `(` 切 term，而不是按空格切成 `die`
+    - 离线 Model B prompt 已要求词汇网络条目必须使用 `[词]` 方括号格式
+    - `Leiter` 重跑后带冠词条目字段不再错位
+    - `Band` 复测已确认：
+      - `in einer Band spielen` 翻译恢复为“在一个摇滚乐队里演奏”
+      - 结构化质量闸门通过
+    - 当前仍需要人工抽查内容语义质量，不能只依赖结构化成功率判断新链路可上线
+  - 前端 `resolveStructuredAnalysis` 也已补同类兜底：
+    - 若拿到的 `structured_analysis` 明显过稀
+    - 会直接回退到 Markdown 解析
+    - 避免旧坏数据继续把 UI 渲染“压扁”
+  - 本轮真实回归：
+    - `pauschal`
+      - 强制重生成后 `structured_analysis` 成功
+      - `usage_modules = 3`
+      - `word_network` 已是对象数组
+      - `deep_insights` 成功保留：
+        - `多维解释`
+        - `词源 (Etymologie)`
+        - `常见错误 (Typische Fehler)`
+    - `erholen`
+      - 强制重生成后主 Markdown 约 `1884` 字
+      - 第二阶段因质量闸门未通过，最终 `structured_analysis = null`
+      - 这意味着前端会回退到 Markdown 解析，而不是继续展示半截结构化结果
+  - 2026-04-26 已定位并修复另一条更关键的内容质量回退：
+    - 之前 `stream_analyze` 不是单纯的“SSE 传输版 analyze”
+    - 它还偷偷使用了一套更短、更保守的专用 prompt 与参数
+    - 实际效果是：
+      - 新查词默认走 `stream`
+      - 旧预热词多来自非流式 `analyze`
+      - 于是用户体感成了“新词明显比老词更短、更不愿展开”
+    - 当前已收口为：
+      - 普通单词分析的第一阶段统一改回“共享 Markdown 规格”
+      - `stream / non-stream` 不再各自维护不同的内容约束
+      - `stream` 只保留 transport 差异，不再额外施加 `500 字内 / 1-2 个模块 / 一个易错提醒` 这类压缩规则
+      - 采样参数也已对齐到 `AnalysisMode::Full`
+    - 真实回归样本：
+      - `Anfrage`：旧缓存约 `1513` 字，强制新生成约 `1740` 字
+      - `künftig`：旧缓存约 `1183` 字，强制新生成约 `1762` 字
+      - `erholen`：流式强制新生成约 `1930` 字
+      - `pauschal`：首次回归遇到单次 `字典兜底`，重试后恢复 `Flash` 正常生成，约 `1659` 字
+  - 当前决定：
+      - 先不做历史批量 backfill / 重跑
+      - 等这一版内容规格继续观察稳定后，再决定受影响词条的重生成范围
+  - 2026-05-01 真实结构化回放：
+    - `helfen`
+    - `pauschal`
+    - `erholen`
+    - `Band`
+    - `Anfrage`
+    - 以上 5 个词在当前链路下均已达到：
+      - `parse_ok = true`
+      - `structure_quality_ok = true`
+    - 其中：
+      - `helfen` 证明此前 `message.content = null` 的 provider 解码失败已被消除
+      - `pauschal` 真实命中过一次“内部引号坏 JSON”，但当前修复器已自动接住并完成结构化
+      - `Anfrage` 暴露过“语法表里的搭配行被抽到 `collocations[]`”这一类语义分流问题；质量闸门已补等价覆盖判断，避免误杀
+  - 2026-05-01 已新增只读审计工具：
+    - `cargo run --bin audit_structured_entries`
+    - 会把结构化健康度与待补词条池导出到 `backend/tmp/structured_audit_*.json`
+  - 2026-05-01 曾新增只读 backfill dry-run 工具：
+    - `dry_run_structured_backfill`
+    - 该工具已在 2026-05-19 归档删除
+    - 当前统一由 `staged_structured_backfill` 承接历史结构化回填
+  - 当前审计结果进一步说明：
+    - 当前库内 `analysis.markdown` 词条约 `2155` 条
+    - 其中真正已落成 `structured` object 的只有 `5` 条
+    - 这意味着当前更大的问题不是“新链路仍在普遍静默漏解”
+    - 而是“历史大量词条根本还没完成第二阶段 backfill”
+  - 同日对历史坏样本再回放：
+    - `künftig`
+    - `Anfrage`
+    - 当前链路都已达到 `parse_ok = true` 且 `structure_quality_ok = true`
+    - 因此这两条在库里的旧坏 `structured` 更接近历史残留，不是现行链路必现问题
+  - 首轮 backfill dry-run 已跑历史最长 Markdown 的前 5 条：
+    - 成功：`vertragen`、`Architektur`、`verlaufen`、`verlängern`
+    - 失败：`funktionieren`
+    - 失败原因：
+      - 第一次结构化返回重复字段坏 JSON
+      - 第二次请求超时
+    - 结论：
+      - 当前不能直接全量写库
+      - 需要先扩大 dry-run 样本，并保留失败池策略
+  - 2026-05-01 已把主线拉回“结构化 prompt 微调”：
+    - 扩大 dry-run 到历史最长 Markdown 前 20 条
+    - 基线结果：`18 / 20` 成功
+    - 失败：
+      - `verlängern`
+      - `ausziehen`
+    - 最终失败原因都是上游超时
+    - 但 `verlängern` 第一次尝试暴露出一个真实抽取问题：
+      - 旧 Markdown 里没有“用法解析 / 场景例句 / 例句翻译”标签
+      - 结构化模型可能漏抽 usage block，导致 `usage_modules = 0`
+    - 已微调第二阶段结构化 prompt：
+      - 明确说明旧格式四行块：
+        - 德语搭配或句型标题
+        - 中文解释
+        - 德语例句
+        - 中文翻译
+      - 必须映射为一条完整 `usage_modules`
+    - 微调后复测前 5 条：
+      - `4 / 5` 成功
+      - `verlängern` 已成功抽出 3 条 usage module
+      - `Architektur` 失败仍是纯超时，不是漏解
+    - 指定词混合样本验证：
+      - 样本覆盖旧格式、短词条、词源、词汇网络与已有 structured 对照
+      - `8 / 10` 成功
+      - `welcher` 与 `Erinnerung` 失败均为 timeout / 504
+      - `helfen` 被识别为字典兜底 Markdown，已从 prompt 质量判断中排除
+      - 过滤后复测 `künftig / Anfrage / Auge` 均成功，usage 与 deep insights 保留完整
+  - 2026-04-28 已补 Model A 离线对照实验脚本可观测性：
+    - `backend/src/bin/compare_model_a.rs` 已拆出独立 prompting / support 模块
+  - 2026-04-29 已补 Stage 2 离线对照收口，当前主候选仍是“Stage 1 + grounded Markdown + 第二阶段结构化抽取”：
+    - `backend/src/bin/compare_stage2.rs` 已可对照：
+      - `legacy_markdown`
+      - `grounded_markdown`
+      - `grounded_direct_json`
+    - 当前结论：
+      - `grounded_direct_json` 仍不适合作为主方向
+      - `grounded_markdown` 是当前最稳的主候选
+    - 已在 Stage 2 prompt 中继续压缩 branch 权重：
+      - Stage 1 branch 明确只是边界参考，不是 `usage_modules` 配额
+      - secondary branch 默认不应挤占 core branch 的高频句型/固定搭配
+      - Stage 1 摘要对 secondary branch 减少语法细节暴露，避免被 Model B 误判为高优先级展开目标
+    - 已完成真实回归：
+      - `gefallen`
+        - `usage_modules` 回到主 branch：
+          - `jemandem gefallen`
+          - `Wie gefällt es dir / Ihnen ...?`
+          - `sich (Dativ) etwas gefallen lassen`
+        - 形容词 branch 退回“核心释义 / 语法详情 / 深度解析与避坑”
+        - 第二阶段结构化抽取成功
+      - `übersetzen`
+        - 主次 branch 仍保持合理覆盖，没有被过度压扁
+        - 已定位并修复一次第二阶段坏 JSON：
+          - 原因是结构提取器在 JSON 字符串中直接输出裸双引号
+          - 当前结构化 prompt 已显式要求 JSON 转义（`\"`、`\\`、`\n`）
+          - 修复后同词回归通过，结构化抽取成功
+  - 2026-04-29 已补一轮 `usage_modules` 小测试集回归：
+    - 样本：
+      - `helfen`
+      - `gefallen`
+      - `während`
+      - `übersetzen`
+      - `absolut`
+      - `Band`
+      - `erholen`
+      - `pauschal`
+      - `künftig`
+      - `Anfrage`
+    - 当前判断：
+      - `usage_modules` 的主要问题已从“普遍跑偏”收缩为“少数 mixed-branch 词的 secondary 抢位”
+      - 其中 `gefallen` 是最敏感样本，已继续追加 prompt 约束：
+        - secondary 的“分词形容词 + 单个狭窄搭配”默认不应抢占 usage module
+        - core branch 若仍有高频句型/提问框架未覆盖，应优先继续覆盖 core
+      - 追加约束后，`gefallen` 的内容面已回到预期：
+        - `usage_modules` 只保留主 branch 的 3 条核心结构
+        - 形容词义项退回“深度解析与避坑”
+      - 同时抽查：
+        - `übersetzen`
+        - `während`
+        - `Band`
+        - `künftig`
+        - 未见明显被“过度压扁”的回归
+    - 仍未彻底关闭的问题：
+      - 第二阶段结构化提取仍会独立失败
+      - 真实坏样本已见：
+        - `absolut`
+        - `pauschal`
+        - `gefallen`（本轮复测）
+      - 失败模式仍主要是 JSON 字符串中的裸双引号，说明“内容生成质量”和“结构化提取稳定性”已可分开处理
+  - 2026-04-29 已开始单独打磨 Stage 2 的 `deep_insights`：
+    - 当前 prompt 已从“考试提纲/机械避坑”转向“理解优先”：
+      - 优先回答“为什么这样用”
+      - 优先建立判断模型与近邻边界
+      - `常见误区` 降级为仅在高价值时保留
+      - 正文优先写成自然解释，而不是默认列表化
+    - 已用样本回归：
+      - `helfen`
+      - `gefallen`
+      - `während`
+      - `Band`
+      - `Anfrage`
+    - 当前观察：
+      - `helfen`
+        - 已出现更接近目标的标题，例如：
+          - `与格逻辑 (Dativ-Logik)`
+          - `helfen vs. unterstützen`
+      - `gefallen`
+        - 已稳定出现：
+          - `主宾逻辑的“倒置”`
+          - `gefallen vs. mögen`
+          - `关于“阵亡”的特殊用法`
+        - 说明模型已开始把“为什么会这样理解”放到 `deep_insights` 中
+      - `während`
+        - 已能把 `währen -> während` 的演变逻辑与 `Genitiv vs. Dativ` 的现代分化并列讲清
+      - `Anfrage`
+        - `Anfrage vs. Nachfrage`、`从 anfragen 到 Anfrage` 这类解释型内容已开始稳定出现
+    - 仍未完全收口：
+      - 个别词仍会保留“避坑”措辞或警告式标题
+      - `Band` 这类高密度多义词仍偏“知识点清单化”
+      - 第二阶段结构化提取仍会独立失败：
+        - 本轮 `gefallen` 与 `Band` 都出现了结构化失败或质量闸门失败
+      - 这说明：
+        - `deep_insights` 的内容风格已经开始改善
+        - 但“结构化稳定性”依然是并行风险源，不能混为一谈
+  - 2026-04-29 已继续做第二轮 `deep_insights` 窄收口：
+    - 重点针对 `Band` 这类“高密度多义词 -> 深度解析容易清单化”的问题
+    - prompt 已新增约束：
+      - 对同形异义/一词多性词，`deep_insights` 优先给“统一理解模型”
+      - 再补一个最关键的区别点
+      - 避免把义项 1/2/3 在 `deep_insights` 中重新完整罗列一遍
+    - 回归样本：
+      - `Band`
+      - `während`
+      - `Anfrage`
+      - 随后又用：
+        - `helfen`
+        - `gefallen`
+        - `während`
+        - `Band`
+        - `Anfrage`
+        做了一轮联调复测
+    - 当前观察：
+      - `Band`
+        - `deep_insights` 已明显从“知识点清单”转向：
+          - `性别与复数的“三角关系”`
+          - `词源逻辑`
+        - 内容开始先讲“物理 vs. 抽象 vs. 借词”的判断模型，再补发音/复数差异
+      - `während`
+        - 当前能稳定出现：
+          - `从“时间同步”到“逻辑对立”`
+          - `词性辨析：连词 vs. 介词`
+        - 解释感优于早前的“纯格位提醒”
+      - `Anfrage`
+        - 当前能稳定出现：
+          - `Frage vs. Anfrage：日常与正式的边界`
+          - `词源直觉`
+        - 已更接近“理解型边界解释”
+      - `gefallen`
+        - 联调样本中 `usage_modules` 仍保持：
+          - `jemandem gefallen`
+          - `Wie gefällt es dir/Ihnen ...?`
+          - `sich (Dativ) etwas gefallen lassen`
+        - 说明这轮 `deep_insights` 收口没有反向撞坏前面的 `usage_modules` 内容面
+    - 仍需注意：
+      - 第二阶段结构化提取的波动依旧存在
+      - 本轮已见两类独立失败：
+        - `structure model call failed / timed out`
+        - `structure_quality_ok = false`
+      - 因此当前可以比较确定：
+        - 内容 prompt 正在往正确方向收敛
+        - 结构化归档链路仍需单独治理
+  - 2026-05-01 已开始单独收口第二阶段结构化提取稳定性：
+    - 当前先做了两条工程层止损，而不是继续改内容 prompt：
+      - `analysis_structure.rs`
+        - 结构化模型单次调用超时从 `60s` 提高到 `90s`
+        - 单次结构化归档内部新增 `2` 次尝试上限
+        - 同一次后台补结构化任务里，如果首轮是：
+          - 上游超时
+          - 坏 JSON
+          - 质量闸门未通过
+        - 现在都会先做一次短间隔重试，而不是立刻把整次后台补做记成失败
+      - `json_extract_repair.rs`
+        - 已把 JSON 修复逻辑从 `analyze_support.rs` 抽离成独立模块
+        - 当前 `extract_json` 的修复顺序已调整为：
+          - 直接解析
+          - 裸双引号修复
+          - 裸双引号 + 截断修复
+          - 纯截断修复
+        - 这样可以避免“明明能救回更多内容，却被更激进的纯截断前缀先吞掉”的情况
+    - 本轮新增库级测试：
+      - `extract_json_repairs_unescaped_inner_quotes`
+      - `extract_json_repairs_unescaped_quotes_before_truncation_repair`
+      - `inner_quote_repair_only_changes_when_needed`
+    - 本地验证：
+      - `cargo test --lib json_extract_repair` 通过
+      - `cargo check --lib` 通过
+    - 结构化修复逻辑本轮已从大文件中拆出，避免继续把 `analyze_support.rs` 堆大：
+      - `analyze_support.rs` 当前已回落到 `327` 行
+      - `json_extract_repair.rs` 独立承接修复细节与测试
+    - 2026-05-01 已做真实坏样本回放：
+      - 样本：
+        - `absolut`
+        - `pauschal`
+        - `gefallen`
+        - `Band`
+        - `helfen`
+        - `Anfrage`
+      - 当前结果：
+        - `absolut`：`parse_ok = true`, `structure_quality_ok = true`
+        - `pauschal`：`parse_ok = true`, `structure_quality_ok = true`
+        - `gefallen`：`parse_ok = true`, `structure_quality_ok = true`
+        - `Anfrage`：`parse_ok = true`, `structure_quality_ok = true`
+        - `Band`：起初 `parse_ok = true` 但 `structure_quality_ok = false`
+          - 已进一步定位为质量闸门误判，而非模型输出问题
+          - 原因：
+            - 旧逻辑只要全文任意位置出现“词源”，就强制要求 `deep_insights.title` 中必须出现“词源”
+            - `Band` 的 usage/explanation 中提到了“该词源自英语”，于是被错误击穿
+          - 当前已修复为：
+            - 仅当“深度解析与避坑”区中显式存在“词源/Etymology”小标题时，才要求 `deep_insights` 中保留对应条目
+          - 修复后单词回放验证：
+            - `Band`: `parse_ok = true`, `structure_quality_ok = true`
+        - `helfen`：本轮仍遇到一类新的上游异常：
+          - `structure model call failed: failed to decode AI response body: invalid type: null, expected a string`
+          - 这说明当前剩余失败已不再集中在“裸双引号坏 JSON”上，而开始暴露 provider 级响应体异常
+    - 支持按模式单跑：
+      - `MODEL_A_COMPARE_MODES=light`
+      - `MODEL_A_COMPARE_MODES=branch`
+      - 默认 `both`
+    - 便于先用 `light_grounded` 扫测试面，再用 `branch_guided` 复核异常词
+  - 2026-04-28 当前 Model A 对照实验已明确覆盖：
+    - 同拼写多性名词：`Band / See / Tor / Leiter / Steuer / Kiefer / Laster / Mast / Messer`
+    - 可分 / 不可分或强弱分支：`übersetzen / umfahren / erschrecken / hängen`
+    - 分词形容词 / 同拼写多词性：`verheiratet / gefallen / Gefallen`
+    - 功能词与支配/语序：`von / wegen / während / obwohl`
+    - 小写 / 大写分流：`gefallen / Gefallen`
+    - 其他混合场景：`allein / reisen / Reisen / liegen`
+  - 这轮实验的当前结论：
+    - `light_grounded` 仍是更接近目标链路的主方向
+    - `branch_guided` 更适合做压力测试与异常复核，不适合直接当主方案
+    - 新暴露的问题不只来自 prompt：
+      - `reisen` 会把低频方言义也保留成独立 branch
+      - `Reisen` 这类 exact titlecase form-of 词头会因为上游摘要过弱而诱发错误补全
+      - `liegen` 的语法字段会受合并词典摘要影响，出现 `haben / sein` 并存
+    - 这说明下一步优先级应落在“Model A 输入整形 / 词典摘要去噪”，而不是继续单纯堆 prompt 规则
+  - 2026-04-29 已补 Stage 2 离线对照实验脚本：
+    - `backend/src/bin/compare_stage2.rs`
+    - `backend/src/bin/compare_stage2_prompting.rs`
+    - `backend/src/bin/compare_stage2_support.rs`
+  - 当前 Stage 2 已完成首轮代表样本对照：
+    - `helfen`
+    - `gefallen`
+    - `während`
+    - `übersetzen`
+  - 对照模式：
+    - `legacy_markdown`
+    - `grounded_markdown`（`dictionary facts + Stage 1 canonical branches`）
+    - `grounded_direct_json`
+  - 当前实验结论已经比较明确：
+    - `grounded_markdown` 能稳定保住 richness，尤其是在：
+      - `usage_modules` 数量自适应
+      - `deep_insights` 层次
+      - 多 branch 词条的组织完整度
+    - `grounded_direct_json` 当前“可解析性”没有明显问题：
+      - `helfen / gefallen / während / übersetzen` 都能直接落成合法结构化对象
+    - 但 `grounded_direct_json` 在内容密度上持续偏保守：
+      - `deep_insights` 条目数稳定少于 `grounded_markdown`
+      - 表达更容易收缩成“短说明 + 少量标题”
+      - 暂时还看不到它相对 `grounded_markdown + 第二阶段抽取` 的内容优势
+  - 因此当前默认判断是：
+    - Stage 2 主方向继续保留 `Markdown generation -> structured extraction`
+    - 但把输入升级为 `dictionary facts + Stage 1 output`
+    - `direct_json` 暂不进入主链路，只保留为实验线或未来 fallback 候选
+  - 2026-04-29 已进一步把 Stage 2 实验默认模式收口为 `grounded_markdown`：
+    - `compare_stage2` 默认不再自动连跑 `grounded_direct_json`
+    - 只有显式指定 `STAGE2_COMPARE_MODES=json` 或 `all` 时才继续测 direct JSON
+  - 当前原因已经比较明确：
+    - `grounded_direct_json` 会把 `usage_modules` 往“知识点标题”方向拉偏
+      - 典型错误如：
+        - `支配与格 (Dativ)`
+        - `Temporal-Konjunktion`
+        - `重音与含义的区分`
+    - `grounded_markdown` 当前没有出现同等级的结构性偏移
+    - 因此下一步不再优先修 `direct_json`
+    - 继续把精力放在：
+      - `grounded_markdown` 的 `usage_modules` 取舍微调
+      - `deep_insights` 的理解型收口
+      - 第二阶段 `markdown -> structured` 的保真度提升
+  - 2026-04-28 当天已继续把 `light_grounded` 实验输入从 prose summary 改为结构化 facts payload：
+    - 不再把 `summarize_dictionary_entry` 的 prose 摘要直接喂给 Model A
+    - 不再给 `branch hints`
+    - 当前改为提供 exact-headword source rows 的轻清洗事实包：
+      - `word`
+      - `pos`
+      - `is_form_of`
+      - `ipas`
+      - `head_templates`
+      - `senses[{glosses,tags}]`
+      - 关键 forms 字段（如 `auxiliaries`、`present_3sg`、`preterite_3sg`、`partizip_ii`、名词复数/二格）
+    - 同时保留 `branch_guided` 作为重事实对照线，不进入正式主方向
+  - 新 payload 在离线回归中的直接收益：
+    - `Band` 恢复稳定产出 `n./m./f.` 三个 branch
+    - `reisen` 不再把 `dialectal` 的 `to fall` 抬成 canonical branch
+    - `liegen` 的 `auxiliaries` 不再依赖被截断 prose 猜测，事实包中可直接看到 `haben / sein`
+    - `Gefallen` 在 facts 选择层排除 exact-headword 下的 form-of rows 后，重新稳定回到 `m.` 名词
+    - `gefallen` 通过 prompt 收口后，重新稳定保留 `verb + adjective`
+  - 当前仍需明确的边界：
+    - `Reisen` 作为 invalid test input，离线实验仍会输出 `Reise` 的复数名词结果
+    - 这不应由 Model A 负责修正，正式链路仍应在进入 analyze 前保证“传入的是原型”
+  - 2026-04-29 已把 Stage 1 的三个表示层取舍基本收口：
+    - `adjective / adverb`
+      - 最终决定：不同词性默认不合并
+      - 已放弃“条件合并”方向，原因是 UX 入口不稳定，且会给后续卡片切换与内容组织增加歧义
+      - 复测样本：
+        - `allein`
+        - `allmählich`
+        - `absolut`
+        - `absichtlich`
+        - `andersrum`
+        - `abartig`
+      - 当前均已回到 `Adjektiv` / `Adverb` 分开输出
+    - 双性同义项
+      - 当前口径：默认可合并到同一 entry（如 `m./n.`）
+      - 若后续遇到“同义但屈折/使用范围明显分叉”的真实反例，再单独拆分
+    - `selector`
+      - 当前已收口为“最小区分信息”模板
+      - 不再鼓励把随机屈折例形、语体标签或说明性短语塞进 selector
+      - 当前目标模板：
+        - 名词：`Substantiv · m./f./n.`
+        - 动词：`Verb · trennbar / untrennbar / stark / schwach`
+        - 形容词、副词：只写 `Adjektiv` / `Adverb`
+        - 介词、连词：只写 `Präposition` / `Konjunktion`，必要时再补最小限定
+- 词库页刷新与加载策略已调整为：
+  - 进入页面时自动加载
+  - 页面重新变为 active 时再次同步
+  - 搜索与 tab 筛选已下沉到后端列表接口
+  - 词库主列表不再一次性拉取全部 `RecentItem`
+  - 已切到“服务端分页/游标 + 前端 load more”
+  - 详情仍保持按点击单独请求，不做列表预加载详情
+  - 当前 `/api/v1/entries` 已支持：
+    - `limit`
+    - `cursor`
+    - `q`
+    - `tab=all|learning|review|new`
+  - 当前游标实现是 offset-based cursor：
+    - `next_cursor` 本质是下一页 offset 字符串
+    - 现阶段足够支撑继续预热和外网部署
+    - 后续如有必要，再演进为真正 keyset cursor
+- 容器部署链路已补一处网络收口：
+  - 前端容器内的 nginx 不再反代到通用上游名 `backend`
+  - 现已改为唯一上游名 `de-ai-hilfer-backend`
+  - 避免和 `caddy_net` 上其他项目的 `backend` 服务名冲突
+- 搜索候选逻辑已做一轮收口：
+  - 查询页候选继续保持“至少 2 个字符再请求”
+  - 查询页候选源已扩展为“知识库 + 词典”
+  - 查询页与词库页都支持大小写不敏感、变音符号宽松匹配和轻度拼写模糊
+  - 两处排序都以“前缀优先，再模糊”为主
+  - 查询页候选已修正大小写同形词排序：
+    - 不再用归一化后的 key 把 `reisen / Reisen` 这类不同词性条目互相去重
+    - `form-of` 条目会排在对应原型/非变形条目之后
+    - 与用户输入大小写风格更一致的词条会优先展示
+  - 新的 `lexeme + surface_index` 词典候选链路已接入 `/api/v1/suggestions`
+  - 当前已确认的关键样例：
+    - `verheiratet -> verheiratet (adj.) / verheiraten (v.)`
+    - `interessiert -> interessiert (adj.) / interessieren (v.)`
+    - `reisen -> reisen`
+    - `Reisen -> Reise / Reis`
+  - 2026-03-28 对历史问题词又补做了一轮回归：
+    - 已确认稳定：
+      - `verheiratet`
+      - `interessiert`
+      - `Reis`
+      - `Sie`
+      - `sehr`
+      - `viel`
+      - `Monat`
+    - 已确认“运行时可用，但仍有收口空间”：
+      - `Reisen`
+        - `intelligent_search` 已能回到 `Reise`
+        - 2026-03-29 已补窄修复，当前候选顺序已回到 `Reise -> Reis -> reisen`
+      - `Karte`
+        - 候选与 `intelligent_search` 可用
+      - `Lampe`
+        - 候选与 `intelligent_search` 可用
+        - 完整 `analyze` 回归中出现过 `字典兜底`
+        - 2026-03-29 已进一步确认：
+          - 不是词典原型解析错误
+          - 更像是模型生成阶段超时/失败后触发兜底
+          - 已补窄修复：
+            - `AnalysisMode::Full` 单次超时从 `25s` 提高到 `40s`
+            - 主模型出现 hard failure 时，先重试一次 Gemini，再切 fallback
+      - `gefallen`
+        - 候选与 `intelligent_search` 可用
+        - 完整 `analyze` 回归中出现过 `字典兜底`
+        - 2026-03-29 已进一步确认：
+          - 不是词典原型解析错误
+          - 更像是模型生成阶段超时/失败后触发兜底
+          - 已补窄修复：
+            - `AnalysisMode::Full` 单次超时从 `25s` 提高到 `40s`
+            - 主模型出现 hard failure 时，先重试一次 Gemini，再切 fallback
+      - `Lieber`
+        - 候选与 `intelligent_search` 已不再回退到旧的 `lieber -> gern` 误判
+  - 2026-03-29 本地回归补充：
+    - `Karte` 在新逻辑下复现过“首轮 Gemini 超时”
+    - 但第二次主模型重试成功
+    - 最终返回：
+      - `source = Flash`
+      - `model = gemini-3-flash-preview`
+    - 说明当前生成链问题更像第三方上游波动，窄修复已能覆盖一部分临时失败
+- 词形误入主词条的问题已进一步收口：
+  - `analyze` / `stream_analyze` 的词典 exact hit 现在会优先命中大小写严格一致的 headword，再回退到大小写不敏感匹配
+  - 这避免了 `Lieber -> lieber -> gern` 一类大小写冲突误判
+- 运行时 `headword/form` 解析现已切到新的词典事实层：
+  - `find_by_headword` 不再盲信旧 `dictionary_raw`
+  - `find_by_form` 现已通过 `surface_index -> lexeme -> raw_entry` 返回真正可分析词条
+  - 多词性同 headword 会先在仓库层合并后再下游消费
+- embedding 迁移已完成真实切换：
+  - 初始化脚本 `init_embeddings` 现已写入 `dictionary_lexeme_embeddings`
+  - 运行时 embedding 检索现已只查询 `dictionary_lexeme_embeddings`
+  - 学习顺序预览与预热排序也不再回查旧 `dictionary_embeddings`
+  - `dictionary_lexeme_embeddings` 已在 rebuilt 词典上全量回填完成：
+    - `94098 / 94098`
+    - 模型：`glm-embedding-3`
+- 运行时知识库命中已改为 `query_text exact-only`
+  - 旧 `aliases` 不再抢在字典解析前命中
+  - 这修正了 `Reisen` 被旧缓存 `Reis` 抢走的问题
+  - 已清理 4 条历史脏缓存：
+    - `Reis`
+    - `sehr`
+    - `viel`
+    - `Sie`
+    - 原因都是缓存内容与 `dictionary_excerpt.word` 不一致
+  - 500 词预热已加入保守过滤：
+    - 跳过纯噪声 token、明显缩写、字母词、专名、`form-of` 条目
+    - 预热选词先走 exact map，再走 lowercase fallback，避免大小写冲突和逐行 SQL 扫描
+  - 500 词预热现在额外强制“只接受主分析模型”：
+    - 预热脚本内已禁用 `fallback_fast/fallback_pro` 的跨模型切换
+    - 出现非主模型结果或临时兜底结果时，会删除缓存并按退避时间重试
+    - 现有非主模型缓存不再被复用
+  - 混入 `glm-4.7-flash` 的旧预热结果已清空
+  - 500 词预热脚本当前已手动暂停，等待重新确认更合理的预热词源策略
+- 2026-04-10 已完成一次真实的受控字典重建与知识库恢复：
+  - 使用修复后的 ETL 重新导入 `kaikki.jsonl`
+  - 新词典规模：
+    - `dictionary_raw_entries = 362401`
+    - `dictionary_lexemes = 94098`
+    - `dictionary_surface_forms = 1789051`
+  - `dictionary_lexeme_embeddings(glm-embedding-3)` 已全量回填：
+    - `94098 / 94098`
+  - 预热知识库已通过 snapshot 正式恢复：
+    - `knowledge_entries = 2145`
+    - `learning_progress = 3`
+    - `knowledge_entries.lexeme_id` 当前 `2145 / 2145` 非空
+    - dangling FK = `0`
+  - 关键抽查：
+    - `verheiratet` 现有独立 `adj` lexeme
+    - `interessiert` 现有独立 `adj` lexeme
+  - 服务已重新启动
+- 学习顺序基础设施已就位：
+  - 新增 `dictionary_learning_order` 表，用于承载后续导入的 CEFR / 学习顺序元数据
+  - 已新增统一导入入口与预览入口
+  - 已新增本地 `telc` lesson 词表构建脚本：
+    - `backend/scripts/build_telc_learning_order.py`
+  - 已采用“保留已验证基线，再增量补级别”的方式导入：
+    - `A1.1 -> A1.2 -> A2.1 -> A2.2`
+    - `B1.1 -> B1.2`
+    - `B2` 使用 `Einfach besser!` 清洗后的可命中条目
+  - 当前计数：
+    - `A1 = 978`
+    - `A2 = 682`
+    - `B1 = 488`
+    - `B2 = 120`
+    - `total = 2268`
+  - `dictionary_learning_order` 已完成第二阶段身份迁移：
+    - 新增可空 `lexeme_id`
+    - 新导入/更新条目会优先写入唯一可判定的 `dictionary_lexemes.id`
+    - 当前库内首轮回填结果为 `2204 / 2268`
+    - 剩余 `64` 条暂保留为空，作为后续集中复核的歧义/词形样本池
+  - 2026-04-09 已确认当前词典 ETL 的一个根因缺陷：
+    - 旧逻辑会把“只要含有 form-of sense 的 raw entry”整条标成 `is_form_of = true`
+    - 这会错误吞掉一批本应进入 `lexeme` 层的混合词条，例如：
+      - `Anzug`
+      - `Aufzug`
+      - `Zähler`
+      - `Ansehen`
+      - `Schreiben`
+  - 代码层已补第一轮修复，但尚未对现网字典表执行重建：
+    - ETL 现已区分：
+      - `Independent`
+      - `Mixed`
+      - `PureForm`
+    - `Mixed` 词条会重新进入 `lexeme` 层
+    - 同时会在导入时剥离 form-of senses，避免独立义项再次被第一条 gloss 误导
+  - 本轮 dry-run 已验证：
+    - `Anzug` 会从旧的“pure form”转为 `Mixed`
+    - 剥离后首条义项回到 `suit (of clothes), outfit`
+    - `Aufzug` / `Zähler` 等样本同理
+  - 当前还没有直接在现网执行 `rebuild_dictionary_lexemes`：
+    - 原因不是代码不稳，而是本地 Kaikki 原始 dump 当前不在仓库工作目录
+    - 且这一步会重建 `dictionary_raw_entries / dictionary_lexemes / dictionary_surface_forms / dictionary_lexeme_embeddings`
+    - 也意味着需要后续重新完成 embedding 回填
+  - 学习顺序预览与预热去重已优先使用 `lexeme_id`
+  - 频率源预热候选不再扫描旧 `dictionary_raw`，而是改走 `dictionary_lexemes.surface`
+  - 这些条目目前主要作为学习顺序元数据与预热候选来源，不直接等于“已完成预热生成”
+  - 2026-03-29 已恢复小批量预热烟雾测试：
+    - `A1 cap` 烟雾测试：
+      - 实际选中 `22`
+      - 成功 `22`
+      - 失败 `0`
+      - 发生“兜底后删除再重试成功”的词：
+        - `verschieden`
+        - `gefallen`
+      - 报告：
+        - `backend/logs/prewarm_analysis_20260328_175217.json`
+    - `A2 cap` 烟雾测试：
+      - 实际选中 `30`
+      - 成功 `30`
+      - 失败 `0`
+      - 实际样本已进入真正 A2 / 数字生活语境词：
+        - `abholen`
+        - `Abendkasse`
+        - `aktuell`
+        - `bestellen`
+        - `Benutzername`
+        - `diskutieren`
+        - `hochladen`
+        - `herunterladen`
+        - `Kennwort`
+      - 发生“兜底后删除再重试成功”的词：
+        - `hochladen`
+      - 报告：
+        - `backend/logs/prewarm_analysis_20260328_180152.json`
+  - 2026-03-29 已进入 A2 批量推进阶段（自动化策略）：
+    - 批次 1：`PREWARM_LIMIT=100`
+      - 报告：`backend/logs/prewarm_analysis_20260328_183529.json`
+      - 结果：
+        - `selected_count = 100`
+        - `ai_generated = 100`
+        - `fallback_failures = 0`
+        - `failed_words = []`
+      - 本批出现重试词 `10` 个，抽样已确认最终均为：
+        - `model = gemini-3-flash-preview`
+    - 批次 2：`PREWARM_LIMIT=300`
+      - 已自动启动并运行中（与批次 1 同参数，`A2 cap / 并发2 / 重试2 / 退避15s`）
+      - 运行中观测到上游 `429` 与超时波动，但当前仍按“兜底删库后重试”策略收敛
+      - 本批最终结论以对应 `prewarm_analysis_*.json` 报告为准
+    - 批次 3：`PREWARM_LIMIT=220`
+      - 报告：`backend/logs/prewarm_analysis_20260329_055657.json`
+      - 结果：
+        - `selected_count = 220`
+        - `ai_generated = 217`
+        - `fallback_failures = 3`
+      - 当时失败词：
+        - `Planung`
+        - `Realschule`
+        - `Blick`
+    - 2026-03-30 对这 3 个顽固词改用更保守参数重试：
+      - `A2 cap / 并发1 / 重试3 / 退避20s`
+      - 报告：`backend/logs/prewarm_analysis_20260329_162904.json`
+      - 结果：
+        - `selected_count = 3`
+        - `ai_generated = 3`
+        - `fallback_failures = 0`
+      - 三词已全部成功落库，且模型均为：
+        - `gemini-3-flash-preview`
+    - 2026-03-30 再次对 A2 运行同链路补跑：
+      - 报告：`backend/logs/prewarm_analysis_20260329_163028.json`
+      - 结果：
+        - `selected_count = 0`
+      - 说明 A2 在“当前预热选择规则”下已经跑尽可预热项
+      - 当前仍留在 `dictionary_learning_order` 中但不会被预热选中的残项约 `26` 个
+      - 这些残项大多带有：
+        - `form_of`
+        - `alt_of`
+        - 或两者之一，因此会被当前 skip 规则主动跳过
+    - 2026-03-30 已开始 B1 保守预热：
+      - `B1 cap / LIMIT=100 / 并发1 / 重试3 / 退避20s`
+      - 首个样本 `aktiv` 已成功落库
+  - 当前 Gemini Flash 预热覆盖计数已更新为：
+    - `A1 = 922`
+    - `A2 = 656`
+    - `B1 = 469`
+- 学习系统已有最小 FSRS 闭环：
+  - 加入学习
+  - 获取 session
+  - 评分提交
+  - 统计读取
+- 数据管理已有导出/导入接口。
+
+## 当前已确认的新架构结论
+
+本轮已明确：后续词典层不再继续围绕旧的 `dictionary_raw(headword PK)` 模型小修小补。
+
+并且这条迁移已经不再只是设计稿，而是进入了实际落地阶段：
+
+- 新表已落地：
+  - `dictionary_raw_entries`
+  - `dictionary_lexemes`
+  - `dictionary_lexeme_raw_entries`
+  - `dictionary_surface_forms`
+  - `dictionary_lexeme_embeddings`
+- 新的候选查询已优先消费 `lexeme + surface_index`
+- 运行时 `intelligent_search` / `analyze` / `stream_analyze` 已通过新的仓库解析逻辑消费可分析对象
+- 但“生成阶段直接理解 lexeme 多词性上下文”仍未完全做成独立对象协议，当前还是仓库层先合并后向下兼容旧接口
+
+当前已定下的方向：
+
+- `form-of` 在产品语义中不再视为“真正可分析词条”
+- `form-of` 只用于：
+  - 候选召回
+  - alias / 词形关联
+  - 将输入形式映射到对应原型候选
+- 候选列表展示的是“真正可分析的原型词条”
+- 如果某个输入同时存在：
+  - 自身的独立原型词条
+  - 以及由 `form-of`、`forms`、alias 推出的其他原型词条
+  - 那么候选中应同时显示这些原型词条
+- 如果同一词头、同一大小写下存在多个独立原型词性：
+  - 候选中应合并为一条
+  - 展示多个词性和简短释义
+  - 进入 `analyze` 时这些词性应一起喂给模型
+- `analyze` 后续将不再在运行时基于 `form-of` 自行重定向分析目标
+
+这意味着：下一阶段的重点不再是“继续 patch prompt 或 form-of 跳转”，而是启动新的词典建模迁移。
+
+## 当前仍需继续处理的事项
+
+1. 词典迁移还没有彻底完成。
+   - 已完成：
+     - `raw_entry / lexeme / surface_index` 新表与重建
+     - 候选层迁移
+     - 运行时 `headword/form` 解析迁移
+     - embedding 初始化与检索已切入新 `lexeme` 表
+     - 学习顺序排序已切到新 `lexeme embedding`
+     - 旧 `dictionary_embeddings` 运行时 fallback 已移除
+   - 尚未完成：
+     - 让生成阶段明确消费独立 `lexeme` 上下文，而不是兼容旧 `DictionaryRaw`
+     - 系统化回收旧 `dictionary_raw(headword PK)` 路径
+     - 评估是否保留旧 `dictionary_embeddings` 表仅作历史数据，还是后续迁移中正式下线
+2. 模型调用稳定性仍是当前主要运行时风险之一。
+   - 重点不在 Markdown 解析，而在第三方模型偶发超时、失败、切换与重试策略。
+   - 已定位到一个具体工程参数：
+     - `full analyze` 的单次模型超时当前是 `25s`
+     - 这会使部分词条在上游响应慢时直接落入 `字典兜底`
+3. 预热词源策略需要重定。
+   - 当前已明确：`opensubtitles_cistem_freq.csv` 只保留为同级 tie-break 候选，不再作为学习顺序主轴。
+   - 新主方案已落地到 `dictionary_learning_order`：
+     - `A1-B1` 优先 `Einfach gut!`
+     - `B2` 暂用 `Einfach besser! 500` 这类模块顺序词表
+   - `Goethe A1/A2/B1` 继续保留为官方分级校验源。
+   - 下一步不再是“选来源”，而是决定：
+     - 是否从 A1 开始正式预热
+     - 预热批次大小与重试策略
+     - 是否需要把 `B2` 再替换为更通用的课程源
+   - 另外，恢复全量预热前还应先修掉一轮历史问题词回归中暴露的两个小尾巴：
+     - `Reisen` 候选排序
+     - `Lampe / gefallen` 偶发落入 `字典兜底`
+4. 数据导入恢复链路还缺谨慎验证。
+   - 接口已存在，但还没有完成一轮足够放心的破坏性恢复验证。
+5. `intelligent_search` 在“只有中文语义提示”的场景下仍可能不稳。
+6. 真正的生成型 RAG 还未接通。
+   - 当前短语链路已收口为主词条内手动追加，不再复用全局宿主候选检索
+   - 尚未做到“检索相关知识库解释 / 已学关联项后再参与生成”
+7. 短语挂载仍缺后续治理能力。
+   - 低置信多候选场景还没有更细的确认流
+8. 学习页仍是最小闭环，增强能力还未补齐。
+9. ETL 深化清洗、音频缓存等字典层增强尚未继续推进。
+10. `SearchPageView.svelte` 仍保留两个已知 warning，当前按用户决策暂不处理：
+   - `showAdvancedOnMount` 的初始值引用提示
+   - 搜索遮罩层的 a11y 提示
+
+## 已明确暂缓的事项
+
+- “主模型直接纯 JSON 输出”方案暂不作为当前默认输出链路。
+- 当前默认路线是：
+  - 主模型保留高质量 Markdown
+  - 再由第二阶段结构化模型做归档抽取
+  - 2026-05-07 当前 A/B/C 链路状态：
+    - 普通词正式生成已接入 A/B/C。
+    - 新词生成成功后会直接落库最终 `structured`，包括 `grammar_branches`。
+    - 失败时不落库，不写字典兜底或半成品。
+    - Model C 结构化阶段已补正式链路内的瞬时失败重试：
+      - 仅重试 Model C，不重新调用 Model A / Model B。
+      - 默认总尝试 3 次，重试等待约 `45s -> 90s`。
+      - 仅对 timeout / 429 / 502-504 / 上游空响应等 provider transient 生效。
+      - 质量闸门、JSON 真实解析缺陷等仍作为有效失败暴露。
+    - 旧 `dry_run_structured_backfill` 已完成历史使命并在 2026-05-19 删除：
+      - 当前不再维护 `structure_only / regenerate_abc` 双模式入口
+      - 历史回填统一收口到 `staged_structured_backfill`
+    - 2026-05-07 已补 backfill 两阶段写库：
+      - dry-run 可通过 `STRUCTURED_BACKFILL_INCLUDE_FULL=1` 输出完整 `analysis` payload。
+      - 审查通过后可用 `STRUCTURED_BACKFILL_APPLY_REPORT=<report.json>` 直接复用 dry-run 成功产物写库。
+      - `apply_report` 不调用 AI，避免 dry-run 成功后 apply 又把 A/B/C 生成重复跑一遍。
+      - 普通 `regenerate_abc + STRUCTURED_BACKFILL_APPLY=true` 仍保留，但更适合单词级快速操作，不适合大批量。
+    - 2026-05-07 当前 backfill 进展：
+      - `Verwaltungssprache` 已通过 `regenerate_abc` 写库，数据库 `grammar_branches` 覆盖变为 `21 / 2161`。
+      - `borgen` 在 Model C 阶段连续触发 provider timeout，已被归类为 `skipped_transient`，未写库、未记为内容质量失败。
+      - 后续小批探测中 `Heimat / aufgeben` 已通过 dry-run report 复用写库，数据库 `grammar_branches` 覆盖变为 `23 / 2161`。
+      - `ursprünglich / gründen / vorsichtig` 均因 provider timeout 或 empty response 被归类为 transient deferred，未写库。
+      - 当前 OpenRouter/newapi 上游状态不适合继续连续大批 backfill；batch=1 也只能降低失败影响范围，不能显著降低单词级 timeout 概率。
+    - 2026-05-07 已明确正式查询与离线 backfill 的模型策略差异：
+      - 正式查询仍允许 Stage2 主模型失败后 fallback，以保证用户侧可用性。
+      - 离线 `regenerate_abc` backfill 已改为 strict primary only。
+      - backfill 中 Stage2 主模型失败会 deferred，不接受 GLM fallback 产物写入历史语料。
+      - 这是为了避免批量语料被不同模型风格和质量混合污染。
+    - 2026-05-07 已新增分阶段离线 backfill runner：
+      - bin：`staged_structured_backfill`
+      - `STAGED_BACKFILL_COMMAND=prepare_ab`：只生成并缓存 Model A + Model B Markdown。
+      - `STAGED_BACKFILL_COMMAND=run_c`：只消费已缓存 A/B 调 Model C。
+      - `STAGED_BACKFILL_COMMAND=apply_ready`：只写入 A/B/C 全成功的 ready 产物。
+      - 队列目录默认：`backend/tmp/staged_structured_backfill/`
+      - 每条产物记录 `pipeline_version / prompt_hash / stage2_model`，便于后续审查。
+      - `run_c` 已改为外层冷却重试：
+        - 只重试 Model C，不重新调用已缓存的 Model A / Model B。
+        - 默认最多重试 `3` 次，指数等待 `180s -> 360s -> 720s`，上限 `900s`。
+        - 可通过 `STAGED_BACKFILL_C_RETRIES`、`STAGED_BACKFILL_C_RETRY_INITIAL_SECS`、`STAGED_BACKFILL_C_RETRY_MAX_SECS` 调整。
+        - C 阶段失败只有在耗尽重试后才写入 `failed/*.run_c.json`。
+        - 已经进入 `ready / applied / failed` 的 A/B 产物不会继续占用 `run_c` 的 limit。
+        - 数据库里已经有 `grammar_branches` 的词条也不会再被残留 A/B 产物重复消费。
+      - canary `zusammenstoßen` 已完整通过三阶段并写库，Stage2 模型为 `gemini-3-flash-preview`，数据库 `grammar_branches` 覆盖变为 `24 / 2161`。
+      - 首个 3 词 staged batch 已完成并写库：
+        - `Windschutzscheibe`：`branch_count=1 / usage_count=3 / insight_count=3`
+        - `vorschreiben`：`branch_count=1 / usage_count=3 / insight_count=4`，Model C 外层冷却重试 1 次后成功
+        - `zulassen`：`branch_count=1 / usage_count=4 / insight_count=4`
+        - 数据库 `grammar_branches` 覆盖变为 `27 / 2161`
+      - 第二个 5 词 staged batch 已完成并写库：
+        - `Unfall`：`branch_count=1 / usage_count=3 / insight_count=3`，Model C 外层冷却重试 1 次后成功
+        - `verletzen`：`branch_count=1 / usage_count=3 / insight_count=4`，Model C 外层冷却重试 2 次后成功
+        - `versehentlich`：`branch_count=2 / usage_count=3 / insight_count=4`，Model C 外层冷却重试 1 次后成功
+        - `versichern`：`branch_count=1 / usage_count=4 / insight_count=4`
+        - `verursachen`：`branch_count=1 / usage_count=3 / insight_count=3`
+        - 数据库 `grammar_branches` 覆盖变为 `32 / 2161`
+      - 2026-05-07 stream 重生成 `übersetzen` 成功，数据库 `grammar_branches` 覆盖变为 `34 / 2161`。
+      - 第三个 5 词 staged batch 已完成并写库：
+        - `Sinn`：`branch_count=1 / usage_count=4 / insight_count=4`
+        - `Sturm`：`branch_count=1 / usage_count=4 / insight_count=4`
+        - `überraschen`：`branch_count=1 / usage_count=3 / insight_count=4`，Model C 外层冷却重试 1 次后成功
+        - `Überschwemmung`：`branch_count=1 / usage_count=3 / insight_count=3`
+        - `schwingen`：`branch_count=1 / usage_count=4 / insight_count=3`，Model C 外层冷却重试 2 次后成功
+        - 数据库 `grammar_branches` 覆盖变为 `39 / 2161`
+      - 2026-05-07 已补 Model C 模型覆盖能力：
+        - 正式链路可用 `AI_MODEL_STRUCTURE` / `STRUCTURE_ARCHIVE_MODEL` 覆盖默认结构化模型。
+        - staged runner 可用 `STAGED_BACKFILL_STRUCTURE_MODEL` 单独指定 C 阶段模型。
+        - staged runner 可用 `STAGED_BACKFILL_IGNORE_DB_EXISTING=1` 做只读/临时队列模型对照，避免被数据库已迁移状态过滤。
+      - Model C 候选模型小样本对照：
+        - 样本：`Sinn / Sturm / schwingen`，复用同一批 A/B cache，只比较 C 阶段，不写库。
+        - `glm-4.7-flash`：三词最终全部通过质量闸门；`Sinn` 首次遇到 429，短重试后成功。
+        - `glm-4.7`：三词仅 `Sturm` 成功；`Sinn` 返回不可解析响应，`schwingen` timeout。
+        - 当前建议：历史 backfill 的 C 阶段优先试用 `glm-4.7-flash`，继续人工抽测内容质量。
+      - 2026-05-08 使用 `glm-4.7-flash` 继续 staged backfill：
+        - `prepare_ab`: `Schläger / Scheinwerfer / Scheibe / Sachschaden / rutschen` 全部成功。
+        - `run_c`: `Sachschaden / rutschen` 成功并写库。
+        - `Scheibe` 首轮为 HTTP 429 rate limited，冷却后单条重试成功并写库。
+        - `Scheinwerfer / Schläger` 首轮在 Model C 阶段 timeout deferred，A/B cache 保留；冷却后单条 C-only 重试均成功并写库。
+        - 本批最终 5 词全部写库，数据库 `grammar_branches` 覆盖变为 `44 / 2161`。
+      - 当前判断：`glm-4.7-flash` 的结构质量仍可继续观察；本轮无需切 `glm-4.7`，但连续 C 批量仍容易触发 429 / timeout，后续 C 阶段应单条低频消费。
+      - 2026-05-19 已完成本轮正式 staged backfill 收尾排查：
+        - 数据库 `grammar_branches` 覆盖现为 `2160 / 2161`。
+        - `klasse / Tropfen / morgen / ihr` 的大小写变体漏回填已修复并成功补回。
+        - 已确认此前 `Klasse` 相关问题实际分成两层：
+          - 更早一轮修掉的是“队列文件名在大小写不敏感文件系统上冲突”。
+          - 本轮补掉的是 `staged_structured_backfill` 运行时数据库判重残留：
+            - 不再使用 `lower(query_text)` 判断“已结构化”。
+            - 不再使用 `lower(query_text)` 定位 apply 时的目标 entry。
+        - 已顺手修复两处会影响正式线上链路的结构化稳定性：
+          - `analysis_structure_seed` 不再把正文中的“反义词/同义词/词族”误判成词汇网络 bucket 标题。
+          - `analysis_grounded_stage2_quality` 现在接受“引号前已有完整终止标点”的正常 Markdown 结尾，不再把 `Bild` 这类内容误判成截断。
+        - `Bild / gern` 已在修复后重新通过并写库。
+        - 当前仅剩 `sie` 1 条未完成，失败类型已收敛为上游 `prepare_ab timeout`：
+          - 队列中无本地 `failed` 脏状态。
+          - 属于可重试的 transient upstream failure，不是本地逻辑错误。
+      - 2026-05-08 下一批 staged backfill 已完成：
+        - `prepare_ab`: `rückwärts / Reifen / regulieren / quietschen / parken` 全部成功。
+        - `run_c`: 五词全部成功，未触发 transient retry。
+        - `apply_ready`: 五词全部写库。
+        - 数据库 `grammar_branches` 覆盖变为 `49 / 2161`。
+        - 可抽测词：`Reifen`、`parken`、`quietschen`、`rückwärts`、`regulieren`。
+      - 2026-05-08 长会话慢速 backfill 已完成：
+        - 先以单条前台测试跑通 `borgen`，成功写库。
+        - 随后自动跑 6 批，每批最多 5 词；A/B 间隔 120 秒，C 单条消费并冷却 180 秒，批间冷却 300 秒。
+        - 本轮最终覆盖变为 `74 / 2161`。
+        - 成功新增词：
+          - `borgen`
+          - `Motorhaube / Kratzer / Motor / lenken / lohnen`
+          - `Hügel / Hagel / Kilometer / korrekt`
+          - `Dach / Diebstahl / Dorf / Einbruch / einbrechen`
+          - `Benzin / aufkommen / beschädigen / betrunken / bremsen`
+          - `Wert / Wurst / absichtlich / zufällig / zunehmen`
+        - 当前失败队列共 6 个，均为 provider timeout：
+          - `ursprünglich`: `prepare_ab` timeout
+          - `Kofferraum`: `prepare_ab` timeout
+          - `gründen`: `run_c` timeout
+          - `vorsichtig`: `run_c` timeout
+          - `nachdenken`: `run_c` timeout
+          - `krachen`: `run_c` timeout
+        - `ready/` 队列为空，说明没有半完成产物堆积。
+        - 抽查 `borgen / Motorhaube / lenken / korrekt / Dach / Benzin / Wert / absichtlich`：均有 `grammar_branches`，`usage_modules` 与 `deep_insights` 数量正常；`Motorhaube` Markdown 只包含新链路三大模块，无旧链路残留。
+    - 前端新 branch UI 需要 `grammar_branches`，因此要完成 UI 数据迁移，主要依赖 `regenerate_abc`，不能只跑旧 Markdown -> Model C。
+- 2026-05-02 旧阶段 A/B/C 实验链路状态：
+  - Model A：基本收敛，负责释义 + 稳定语法特性 JSON。
+  - Model B：基本收敛，负责应用与例句 / 词汇网络 / 深度解析 Markdown。
+  - Model C：已修掉三类明确结构化抽取问题：
+    - 词性内部逗号导致 `word_network` 字段错位
+    - 无方括号词汇网络条目导致 term 截断
+    - 中文说明括号被误删
+  - 最新验证：
+    - `Kiefer` 复测通过，中文括号完整保留，且无 repair notes。
+    - `Ton / Lehre / Absatz` 小批次均通过，且无 repair notes。
+  - 当前结论：
+    - 新链路仍不接生产 `analyze`。
+    - 还不写库、不做 backfill。
+    - 前 10 条历史 Markdown 只读 dry-run 已从 `2/10` 修复到 `8/10`：
+      - 主要修复点是质量闸门兼容旧版 `* 词族 (Wortfamilie)` 格式。
+      - 剩余失败目前集中在上游 timeout。
+      - 显式复测中 `verlängern` 已成功，`kaufmännisch` 仍连续 timeout。
+    - 前 30 条历史 Markdown 只读 dry-run 已达到 `29/30`：
+      - 唯一失败 `sprechen` 单独复测已成功。
+      - 本轮没有质量闸门失败。
+      - 本轮记录 1 次 `extract_json repaired inner quotes`，最终 parse 成功。
+    - offset 30 的第二批 30 条只读 dry-run 为 `26/30`：
+      - 4 个失败词单独复测后全部成功。
+      - `versichern` 曾因截断响应导致 `grammar_rows` 缺失，被质量闸门正确拒绝。
+      - 前 60 条历史候选中，目前没有留下稳定内容型结构化失败样本。
+    - offset 60 的第三批 30 条只读 dry-run 为 `30/30`：
+      - 结构化逻辑继续稳定。
+      - JSON repair 频率变高，尤其出现 truncation repair。
+      - 已补结构化归档 repair 日志的 query 维度，并拒绝“大幅截断修复”结果。
+    - 2026-05-03 已进入 backfill runner 工程化：
+      - Model C `structure_prompt` 已外置到 `backend/config/prompts/default.yaml`。
+      - 旧 `dry_run_structured_backfill` 当时已升级为安全 backfill runner。
+      - 默认 dry-run；只有 `STRUCTURED_BACKFILL_APPLY=true` 才写库。
+      - report 已包含 `error_kind_counts`、`repair_kind_counts`、逐 case `repair_events`、`applied_count`。
+      - 已完成 1 条只读验证：`vertragen` 成功，未写库。
+      - 已完成 1 条 apply 验证：`vertragen` 写入 `analysis.structured`。
+    - 下一步应小批 apply 5-10 条并前端抽查，然后再扩大到 30 / 100 条。
+- Prompt 微调不再依赖“感觉更顺眼”，后续若继续推进，应使用已有 A/B 评测工具。
+- 与恢复范围无关的新功能，不主动扩张。
+
+## 当前判断
+
+如果要继续开发，最合理的顺序仍然是：
+
+1. 完成词典迁移收口
+2. 模型稳定性
+3. 数据导入恢复验证
+4. 学习页增强
+5. 字典层增强与 AI 质量优化

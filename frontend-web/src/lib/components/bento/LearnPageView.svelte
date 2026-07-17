@@ -56,8 +56,6 @@
 </script>
 
 <div class="learning-page">
-  <header class="page-header"><h1>沉浸复习</h1></header>
-
   <main class="session-shell">
     <div class="progress-row">
       <div class="progress" aria-label="本轮学习进度"><span style:width={`${sessionProgress}%`}></span></div>
@@ -93,8 +91,6 @@
 
 <style>
   .learning-page { width: min(1040px, calc(100vw - 304px)); margin-left: 50%; transform: translateX(-50%); }
-  .page-header { flex: 0 0 auto; margin-bottom: 1.2rem; }
-  .page-header h1 { font-size: 1.75rem; font-weight: 800; }
   .session-shell { width: min(940px, 100%); margin: 0 auto; }
   .progress-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
   .progress { flex: 1; height: 8px; overflow: hidden; border-radius: var(--radius-full); background: var(--btn-secondary); }
@@ -109,8 +105,6 @@
 
   @media (max-width: 768px) {
     .learning-page { width: 100%; margin-left: 0; transform: none; }
-    .page-header { margin-bottom: 0.9rem; }
-    .page-header h1 { font-size: 1.55rem; }
     .progress-row { margin-bottom: 0.75rem; }
   }
 </style>

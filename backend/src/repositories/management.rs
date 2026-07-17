@@ -8,7 +8,7 @@ pub async fn replace_database_snapshot(
     let mut tx = pool.begin().await?;
 
     sqlx::query(
-        "TRUNCATE TABLE learning_progress, follow_ups, knowledge_entries RESTART IDENTITY CASCADE",
+        "TRUNCATE TABLE reading_article_bookmarks, reading_articles, reading_folders, learning_progress, follow_ups, knowledge_entries RESTART IDENTITY CASCADE",
     )
     .execute(&mut *tx)
     .await?;
@@ -77,6 +77,61 @@ pub async fn replace_database_snapshot(
         .await?;
     }
 
+    for folder in &backup.reading_folders {
+        sqlx::query(
+            r#"
+            INSERT INTO reading_folders (id, parent_id, name, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+        )
+        .bind(folder.id)
+        .bind(folder.parent_id)
+        .bind(&folder.name)
+        .bind(folder.created_at)
+        .bind(folder.updated_at)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    for article in &backup.reading_articles {
+        sqlx::query(
+            r#"
+            INSERT INTO reading_articles (
+                id, folder_id, title, body, completed, last_opened_at, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            "#,
+        )
+        .bind(article.id)
+        .bind(article.folder_id)
+        .bind(&article.title)
+        .bind(&article.body)
+        .bind(article.completed)
+        .bind(article.last_opened_at)
+        .bind(article.created_at)
+        .bind(article.updated_at)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    for bookmark in &backup.reading_article_bookmarks {
+        sqlx::query(
+            r#"
+            INSERT INTO reading_article_bookmarks (
+                id, article_id, occurrence_index, surface, form_of, lexeme_id, entry_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            "#,
+        )
+        .bind(bookmark.id)
+        .bind(bookmark.article_id)
+        .bind(bookmark.occurrence_index)
+        .bind(&bookmark.surface)
+        .bind(&bookmark.form_of)
+        .bind(bookmark.lexeme_id)
+        .bind(bookmark.entry_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+
     sqlx::query(
         r#"
         SELECT setval(
@@ -100,6 +155,17 @@ pub async fn replace_database_snapshot(
     )
     .execute(&mut *tx)
     .await?;
+
+    for table in [
+        "reading_folders",
+        "reading_articles",
+        "reading_article_bookmarks",
+    ] {
+        let statement = format!(
+            "SELECT setval(pg_get_serial_sequence('{table}', 'id'), COALESCE((SELECT MAX(id) FROM {table}), 0) + 1, false)"
+        );
+        sqlx::query(&statement).execute(&mut *tx).await?;
+    }
 
     tx.commit().await?;
     Ok(())

@@ -9,6 +9,7 @@ mod embedding_rate_limiter;
 pub mod handlers;
 pub mod models;
 pub mod prompts;
+pub mod reading_models;
 pub mod repositories;
 pub mod services;
 pub mod state;

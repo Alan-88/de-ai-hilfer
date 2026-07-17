@@ -25,6 +25,12 @@ if (parsed.values["self-test"]) {
   assert.equal(apiBase("https://example.test/api/v1/"), "https://example.test/api/v1");
   assert.deepEqual(parseInput('["ging", "hätte"]'), ["ging", "hätte"]);
   assert.throws(() => parseInput('{"word":"ging"}'), /JSON array/);
+  assert.deepEqual(parseArticleInput('{"title":" Test ","body":"Text","folder_id":null}'), {
+    title: "Test",
+    body: "Text",
+    folder_id: null,
+  });
+  assert.throws(() => parseArticleInput('{"title":"","body":"Text"}'), /title/);
   console.log("deai self-test passed");
   process.exit(0);
 }
@@ -40,7 +46,10 @@ const baseUrl = apiBase(
 const token = parsed.values.token ?? process.env.DEAI_API_TOKEN ?? localEnv("DEAI_API_TOKEN");
 if (!token) fail("Set DEAI_API_TOKEN or pass --token.");
 
-const inputs = parsed.values.stdin ? parseInput(readFileSync(0, "utf8")) : positionals;
+const stdinRaw = parsed.values.stdin ? readFileSync(0, "utf8") : null;
+const inputs = stdinRaw === null || (group === "article" && action === "import")
+  ? positionals
+  : parseInput(stdinRaw);
 
 try {
   let output;
@@ -67,6 +76,18 @@ try {
         body: JSON.stringify(body),
       }),
     );
+  } else if (group === "article" && action === "list") {
+    output = await request("/reading");
+  } else if (group === "article" && action === "get") {
+    requireInputs(inputs, "article ids");
+    output = await many(inputs, (id) => request(`/reading/articles/${integer(id, "article id")}`));
+  } else if (group === "article" && action === "import") {
+    requireConfirmation();
+    if (stdinRaw === null) fail("Article import requires a JSON object through --stdin.");
+    output = await request("/reading/articles", {
+      method: "POST",
+      body: JSON.stringify(parseArticleInput(stdinRaw)),
+    });
   } else if (group === "learning" && action === "list") {
     output = await request("/agent/learning");
   } else if (group === "learning" && action === "status") {
@@ -139,6 +160,21 @@ function parseInput(raw) {
   return value;
 }
 
+function parseArticleInput(raw) {
+  const value = JSON.parse(raw);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("article stdin must contain a JSON object");
+  }
+  const title = typeof value.title === "string" ? value.title.trim() : "";
+  if (!title) throw new Error("article title is required");
+  if (typeof value.body !== "string" || !value.body.trim()) throw new Error("article body is required");
+  const folderId = value.folder_id ?? null;
+  if (folderId !== null && (!Number.isSafeInteger(folderId) || folderId <= 0)) {
+    throw new Error(`invalid folder id: ${folderId}`);
+  }
+  return { title, body: value.body, folder_id: folderId };
+}
+
 function apiBase(value) {
   return value.replace(/\/+$/, "");
 }
@@ -178,6 +214,9 @@ function usage(code) {
   tools/deai lexeme resolve <surface...> [--limit 8]
   tools/deai lexeme inspect <lexeme-id...>
   tools/deai entry initialize <lexeme-id...> --yes [--provider NAME --model ID]
+  tools/deai article list
+  tools/deai article get <article-id...>
+  tools/deai article import --stdin --yes
   tools/deai learning status <lexeme-id...>
   tools/deai learning list
   tools/deai learning add|remove|reset <entry-id...> --yes [--lexeme]

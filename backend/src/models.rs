@@ -277,6 +277,12 @@ pub struct DatabaseBackupPayload {
     pub knowledge_entries: Vec<KnowledgeEntry>,
     pub follow_ups: Vec<FollowUp>,
     pub learning_progress: Vec<LearningProgress>,
+    #[serde(default)]
+    pub reading_folders: Vec<crate::reading_models::ReadingFolder>,
+    #[serde(default)]
+    pub reading_articles: Vec<crate::reading_models::ReadingArticle>,
+    #[serde(default)]
+    pub reading_article_bookmarks: Vec<crate::reading_models::ReadingArticleBookmark>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
