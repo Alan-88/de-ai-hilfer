@@ -12,11 +12,12 @@
     onEdit: () => void;
     onToggleStatus: () => void;
     statusLabel: string;
+    onMove: () => void;
     onDelete: () => void;
     onCreateChild: () => void;
   }
 
-  let { target, onRename, onEdit, onToggleStatus, statusLabel, onDelete, onCreateChild }: Props = $props();
+  let { target, onRename, onEdit, onToggleStatus, statusLabel, onMove, onDelete, onCreateChild }: Props = $props();
 </script>
 
 {#if target}
@@ -32,6 +33,7 @@
     {:else}
       <button role="menuitem" onclick={onEdit}><i class="ph ph-note-pencil"></i> 编辑文章</button>
       <button role="menuitem" onclick={onToggleStatus}><i class="ph ph-check-circle"></i> {statusLabel}</button>
+      <button role="menuitem" onclick={onMove}><i class="ph ph-folder-notch-open"></i> 移动到文件夹</button>
     {/if}
     <button role="menuitem" onclick={onRename}><i class="ph ph-pencil-simple"></i> 重命名</button>
     <div class="separator"></div>

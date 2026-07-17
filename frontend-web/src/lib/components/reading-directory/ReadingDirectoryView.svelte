@@ -3,6 +3,7 @@
   import DirectoryArticleList from "$lib/components/reading-directory/DirectoryArticleList.svelte";
   import DirectoryContextMenu from "$lib/components/reading-directory/DirectoryContextMenu.svelte";
   import DirectoryFolderTree from "$lib/components/reading-directory/DirectoryFolderTree.svelte";
+  import DirectoryMoveDialog from "$lib/components/reading-directory/DirectoryMoveDialog.svelte";
   import ReadingImportDialog from "$lib/components/reading/ReadingImportDialog.svelte";
   import {
     createReadingFolder,
@@ -44,6 +45,8 @@
   let foldersOpen = $state(false);
   let importOpen = $state(false);
   let editingArticleId = $state<number | null>(null);
+  let movingArticleId = $state<number | null>(null);
+  let movePending = $state(false);
   let loading = $state(true);
   let notice = $state("");
   let noticeTimer: number | undefined;
@@ -255,7 +258,7 @@
   }
 
   function openContextAt(kind: "folder" | "article", id: number, x: number, y: number) {
-    const height = kind === "folder" ? 158 : 194;
+    const height = kind === "folder" ? 158 : 230;
     contextTarget = {
       kind,
       id,
@@ -369,6 +372,28 @@
     }
   }
 
+  function moveTarget() {
+    if (contextTarget?.kind !== "article") return;
+    movingArticleId = contextTarget.id;
+    contextTarget = null;
+  }
+
+  async function moveArticleFromDialog(folderId: number | null) {
+    const article = articles.find((item) => item.id === movingArticleId);
+    if (!article || article.folderId === folderId) return;
+    movePending = true;
+    try {
+      await moveReadingArticle(article.id, folderId);
+      articles = articles.map((item) => item.id === article.id ? { ...item, folderId } : item);
+      movingArticleId = null;
+      showNotice(folderId === null ? "文章已移到未归类" : `文章已移到 ${folderPath(folderId)}`);
+    } catch (cause) {
+      showNotice(errorMessage(cause));
+    } finally {
+      movePending = false;
+    }
+  }
+
   function handleWindowPointerDown(event: PointerEvent) {
     const element = event.target instanceof Element ? event.target : null;
     if (contextTarget && !element?.closest(".directory-context-menu")) contextTarget = null;
@@ -378,6 +403,7 @@
     if (event.key === "Escape") {
       contextTarget = null;
       foldersOpen = false;
+      if (!movePending) movingArticleId = null;
     }
   }
 
@@ -466,6 +492,7 @@
     onEdit={editTarget}
     onToggleStatus={toggleTargetStatus}
     statusLabel={contextTarget?.kind === "article" && articles.find((article) => article.id === contextTarget?.id)?.completed ? "移回未读完" : "标为已完成"}
+    onMove={moveTarget}
     onDelete={deleteTarget}
     onCreateChild={() => contextTarget?.kind === "folder" && createFolder(contextTarget.id)}
   />
@@ -484,6 +511,16 @@
       articleId={editingArticleId}
       onClose={() => editingArticleId = null}
       onCreated={(article) => { editingArticleId = null; void loadIndex(); void goto(`/learn/articles/${article.id}`); }}
+    />
+  {/if}
+  {#if movingArticleId !== null}
+    <DirectoryMoveDialog
+      articleTitle={articles.find((article) => article.id === movingArticleId)?.title ?? ""}
+      folders={folders.map((folder) => ({ id: folder.id, name: folderPath(folder.id) }))}
+      currentFolderId={articles.find((article) => article.id === movingArticleId)?.folderId ?? null}
+      moving={movePending}
+      onSelect={(folderId) => void moveArticleFromDialog(folderId)}
+      onClose={() => { if (!movePending) movingArticleId = null; }}
     />
   {/if}
 </div>

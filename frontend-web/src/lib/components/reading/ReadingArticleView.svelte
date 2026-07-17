@@ -1,12 +1,19 @@
 <script lang="ts">
+  import ReadingBookmarkPicker from "$lib/components/reading/ReadingBookmarkPicker.svelte";
   import ReadingLookupRail from "$lib/components/reading/ReadingLookupRail.svelte";
+  import { insertReadingBookmark, type ReadingTextTarget } from "$lib/readingBookmarks";
   import {
     getReadingArticle,
     getReadingIndex,
     markReadingArticleOpened,
+    saveReadingArticle,
     type ReadingArticleDetail,
     type ReadingContentSegment,
   } from "$lib/readingApi";
+  import { analyzeWord, getSuggestions } from "$lib/queryApi";
+  import type { DBSuggestion } from "$lib/types";
+
+  type MarkTarget = ReadingTextTarget & { x: number; y: number };
 
   let { articleId } = $props<{ articleId: number }>();
 
@@ -19,6 +26,12 @@
   let railOpen = $state(false);
   let loading = $state(true);
   let error = $state("");
+  let markTarget = $state<MarkTarget | null>(null);
+  let markSuggestions = $state<DBSuggestion[]>([]);
+  let markLoading = $state(false);
+  let markSaving = $state(false);
+  let markError = $state("");
+  let markRequestId = 0;
 
   const bookmarks = $derived(
     article?.segments.filter((segment): segment is Extract<ReadingContentSegment, { kind: "bookmark" }> => segment.kind === "bookmark") ?? [],
@@ -75,7 +88,149 @@
     const text = article.segments.map((segment) => segment.kind === "text" ? segment.text : segment.surface).join("");
     return text.trim() ? text.trim().split(/\s+/).length : 0;
   }
+
+  function handleArticleContextMenu(event: MouseEvent) {
+    if (!article || (event.target instanceof Element && event.target.closest(".marked"))) return;
+    const target = readingTextTarget(event);
+    if (!target) return;
+    event.preventDefault();
+    markTarget = {
+      ...target,
+      x: Math.max(12, Math.min(event.clientX, window.innerWidth - 322)),
+      y: Math.max(12, Math.min(event.clientY, window.innerHeight - 360)),
+    };
+    markSuggestions = [];
+    markError = "";
+    void loadMarkSuggestions(target.surface);
+  }
+
+  async function loadMarkSuggestions(surface: string) {
+    const requestId = ++markRequestId;
+    markLoading = true;
+    try {
+      const response = await getSuggestions(surface);
+      if (requestId !== markRequestId) return;
+      const unique = new Map<string, DBSuggestion>();
+      for (const suggestion of response.suggestions) {
+        const key = suggestion.query_text.toLocaleLowerCase("de");
+        const existing = unique.get(key);
+        if (!existing || (existing.entry_id <= 0 && suggestion.entry_id > 0)) unique.set(key, suggestion);
+      }
+      markSuggestions = [...unique.values()].slice(0, 6);
+    } catch (cause) {
+      if (requestId === markRequestId) markError = errorMessage(cause);
+    } finally {
+      if (requestId === markRequestId) markLoading = false;
+    }
+  }
+
+  async function chooseMarkCandidate(candidate: DBSuggestion) {
+    const target = markTarget;
+    const current = article;
+    if (!target || !current) return;
+    markSaving = true;
+    markError = "";
+    try {
+      if (candidate.entry_id <= 0) await analyzeWord(candidate.query_text);
+      const occurrenceIndex = current.segments.slice(0, target.segmentIndex).filter((segment) => segment.kind === "bookmark").length;
+      const body = insertReadingBookmark(current.body, current.segments, target, candidate.query_text);
+      const next = await saveReadingArticle(current.id, { title: current.title, body, folder_id: current.folder_id });
+      article = next;
+      closeMarkPicker();
+      const bookmark = next.segments.find((segment) => segment.kind === "bookmark" && segment.occurrence_index === occurrenceIndex);
+      if (bookmark?.kind === "bookmark") selectWord(bookmark);
+      window.getSelection()?.removeAllRanges();
+    } catch (cause) {
+      markError = errorMessage(cause);
+    } finally {
+      markSaving = false;
+    }
+  }
+
+  function closeMarkPicker() {
+    markRequestId += 1;
+    markTarget = null;
+    markSuggestions = [];
+    markLoading = false;
+    markError = "";
+  }
+
+  function handleWindowPointerDown(event: PointerEvent) {
+    const element = event.target instanceof Element ? event.target : null;
+    if (markTarget && !element?.closest(".reading-mark-picker")) closeMarkPicker();
+  }
+
+  function readingTextTarget(event: MouseEvent): ReadingTextTarget | null {
+    const selected = targetFromSelection();
+    if (selected) return selected;
+    const caret = caretAtPoint(event.clientX, event.clientY);
+    if (!caret) return null;
+    const span = segmentSpan(caret.node);
+    if (!span || span !== (event.target instanceof Element ? event.target.closest("[data-reading-segment]") : null)) return null;
+    const text = span.textContent ?? "";
+    let start = caret.offset;
+    let end = caret.offset;
+    while (start > 0 && isWordCharacter(text[start - 1])) start -= 1;
+    while (end < text.length && isWordCharacter(text[end])) end += 1;
+    return buildTextTarget(span, start, end);
+  }
+
+  function targetFromSelection() {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
+    const range = selection.getRangeAt(0);
+    const startSpan = segmentSpan(range.startContainer);
+    const endSpan = segmentSpan(range.endContainer);
+    if (!startSpan || startSpan !== endSpan) return null;
+    const start = textOffset(startSpan, range.startContainer, range.startOffset);
+    const end = textOffset(startSpan, range.endContainer, range.endOffset);
+    return buildTextTarget(startSpan, start, end);
+  }
+
+  function buildTextTarget(span: HTMLElement, rawStart: number, rawEnd: number) {
+    const text = span.textContent ?? "";
+    let start = Math.min(rawStart, rawEnd);
+    let end = Math.max(rawStart, rawEnd);
+    while (start < end && !isWordCharacter(text[start])) start += 1;
+    while (end > start && !isWordCharacter(text[end - 1])) end -= 1;
+    const surface = text.slice(start, end);
+    if (!surface || [...surface].some((character) => !isWordCharacter(character))) return null;
+    const segmentIndex = Number(span.dataset.readingSegment);
+    if (!Number.isSafeInteger(segmentIndex)) return null;
+    return { segmentIndex, start, end, surface };
+  }
+
+  function segmentSpan(node: Node) {
+    const element = node instanceof Element ? node : node.parentElement;
+    return element?.closest<HTMLElement>("[data-reading-segment]") ?? null;
+  }
+
+  function textOffset(root: HTMLElement, node: Node, offset: number) {
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    range.setEnd(node, offset);
+    return range.toString().length;
+  }
+
+  function caretAtPoint(x: number, y: number) {
+    if (document.caretPositionFromPoint) {
+      const position = document.caretPositionFromPoint(x, y);
+      if (position) return { node: position.offsetNode, offset: position.offset };
+    }
+    const legacy = (document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null }).caretRangeFromPoint?.(x, y);
+    return legacy ? { node: legacy.startContainer, offset: legacy.startOffset } : null;
+  }
+
+  function isWordCharacter(character: string | undefined) {
+    return Boolean(character && /[\p{L}\p{M}'’-]/u.test(character));
+  }
+
+  function errorMessage(cause: unknown) {
+    return cause instanceof Error ? cause.message : "操作失败";
+  }
 </script>
+
+<svelte:window onpointerdown={handleWindowPointerDown} />
 
 <div class="reading-view">
   {#if loading}
@@ -109,10 +264,10 @@
 
     <div class="reading-shell">
       <main class="article-pane">
-        <article class="article-copy">
-          {#each article.segments as segment}
+        <article class="article-copy" oncontextmenu={handleArticleContextMenu}>
+          {#each article.segments as segment, segmentIndex}
             {#if segment.kind === "text"}
-              <span>{segment.text}</span>
+              <span data-reading-segment={segmentIndex}>{segment.text}</span>
             {:else}
               <button
                 id={`mark-${segment.occurrence_index}`}
@@ -133,6 +288,20 @@
 
       <ReadingLookupRail {selectedKey} {selectedEntryId} open={railOpen} onClose={() => railOpen = false} />
     </div>
+
+    {#if markTarget}
+      <ReadingBookmarkPicker
+        surface={markTarget.surface}
+        x={markTarget.x}
+        y={markTarget.y}
+        suggestions={markSuggestions}
+        loading={markLoading}
+        saving={markSaving}
+        error={markError}
+        onChoose={(suggestion) => void chooseMarkCandidate(suggestion)}
+        onClose={closeMarkPicker}
+      />
+    {/if}
   {/if}
 </div>
 
