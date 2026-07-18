@@ -45,7 +45,7 @@
   let foldersOpen = $state(false);
   let importOpen = $state(false);
   let editingArticleId = $state<number | null>(null);
-  let movingArticleId = $state<number | null>(null);
+  let movingItem = $state<DragItem | null>(null);
   let movePending = $state(false);
   let loading = $state(true);
   let notice = $state("");
@@ -258,7 +258,7 @@
   }
 
   function openContextAt(kind: "folder" | "article", id: number, x: number, y: number) {
-    const height = kind === "folder" ? 158 : 230;
+    const height = kind === "folder" ? 194 : 230;
     contextTarget = {
       kind,
       id,
@@ -373,20 +373,31 @@
   }
 
   function moveTarget() {
-    if (contextTarget?.kind !== "article") return;
-    movingArticleId = contextTarget.id;
+    if (!contextTarget) return;
+    movingItem = { kind: contextTarget.kind, id: contextTarget.id };
     contextTarget = null;
   }
 
-  async function moveArticleFromDialog(folderId: number | null) {
-    const article = articles.find((item) => item.id === movingArticleId);
-    if (!article || article.folderId === folderId) return;
+  async function moveItemFromDialog(folderId: number | null) {
+    const item = movingItem;
+    if (!item) return;
     movePending = true;
     try {
-      await moveReadingArticle(article.id, folderId);
-      articles = articles.map((item) => item.id === article.id ? { ...item, folderId } : item);
-      movingArticleId = null;
-      showNotice(folderId === null ? "文章已移到未归类" : `文章已移到 ${folderPath(folderId)}`);
+      if (item.kind === "article") {
+        const article = articles.find((candidate) => candidate.id === item.id);
+        if (!article || article.folderId === folderId) return;
+        await moveReadingArticle(article.id, folderId);
+        articles = articles.map((candidate) => candidate.id === article.id ? { ...candidate, folderId } : candidate);
+        showNotice(folderId === null ? "文章已移到未归类" : `文章已移到 ${folderPath(folderId)}`);
+      } else {
+        const folder = folders.find((candidate) => candidate.id === item.id);
+        if (!folder || folder.parentId === folderId || isInsideFolder(folderId, folder.id)) return;
+        await updateReadingFolder(folder.id, folder.name, folderId);
+        folders = folders.map((candidate) => candidate.id === folder.id ? { ...candidate, parentId: folderId } : candidate);
+        if (folderId !== null && !expandedIds.includes(folderId)) expandedIds = [...expandedIds, folderId];
+        showNotice(folderId === null ? "文件夹已移到根目录" : `文件夹已移到 ${folderPath(folderId)}`);
+      }
+      movingItem = null;
     } catch (cause) {
       showNotice(errorMessage(cause));
     } finally {
@@ -403,7 +414,7 @@
     if (event.key === "Escape") {
       contextTarget = null;
       foldersOpen = false;
-      if (!movePending) movingArticleId = null;
+      if (!movePending) movingItem = null;
     }
   }
 
@@ -465,7 +476,6 @@
       <div class="toolbar">
         <button class="mobile-folder-button" aria-label="打开文件夹" onclick={() => foldersOpen = true}><i class="ph ph-folders"></i></button>
         <form onsubmit={(event) => event.preventDefault()}><i class="ph ph-magnifying-glass"></i><input bind:value={search} placeholder="搜索文章或路径" /></form>
-        <button aria-label="排序"><i class="ph ph-arrows-down-up"></i></button>
       </div>
       {#if loading}
         <div class="loading-list"><span></span><span></span><span></span></div>
@@ -513,14 +523,15 @@
       onCreated={(article) => { editingArticleId = null; void loadIndex(); void goto(`/learn/articles/${article.id}`); }}
     />
   {/if}
-  {#if movingArticleId !== null}
+  {#if movingItem}
     <DirectoryMoveDialog
-      articleTitle={articles.find((article) => article.id === movingArticleId)?.title ?? ""}
-      folders={folders.map((folder) => ({ id: folder.id, name: folderPath(folder.id) }))}
-      currentFolderId={articles.find((article) => article.id === movingArticleId)?.folderId ?? null}
+      itemKind={movingItem.kind === "article" ? "文章" : "文件夹"}
+      itemTitle={movingItem.kind === "article" ? articles.find((article) => article.id === movingItem?.id)?.title ?? "" : folders.find((folder) => folder.id === movingItem?.id)?.name ?? ""}
+      folders={folders.filter((folder) => movingItem?.kind !== "folder" || !descendantFolderIds(movingItem.id).has(folder.id)).map((folder) => ({ id: folder.id, name: folderPath(folder.id) }))}
+      currentFolderId={movingItem.kind === "article" ? articles.find((article) => article.id === movingItem?.id)?.folderId ?? null : folders.find((folder) => folder.id === movingItem?.id)?.parentId ?? null}
       moving={movePending}
-      onSelect={(folderId) => void moveArticleFromDialog(folderId)}
-      onClose={() => { if (!movePending) movingArticleId = null; }}
+      onSelect={(folderId) => void moveItemFromDialog(folderId)}
+      onClose={() => { if (!movePending) movingItem = null; }}
     />
   {/if}
 </div>

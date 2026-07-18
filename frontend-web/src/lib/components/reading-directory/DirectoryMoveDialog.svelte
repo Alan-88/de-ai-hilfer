@@ -5,7 +5,8 @@
   }
 
   interface Props {
-    articleTitle: string;
+    itemKind: "文章" | "文件夹";
+    itemTitle: string;
     folders: FolderOption[];
     currentFolderId: number | null;
     moving: boolean;
@@ -13,7 +14,7 @@
     onClose: () => void;
   }
 
-  let { articleTitle, folders, currentFolderId, moving, onSelect, onClose }: Props = $props();
+  let { itemKind, itemTitle, folders, currentFolderId, moving, onSelect, onClose }: Props = $props();
 </script>
 
 <svelte:window onkeydown={(event) => { if (event.key === "Escape" && !moving) onClose(); }} />
@@ -22,12 +23,12 @@
   <button class="move-scrim" aria-label="关闭移动面板" disabled={moving} onclick={onClose}></button>
   <div class="move-dialog" role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="move-title">
     <header>
-      <div><h2 id="move-title">移动文章</h2><span>{articleTitle}</span></div>
+      <div><h2 id="move-title">移动{itemKind}</h2><span>{itemTitle}</span></div>
       <button aria-label="关闭" disabled={moving} onclick={onClose}><i class="ph ph-x"></i></button>
     </header>
     <div class="folder-options">
       <button class:current={currentFolderId === null} disabled={moving || currentFolderId === null} onclick={() => onSelect(null)}>
-        <i class="ph ph-tray"></i><span>未归类</span>{#if currentFolderId === null}<i class="ph ph-check"></i>{/if}
+        <i class="ph ph-tray"></i><span>{itemKind === "文章" ? "未归类" : "根目录"}</span>{#if currentFolderId === null}<i class="ph ph-check"></i>{/if}
       </button>
       {#each folders as folder}
         <button class:current={currentFolderId === folder.id} disabled={moving || currentFolderId === folder.id} onclick={() => onSelect(folder.id)}>

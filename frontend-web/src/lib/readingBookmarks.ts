@@ -29,6 +29,26 @@ export function insertReadingBookmark(
   return `${body.slice(0, start)}[${surface}](${normalizedHeadword})${body.slice(end)}`;
 }
 
+export function removeReadingBookmark(
+  body: string,
+  segments: ReadingContentSegment[],
+  occurrenceIndex: number,
+) {
+  const targetIndex = segments.findIndex(
+    (segment) => segment.kind === "bookmark" && segment.occurrence_index === occurrenceIndex,
+  );
+  const segment = segments[targetIndex];
+  if (!segment || segment.kind !== "bookmark") throw new Error("书签位置已失效");
+
+  const start = sourceStartForSegment(body, segments, targetIndex);
+  const surfaceEnd = body.indexOf("](", start + 1);
+  const markerEnd = surfaceEnd < 0 ? -1 : body.indexOf(")", surfaceEnd + 2);
+  if (body[start] !== "[" || surfaceEnd < 0 || markerEnd < 0 || body.slice(start + 1, surfaceEnd) !== segment.surface) {
+    throw new Error("文章书签格式无效");
+  }
+  return `${body.slice(0, start)}${segment.surface}${body.slice(markerEnd + 1)}`;
+}
+
 function sourceStartForSegment(body: string, segments: ReadingContentSegment[], targetIndex: number) {
   let cursor = 0;
   for (let index = 0; index < targetIndex; index += 1) {
@@ -45,8 +65,10 @@ function sourceStartForSegment(body: string, segments: ReadingContentSegment[], 
   }
 
   const target = segments[targetIndex];
-  if (!target || target.kind !== "text" || body.slice(cursor, cursor + target.text.length) !== target.text) {
+  if (!target) throw new Error("文章正文与渲染内容不同步");
+  if (target.kind === "text" && body.slice(cursor, cursor + target.text.length) !== target.text) {
     throw new Error("文章正文与渲染内容不同步");
   }
+  if (target.kind === "bookmark" && body[cursor] !== "[") throw new Error("文章书签位置无效");
   return cursor;
 }

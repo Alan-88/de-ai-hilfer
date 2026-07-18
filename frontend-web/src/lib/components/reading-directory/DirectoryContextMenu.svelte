@@ -30,6 +30,7 @@
   >
     {#if target.kind === "folder"}
       <button role="menuitem" onclick={onCreateChild}><i class="ph ph-folder-plus"></i> 新建子文件夹</button>
+      <button role="menuitem" onclick={onMove}><i class="ph ph-folder-notch-open"></i> 移动到文件夹</button>
     {:else}
       <button role="menuitem" onclick={onEdit}><i class="ph ph-note-pencil"></i> 编辑文章</button>
       <button role="menuitem" onclick={onToggleStatus}><i class="ph ph-check-circle"></i> {statusLabel}</button>

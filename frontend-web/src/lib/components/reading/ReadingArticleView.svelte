@@ -1,7 +1,8 @@
 <script lang="ts">
   import ReadingBookmarkPicker from "$lib/components/reading/ReadingBookmarkPicker.svelte";
+  import ReadingImportDialog from "$lib/components/reading/ReadingImportDialog.svelte";
   import ReadingLookupRail from "$lib/components/reading/ReadingLookupRail.svelte";
-  import { insertReadingBookmark, type ReadingTextTarget } from "$lib/readingBookmarks";
+  import { insertReadingBookmark, removeReadingBookmark, type ReadingTextTarget } from "$lib/readingBookmarks";
   import {
     getReadingArticle,
     getReadingIndex,
@@ -9,6 +10,7 @@
     saveReadingArticle,
     type ReadingArticleDetail,
     type ReadingContentSegment,
+    type ReadingFolder,
   } from "$lib/readingApi";
   import { analyzeWord, getSuggestions } from "$lib/queryApi";
   import type { DBSuggestion } from "$lib/types";
@@ -18,6 +20,7 @@
   let { articleId } = $props<{ articleId: number }>();
 
   let article = $state<ReadingArticleDetail | null>(null);
+  let folders = $state<ReadingFolder[]>([]);
   let folderPath = $state("");
   let selectedKey = $state("");
   let selectedEntryId = $state<number | null>(null);
@@ -31,6 +34,9 @@
   let markLoading = $state(false);
   let markSaving = $state(false);
   let markError = $state("");
+  let bookmarkError = $state("");
+  let bookmarkRemoving = $state<number | null>(null);
+  let editOpen = $state(false);
   let markRequestId = 0;
 
   const bookmarks = $derived(
@@ -45,6 +51,7 @@
     try {
       const [next, index] = await Promise.all([getReadingArticle(id), getReadingIndex()]);
       article = next;
+      folders = index.folders;
       folderPath = buildFolderPath(next.folder_id, index.folders);
       const first = next.segments.find((segment) => segment.kind === "bookmark");
       if (first?.kind === "bookmark") selectWord(first, false);
@@ -68,6 +75,57 @@
     selectWord(bookmark);
     showBookmarks = false;
     document.getElementById(`mark-${bookmark.occurrence_index}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  async function removeBookmark(bookmark: Extract<ReadingContentSegment, { kind: "bookmark" }>) {
+    const current = article;
+    if (!current || bookmarkRemoving !== null) return;
+    bookmarkRemoving = bookmark.occurrence_index;
+    bookmarkError = "";
+    try {
+      const body = removeReadingBookmark(current.body, current.segments, bookmark.occurrence_index);
+      const next = await saveReadingArticle(current.id, { title: current.title, body, folder_id: current.folder_id });
+      article = next;
+      const remaining = next.segments.filter(
+        (segment): segment is Extract<ReadingContentSegment, { kind: "bookmark" }> => segment.kind === "bookmark",
+      );
+      if (selectedOccurrence === bookmark.occurrence_index) {
+        const replacement = remaining[Math.min(bookmark.occurrence_index, remaining.length - 1)];
+        if (replacement) selectWord(replacement, false);
+        else {
+          selectedKey = "";
+          selectedEntryId = null;
+          selectedOccurrence = null;
+        }
+      } else if (selectedOccurrence !== null && selectedOccurrence > bookmark.occurrence_index) {
+        selectedOccurrence -= 1;
+      }
+      if (remaining.length === 0) showBookmarks = false;
+    } catch (cause) {
+      bookmarkError = errorMessage(cause);
+    } finally {
+      bookmarkRemoving = null;
+    }
+  }
+
+  function applyEditedArticle(next: ReadingArticleDetail) {
+    article = next;
+    folderPath = buildFolderPath(next.folder_id, folders);
+    editOpen = false;
+    const selected = next.segments.find(
+      (segment) => segment.kind === "bookmark"
+        && segment.occurrence_index === selectedOccurrence
+        && segment.entry_id === selectedEntryId,
+    ) ?? next.segments.find(
+      (segment) => segment.kind === "bookmark" && segment.entry_id === selectedEntryId,
+    );
+    if (selected?.kind === "bookmark") {
+      selectWord(selected, false);
+    } else {
+      selectedKey = "";
+      selectedEntryId = null;
+      selectedOccurrence = null;
+    }
   }
 
   function buildFolderPath(folderId: number | null, folders: Awaited<ReturnType<typeof getReadingIndex>>["folders"]) {
@@ -158,6 +216,7 @@
   function handleWindowPointerDown(event: PointerEvent) {
     const element = event.target instanceof Element ? event.target : null;
     if (markTarget && !element?.closest(".reading-mark-picker")) closeMarkPicker();
+    if (showBookmarks && !element?.closest(".bookmark-menu")) showBookmarks = false;
   }
 
   function readingTextTarget(event: MouseEvent): ReadingTextTarget | null {
@@ -241,20 +300,36 @@
     <header class="page-head">
       <div class="title-group">
         <a class="back-button" href="/learn/articles" aria-label="返回文章目录"><i class="ph ph-arrow-left"></i></a>
-        <div><span>{folderPath}</span><h1>{article.title}</h1></div>
+        <div class="title-copy">
+          <span>{folderPath}</span>
+          <div class="title-line">
+            <h1>{article.title}</h1>
+            <button class="edit-article" aria-label="编辑文章" title="编辑文章" onclick={() => editOpen = true}><i class="ph ph-pencil-simple"></i></button>
+          </div>
+        </div>
       </div>
       <div class="head-actions">
         <div class="bookmark-menu">
-          <button class:active={showBookmarks} onclick={() => showBookmarks = !showBookmarks}>
+          <button class:active={showBookmarks} disabled={bookmarks.length === 0} onclick={() => showBookmarks = !showBookmarks}>
             <i class="ph ph-bookmarks"></i><span class="bookmark-label">标记词</span><span class="bookmark-count">{bookmarks.length}</span>
           </button>
           {#if showBookmarks}
             <div class="bookmark-popover">
               {#each bookmarks as bookmark}
-                <button onclick={() => jumpToBookmark(bookmark)}>
-                  <strong>{bookmark.form_of}</strong><span>原文：{bookmark.surface}</span>
-                </button>
+                <div class="bookmark-row">
+                  <button class="bookmark-jump" onclick={() => jumpToBookmark(bookmark)}>
+                    <strong>{bookmark.form_of}</strong><span>原文：{bookmark.surface}</span>
+                  </button>
+                  <button
+                    class="bookmark-remove"
+                    aria-label={`取消标记 ${bookmark.surface}`}
+                    title="取消标记"
+                    disabled={bookmarkRemoving !== null}
+                    onclick={() => void removeBookmark(bookmark)}
+                  ><i class={bookmarkRemoving === bookmark.occurrence_index ? "ph ph-spinner-gap spin" : "ph ph-trash"}></i></button>
+                </div>
               {/each}
+              {#if bookmarkError}<div class="bookmark-error" role="alert">{bookmarkError}</div>{/if}
             </div>
           {/if}
         </div>
@@ -302,6 +377,15 @@
         onClose={closeMarkPicker}
       />
     {/if}
+    {#if editOpen}
+      <ReadingImportDialog
+        folders={folders.map((folder) => ({ id: folder.id, name: buildFolderPath(folder.id, folders) }))}
+        defaultFolderId={article.folder_id}
+        articleId={article.id}
+        onClose={() => editOpen = false}
+        onCreated={applyEditedArticle}
+      />
+    {/if}
   {/if}
 </div>
 
@@ -312,19 +396,29 @@
   .article-state a { color: var(--accent-main); text-decoration: none; }
   .page-head { display: flex; min-height: 62px; align-items: center; justify-content: space-between; gap: 1.5rem; padding-right: 88px; }
   .title-group { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
+  .title-copy { min-width: 0; }
+  .title-line { display: flex; min-width: 0; align-items: center; gap: 0.35rem; }
   .back-button { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid var(--border-color); border-radius: 50%; background: var(--card-bg); color: var(--text-main); text-decoration: none; box-shadow: var(--shadow-sm); }
   .title-group span { color: var(--text-muted); font-size: 0.72rem; font-weight: 750; letter-spacing: 0.04em; }
   h1 { margin: 0.15rem 0 0; overflow: hidden; font-size: 1.45rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+  .edit-article { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; margin-top: 0.12rem; border-radius: 50%; background: transparent; color: var(--text-muted); }
+  .edit-article:hover, .edit-article:focus-visible { background: var(--btn-secondary); color: var(--text-main); outline: none; }
   .head-actions { display: flex; align-items: center; gap: 0.55rem; }
   .bookmark-menu { position: relative; }
   .bookmark-menu > button, .mobile-lookup { display: flex; align-items: center; gap: 0.5rem; min-height: 40px; padding: 0 0.85rem; border: 1px solid var(--border-color); border-radius: var(--radius-full); background: var(--card-bg); color: var(--text-main); font-weight: 750; box-shadow: var(--shadow-sm); }
   .bookmark-menu > button.active { border-color: color-mix(in srgb, var(--accent-main) 55%, var(--border-color)); }
+  .bookmark-menu > button:disabled { cursor: default; opacity: 0.55; }
   .bookmark-menu > button .bookmark-count { display: grid; min-width: 21px; height: 21px; place-items: center; border-radius: 50%; background: var(--btn-secondary); color: var(--text-muted); font-size: 0.7rem; }
   .bookmark-popover { position: absolute; top: calc(100% + 0.6rem); right: 0; z-index: 230; width: 245px; padding: 0.45rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--card-bg); box-shadow: var(--shadow-hover); }
-  .bookmark-popover button { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 0.8rem; padding: 0.7rem 0.75rem; border-radius: 9px; background: transparent; color: var(--text-main); text-align: left; }
-  .bookmark-popover button:hover { background: var(--btn-secondary); }
+  .bookmark-row { display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: center; gap: 0.2rem; border-radius: 9px; }
+  .bookmark-row:hover { background: var(--btn-secondary); }
+  .bookmark-jump { display: flex; width: 100%; min-width: 0; align-items: center; justify-content: space-between; gap: 0.8rem; padding: 0.7rem 0.55rem 0.7rem 0.75rem; background: transparent; color: var(--text-main); text-align: left; }
+  .bookmark-remove { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; background: transparent; color: var(--text-muted); }
+  .bookmark-remove:hover, .bookmark-remove:focus-visible { background: color-mix(in srgb, #c64b43 10%, var(--card-bg)); color: var(--danger-text, #b8453f); outline: none; }
+  .bookmark-remove:disabled { opacity: 0.55; }
   .bookmark-popover strong { font-size: 0.86rem; }
   .bookmark-popover span { overflow: hidden; color: var(--text-muted); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
+  .bookmark-error { margin: 0.35rem 0.45rem 0.15rem; color: var(--danger-text, #b8453f); font-size: 0.7rem; line-height: 1.45; }
   .mobile-lookup { display: none; }
 
   .head-actions { position: absolute; top: calc(62px + 1.85rem); right: calc(380px + 1rem); z-index: 4; }

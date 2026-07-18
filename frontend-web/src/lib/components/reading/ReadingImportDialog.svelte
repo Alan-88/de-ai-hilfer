@@ -102,7 +102,7 @@
 
       <footer>
         <button type="button" class="secondary" onclick={onClose}>取消</button>
-        <button type="submit" class="primary" disabled={saving || loading}>{loading ? "加载中…" : saving ? "检查中…" : "保存并打开"}</button>
+        <button type="submit" class="primary" disabled={saving || loading}>{loading ? "加载中…" : saving ? "检查中…" : articleId ? "保存修改" : "保存并打开"}</button>
       </footer>
     </form>
   </div>

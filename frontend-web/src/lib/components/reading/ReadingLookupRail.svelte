@@ -2,7 +2,7 @@
   import { resolveStructuredAnalysis, type StructuredAnalysis } from "$lib/analysis/structuredAnalysis";
   import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
   import LearningAnalysisContent from "$lib/components/bento/LearningAnalysisContent.svelte";
-  import { addWordToLearning } from "$lib/learningApi";
+  import { addWordToLearning, getLearningProgress } from "$lib/learningApi";
   import { analyzeWord, getEntryDetail, getSuggestions } from "$lib/queryApi";
   import type { AnalyzeResponse, EntryDetailResponse, GrammarBranch } from "$lib/types";
 
@@ -21,13 +21,40 @@
   let loading = $state(false);
   let learningAdded = $state(false);
   let requestId = 0;
+  let learningEntryIds: Set<number> | null = null;
+  let learningIdsRequest: Promise<Set<number>> | null = null;
   let activeGrammarBranch = $state<GrammarBranch | null>(null);
   let popoverTriggerRect = $state<DOMRect | null>(null);
 
   $effect(() => {
     if (selectedEntryId) void showEntry(selectedEntryId, selectedKey);
     else if (selectedKey) showUnavailable(selectedKey);
+    else clearEntry();
   });
+
+  function clearEntry() {
+    requestId += 1;
+    query = "";
+    entry = null;
+    analysis = null;
+    error = "";
+    loading = false;
+    learningAdded = false;
+  }
+
+  function getLearningEntryIds() {
+    if (learningEntryIds) return Promise.resolve(learningEntryIds);
+    if (!learningIdsRequest) {
+      learningIdsRequest = getLearningProgress()
+        .then(({ progress }) => {
+          learningEntryIds = new Set(Object.keys(progress).map(Number));
+          return learningEntryIds;
+        })
+        .catch(() => new Set<number>())
+        .finally(() => learningIdsRequest = null);
+    }
+    return learningIdsRequest;
+  }
 
   async function showEntry(entryId: number, key: string) {
     const currentRequest = ++requestId;
@@ -37,10 +64,14 @@
     loading = true;
     error = "";
     try {
-      const next = cache.get(entryId) ?? await getEntryDetail(entryId);
+      const [next, learningIds] = await Promise.all([
+        cache.get(entryId) ?? getEntryDetail(entryId),
+        getLearningEntryIds(),
+      ]);
       if (currentRequest !== requestId) return;
       cache.set(entryId, next);
       entry = next;
+      learningAdded = learningIds.has(entryId);
       analysis = resolveStructuredAnalysis(next.analysis_markdown, next.structured_analysis, next.query_text);
     } catch (cause) {
       if (currentRequest !== requestId) return;
@@ -85,6 +116,10 @@
       query = entry.query_text;
       analysis = resolveStructuredAnalysis(entry.analysis_markdown, entry.structured_analysis, entry.query_text);
       if (!analysis) throw new Error("词条缺少结构化释义");
+      const resolvedEntry = entry;
+      const learningIds = await getLearningEntryIds();
+      if (currentRequest !== requestId) return;
+      learningAdded = learningIds.has(resolvedEntry.entry_id);
     } catch (cause) {
       if (currentRequest !== requestId) return;
       entry = null;
@@ -99,6 +134,7 @@
     if (!entry) return;
     try {
       await addWordToLearning(entry.entry_id);
+      (learningEntryIds ??= new Set()).add(entry.entry_id);
       learningAdded = true;
     } catch (cause) {
       error = cause instanceof Error ? cause.message : "加入复习失败";
@@ -134,7 +170,7 @@
         </div>
         <div class="word-meta-row">
           {#if analysis.phonetic}<span class="word-phonetic">{analysis.phonetic}</span>{/if}
-          <button class:added={learningAdded} class="learning-action" onclick={() => void addLearning()}><i class={learningAdded ? "ph ph-check" : "ph ph-target"}></i> {learningAdded ? "已加入" : "加入复习"}</button>
+          <button class:added={learningAdded} class="learning-action" disabled={learningAdded} onclick={() => void addLearning()}><i class={learningAdded ? "ph ph-check" : "ph ph-target"}></i> {learningAdded ? "已加入" : "加入复习"}</button>
         </div>
       </section>
 
@@ -174,6 +210,7 @@
   .word-phonetic { min-width: 0; color: var(--text-muted); font-family: "Arial Unicode MS", "Lucida Sans Unicode", sans-serif; font-size: 0.86rem; line-height: 1.6; }
   .learning-action { display: flex; min-width: 112px; min-height: 36px; flex: 0 0 auto; align-items: center; justify-content: center; gap: 0.4rem; padding: 0 0.9rem; border-radius: var(--radius-full); background: var(--accent-main); color: white; font-weight: 800; }
   .learning-action.added { background: color-mix(in srgb, var(--accent-main) 72%, #4f8665); }
+  .learning-action:disabled { cursor: default; }
   .empty-result { display: flex; align-items: center; gap: 0.65rem; padding: 1rem; border: 1px dashed var(--border-color); border-radius: var(--radius-md); color: var(--text-muted); }
   .loading-result { display: flex; justify-content: center; gap: 0.4rem; padding: 3rem 0; }
   .loading-result span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); animation: pulse 900ms ease-in-out infinite alternate; }
