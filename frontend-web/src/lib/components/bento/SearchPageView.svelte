@@ -626,7 +626,7 @@
   .search-intro p { margin-left: 14rem; color: var(--text-muted); font-size: 1.15rem; }
 
   .search-panel-group {
-    position: relative; width: 100%; background: var(--card-bg);
+    position: relative; width: 100%; background: var(--control-bg);
     border: 1px solid var(--border-color); border-radius: 28px;
     box-shadow: var(--shadow-sm); transition: all var(--transition-smooth);
   }

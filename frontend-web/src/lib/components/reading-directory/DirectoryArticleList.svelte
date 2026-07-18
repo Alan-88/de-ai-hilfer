@@ -80,7 +80,7 @@
   .title strong { font-size: 0.84rem; cursor: text; user-select: text; }
   .title small, .date { color: var(--text-muted); font-size: 0.7rem; }
   .memory { display: flex; align-items: center; gap: 0.5rem; }
-  .memory > i { width: 94px; height: 4px; overflow: hidden; border-radius: 2px; background: var(--btn-secondary); }
+  .memory > i { width: 94px; height: 4px; overflow: hidden; border-radius: 2px; background: var(--surface-passive); }
   .memory b { display: block; height: 100%; background: var(--accent-main); }
   .memory em, .marks { color: var(--text-muted); font-size: 0.68rem; font-style: normal; }
   .marks { display: flex; align-items: center; gap: 0.25rem; }

@@ -93,7 +93,7 @@
   .learning-page { width: min(1040px, calc(100vw - 304px)); margin-left: 50%; transform: translateX(-50%); }
   .session-shell { width: min(940px, 100%); margin: 0 auto; }
   .progress-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
-  .progress { flex: 1; height: 8px; overflow: hidden; border-radius: var(--radius-full); background: var(--btn-secondary); }
+  .progress { flex: 1; height: 8px; overflow: hidden; border-radius: var(--radius-full); background: var(--surface-passive); }
   .progress span { display: block; height: 100%; background: var(--accent-main); transition: width 240ms ease; }
   .progress-row > strong { min-width: 52px; color: var(--text-muted); font-size: 0.88rem; font-variant-numeric: tabular-nums; text-align: right; }
   .card-stage { min-height: 0; }

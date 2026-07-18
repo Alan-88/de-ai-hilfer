@@ -426,7 +426,7 @@
   .debug-section { margin-top: 3rem; border-top: 1px solid var(--border-color); padding-top: 1rem; }
   .debug-section summary { font-size: 0.85rem; color: var(--text-muted); cursor: pointer; padding: 0.5rem 0; }
   .raw-markdown {
-    background: var(--btn-secondary);
+    background: var(--surface-passive);
     padding: 1rem;
     border-radius: var(--radius-sm);
     font-size: 0.8rem;

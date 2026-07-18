@@ -261,7 +261,7 @@
 
   .library-controls { position: sticky; top: -2rem; z-index: 80; display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: calc(100vw - var(--desktop-sidebar-width)); height: var(--desktop-top-chrome-height); margin-left: calc((100% - (100vw - var(--desktop-sidebar-width))) / 2); margin-bottom: 2rem; padding: 0 max(1rem, calc((100vw - var(--desktop-sidebar-width) - var(--page-content-width)) / 2 + 1rem)); border-bottom: 1px solid var(--border-color); background: var(--bg-color); }
   .header-toolbar { display: flex; flex: 0 0 auto; gap: 0.75rem; align-items: center; order: 2; }
-  .search-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 1.25rem; border-radius: var(--radius-full); width: 280px; }
+  .search-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 1.25rem; border-radius: var(--radius-full); width: 280px; background: var(--control-bg); }
   .search-bar input { background: transparent; width: 100%; color: var(--text-main); }
   .search-bar i { color: var(--text-muted); font-size: 1.1rem; }
 
@@ -280,8 +280,8 @@
   .empty-state i { font-size: 3rem; opacity: 0.4; }
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-  .global-loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.5); backdrop-filter: blur(2px); z-index: 2000; display: flex; align-items: center; justify-content: center; }
-  .spinner { width: 2.5rem; height: 2.5rem; border: 3px solid var(--btn-secondary); border-top-color: var(--accent-main); border-radius: 50%; animation: spin 1s linear infinite; }
+  .global-loading-overlay { position: fixed; inset: 0; background: color-mix(in srgb, var(--card-bg) 50%, transparent); backdrop-filter: blur(2px); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+  .spinner { width: 2.5rem; height: 2.5rem; border: 3px solid var(--surface-passive); border-top-color: var(--accent-main); border-radius: 50%; animation: spin 1s linear infinite; }
 
   @media (min-width: 769px) and (max-width: 1200px) {
     .library-controls { padding-right: 7.25rem; }

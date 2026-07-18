@@ -15,13 +15,17 @@
 [data-theme="canvas"] {
   --bg-color: #efebe2;
   --sidebar-bg: #e7e2d6;
-  --card-bg: #ffffff;
+  --card-bg: #faf7f1;
+  --control-bg: #fffdf9;
+  --surface-passive: #e9e4da;
   --text-main: #342e55;
   --text-muted: #8d8898;
   --accent-main: #e55c11;
   --accent-glow: rgba(229, 92, 17, 0.35);
-  --btn-secondary: #e3dfed;
-  --btn-secondary-text: #666175;
+  /* 次级按钮只表达交互；状态、轨道和骨架屏使用 --surface-passive。 */
+  --btn-secondary: color-mix(in srgb, var(--accent-main) 12%, var(--card-bg));
+  --btn-secondary-hover: color-mix(in srgb, var(--accent-main) 18%, var(--card-bg));
+  --btn-secondary-text: var(--text-main);
   --border-color: rgba(52, 46, 85, 0.08);
   --shadow-sm: 0 4px 20px rgba(52, 46, 85, 0.04);
   --shadow-hover: 0 8px 30px rgba(229, 92, 17, 0.12);
@@ -39,11 +43,14 @@
   --bg-color: #2e2a42;
   --sidebar-bg: #262238;
   --card-bg: #383350;
-  --text-main: #f4f0f8;
+  --control-bg: #383350;
+  --surface-passive: #4a4468;
+  --text-main: #eae5ef;
   --text-muted: #b8b3ce;
   --accent-main: #ff8a45;
   --accent-glow: rgba(255, 138, 69, 0.45);
   --btn-secondary: #4a4468;
+  --btn-secondary-hover: color-mix(in srgb, var(--btn-secondary) 90%, var(--text-main) 10%);
   --btn-secondary-text: #f4f0f8;
   --border-color: rgba(255, 255, 255, 0.06);
   --shadow-sm: 0 8px 30px rgba(0, 0, 0, 0.15);
@@ -195,7 +202,7 @@ button {
 }
 
 .btn-secondary:hover {
-  background: color-mix(in srgb, var(--btn-secondary) 90%, var(--text-main) 10%);
+  background: var(--btn-secondary-hover);
 }
 
 /* 消息面板 */
@@ -233,7 +240,7 @@ button {
 .skeleton-block {
   height: 1rem;
   border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, var(--btn-secondary) 25%, var(--card-bg) 50%, var(--btn-secondary) 75%);
+  background: linear-gradient(90deg, var(--surface-passive) 25%, var(--card-bg) 50%, var(--surface-passive) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.8s infinite linear;
 }

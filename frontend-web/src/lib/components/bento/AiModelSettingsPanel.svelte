@@ -611,7 +611,7 @@
     min-height: 2.5rem;
     border: 1px solid var(--border-color);
     border-radius: 10px;
-    background: var(--card-bg);
+    background: var(--control-bg);
     color: var(--text-main);
     padding: 0 0.75rem;
     font-size: 0.92rem;

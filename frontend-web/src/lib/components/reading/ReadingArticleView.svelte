@@ -297,48 +297,48 @@
   {:else if error || !article}
     <div class="article-state"><i class="ph ph-warning-circle"></i><span>{error || "文章不存在"}</span><a href="/learn/articles">返回文章目录</a></div>
   {:else}
-    <header class="page-head">
-      <div class="title-group">
-        <a class="back-button" href="/learn/articles" aria-label="返回文章目录"><i class="ph ph-arrow-left"></i></a>
-        <div class="title-copy">
-          <span>{folderPath}</span>
-          <div class="title-line">
-            <h1>{article.title}</h1>
-            <button class="edit-article" aria-label="编辑文章" title="编辑文章" onclick={() => editOpen = true}><i class="ph ph-pencil-simple"></i></button>
-          </div>
-        </div>
-      </div>
-      <div class="head-actions">
-        <div class="bookmark-menu">
-          <button class:active={showBookmarks} disabled={bookmarks.length === 0} onclick={() => showBookmarks = !showBookmarks}>
-            <i class="ph ph-bookmarks"></i><span class="bookmark-label">标记词</span><span class="bookmark-count">{bookmarks.length}</span>
-          </button>
-          {#if showBookmarks}
-            <div class="bookmark-popover">
-              {#each bookmarks as bookmark}
-                <div class="bookmark-row">
-                  <button class="bookmark-jump" onclick={() => jumpToBookmark(bookmark)}>
-                    <strong>{bookmark.form_of}</strong><span>原文：{bookmark.surface}</span>
-                  </button>
-                  <button
-                    class="bookmark-remove"
-                    aria-label={`取消标记 ${bookmark.surface}`}
-                    title="取消标记"
-                    disabled={bookmarkRemoving !== null}
-                    onclick={() => void removeBookmark(bookmark)}
-                  ><i class={bookmarkRemoving === bookmark.occurrence_index ? "ph ph-spinner-gap spin" : "ph ph-trash"}></i></button>
-                </div>
-              {/each}
-              {#if bookmarkError}<div class="bookmark-error" role="alert">{bookmarkError}</div>{/if}
-            </div>
-          {/if}
-        </div>
-        <button class="mobile-lookup" onclick={() => railOpen = true}><i class="ph ph-magnifying-glass"></i> 查词</button>
-      </div>
-    </header>
-
     <div class="reading-shell">
       <main class="article-pane">
+        <header class="page-head">
+          <div class="title-group">
+            <a class="back-button" href="/learn/articles" aria-label="返回文章目录"><i class="ph ph-arrow-left"></i></a>
+            <div class="title-copy">
+              <span>{folderPath}</span>
+              <div class="title-line">
+                <h1>{article.title}</h1>
+                <button class="edit-article" aria-label="编辑文章" title="编辑文章" onclick={() => editOpen = true}><i class="ph ph-pencil-simple"></i></button>
+              </div>
+            </div>
+          </div>
+          <div class="head-actions">
+            <div class="bookmark-menu">
+              <button class:active={showBookmarks} disabled={bookmarks.length === 0} onclick={() => showBookmarks = !showBookmarks}>
+                <i class="ph ph-bookmarks"></i><span class="bookmark-label">标记词</span><span class="bookmark-count">{bookmarks.length}</span>
+              </button>
+              {#if showBookmarks}
+                <div class="bookmark-popover">
+                  {#each bookmarks as bookmark}
+                    <div class="bookmark-row">
+                      <button class="bookmark-jump" onclick={() => jumpToBookmark(bookmark)}>
+                        <strong>{bookmark.form_of}</strong><span>原文：{bookmark.surface}</span>
+                      </button>
+                      <button
+                        class="bookmark-remove"
+                        aria-label={`取消标记 ${bookmark.surface}`}
+                        title="取消标记"
+                        disabled={bookmarkRemoving !== null}
+                        onclick={() => void removeBookmark(bookmark)}
+                      ><i class={bookmarkRemoving === bookmark.occurrence_index ? "ph ph-spinner-gap spin" : "ph ph-trash"}></i></button>
+                    </div>
+                  {/each}
+                  {#if bookmarkError}<div class="bookmark-error" role="alert">{bookmarkError}</div>{/if}
+                </div>
+              {/if}
+            </div>
+            <button class="mobile-lookup" onclick={() => railOpen = true}><i class="ph ph-magnifying-glass"></i> 查词</button>
+          </div>
+        </header>
+
         <article class="article-copy" oncontextmenu={handleArticleContextMenu}>
           {#each article.segments as segment, segmentIndex}
             {#if segment.kind === "text"}
@@ -391,14 +391,14 @@
 
 <style>
   :global(.page-container:has(.reading-view)) { max-width: 1320px; }
-  .reading-view { position: relative; display: grid; height: calc(100dvh - 4rem - 70px); grid-template-rows: auto minmax(0, 1fr); gap: 1rem; color: var(--text-main); }
+  .reading-view { position: relative; display: grid; height: calc(100dvh - 4rem - 70px); grid-template-rows: minmax(0, 1fr); color: var(--text-main); }
   .article-state { display: flex; min-height: calc(100dvh - 8rem); align-items: center; justify-content: center; gap: 0.65rem; color: var(--text-muted); }
   .article-state a { color: var(--accent-main); text-decoration: none; }
-  .page-head { display: flex; min-height: 62px; align-items: center; justify-content: space-between; gap: 1.5rem; padding-right: 88px; }
+  .page-head { position: sticky; top: 0; z-index: 5; display: flex; min-height: 75px; align-items: center; justify-content: space-between; gap: 1.5rem; padding: 0.65rem 1.35rem; border-bottom: 1px solid var(--border-color); background: var(--card-bg); }
   .title-group { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
   .title-copy { min-width: 0; }
   .title-line { display: flex; min-width: 0; align-items: center; gap: 0.35rem; }
-  .back-button { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid var(--border-color); border-radius: 50%; background: var(--card-bg); color: var(--text-main); text-decoration: none; box-shadow: var(--shadow-sm); }
+  .back-button { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid var(--border-color); border-radius: 50%; background: var(--control-bg); color: var(--text-main); text-decoration: none; box-shadow: var(--shadow-sm); }
   .title-group span { color: var(--text-muted); font-size: 0.72rem; font-weight: 750; letter-spacing: 0.04em; }
   h1 { margin: 0.15rem 0 0; overflow: hidden; font-size: 1.45rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
   .edit-article { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; margin-top: 0.12rem; border-radius: 50%; background: transparent; color: var(--text-muted); }
@@ -408,7 +408,7 @@
   .bookmark-menu > button, .mobile-lookup { display: flex; align-items: center; gap: 0.5rem; min-height: 40px; padding: 0 0.85rem; border: 1px solid var(--border-color); border-radius: var(--radius-full); background: var(--card-bg); color: var(--text-main); font-weight: 750; box-shadow: var(--shadow-sm); }
   .bookmark-menu > button.active { border-color: color-mix(in srgb, var(--accent-main) 55%, var(--border-color)); }
   .bookmark-menu > button:disabled { cursor: default; opacity: 0.55; }
-  .bookmark-menu > button .bookmark-count { display: grid; min-width: 21px; height: 21px; place-items: center; border-radius: 50%; background: var(--btn-secondary); color: var(--text-muted); font-size: 0.7rem; }
+  .bookmark-menu > button .bookmark-count { display: grid; min-width: 21px; height: 21px; place-items: center; border-radius: 50%; background: var(--surface-passive); color: var(--text-muted); font-size: 0.7rem; }
   .bookmark-popover { position: absolute; top: calc(100% + 0.6rem); right: 0; z-index: 230; width: 245px; padding: 0.45rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--card-bg); box-shadow: var(--shadow-hover); }
   .bookmark-row { display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: center; gap: 0.2rem; border-radius: 9px; }
   .bookmark-row:hover { background: var(--btn-secondary); }
@@ -421,8 +421,7 @@
   .bookmark-error { margin: 0.35rem 0.45rem 0.15rem; color: var(--danger-text, #b8453f); font-size: 0.7rem; line-height: 1.45; }
   .mobile-lookup { display: none; }
 
-  .head-actions { position: absolute; top: calc(62px + 1.85rem); right: calc(380px + 1rem); z-index: 4; }
-  .bookmark-menu > button { min-height: 36px; padding: 0 0.7rem; background: color-mix(in srgb, var(--card-bg) 92%, transparent); }
+  .bookmark-menu > button { min-height: 36px; padding: 0 0.7rem; background: var(--control-bg); }
 
   .reading-shell { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--card-bg); box-shadow: var(--shadow-sm); }
   .article-pane { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; }
@@ -439,8 +438,6 @@
   @media (max-width: 900px) {
     :global(.page-container:has(.reading-view)) { max-width: 100%; }
     .reading-view { height: auto; min-height: calc(100dvh - 4rem); }
-    .page-head { padding-right: 82px; }
-    .head-actions { position: static; }
     .reading-shell { display: block; min-height: calc(100dvh - 8.8rem); }
     .article-pane { min-height: calc(100dvh - 9rem); }
     .article-copy { width: min(680px, calc(100% - 2.5rem)); padding: 3.5rem 0; }
@@ -448,13 +445,14 @@
   }
 
   @media (max-width: 600px) {
-    .reading-view { min-height: calc(100dvh - 4rem); gap: 0.6rem; }
-    .page-head { min-height: 66px; align-items: center; padding: 0.55rem 0.65rem; }
-    .back-button { display: none; }
+    .reading-view { min-height: calc(100dvh - 4rem); }
+    .page-head { min-height: 66px; align-items: center; gap: 0.5rem; padding: 0.55rem 0.65rem; }
+    .title-group { gap: 0.6rem; }
+    .back-button { width: 34px; height: 34px; }
     .title-group span { font-size: 0.64rem; }
     h1 { font-size: 1.15rem; }
-    .bookmark-menu > button { padding: 0 0.65rem; font-size: 0.78rem; }
-    .bookmark-menu > button i { display: none; }
+    .bookmark-menu > button { padding: 0 0.55rem; font-size: 0.78rem; }
+    .bookmark-label { display: none; }
     .mobile-lookup { width: 40px; padding: 0; justify-content: center; gap: 0; color: transparent; font-size: 0; }
     .mobile-lookup i { color: var(--text-main); font-size: 1rem; }
     .reading-shell { border-radius: var(--radius-md); }

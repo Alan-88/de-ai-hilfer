@@ -72,7 +72,7 @@
   .word-preview { font-size: 0.92rem; color: var(--text-muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
   .status-badge { padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
-  .status-badge.new { background: var(--btn-secondary); color: var(--text-muted); }
+  .status-badge.new { background: var(--surface-passive); color: var(--text-muted); }
   .status-badge.learning { background: var(--success-bg); color: var(--success-text); }
   .status-badge.review { background: var(--warning-bg); color: var(--warning-text); }
 

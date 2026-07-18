@@ -158,7 +158,7 @@
     left: 0.3rem;
     width: 32px;
     height: 32px;
-    background: var(--card-bg);
+    background: var(--control-bg);
     border-radius: 50%;
     box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 0 0 1px var(--border-color);
     transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
