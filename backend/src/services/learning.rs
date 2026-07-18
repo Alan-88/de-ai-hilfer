@@ -19,10 +19,7 @@ use uuid::Uuid;
 
 const TARGET_RETENTION: f32 = 0.9;
 
-pub async fn get_session(
-    state: &AppState,
-    _limit_new_words: i64,
-) -> Result<LearningSessionResponse> {
+pub async fn get_session(state: &AppState) -> Result<LearningSessionResponse> {
     let now = Utc::now();
     let due_entries = learning::list_due_entries(&state.pool, now).await?;
 
@@ -60,21 +57,15 @@ pub async fn get_session(
     })
 }
 
-pub async fn start_session_v3(
-    state: &AppState,
-    limit_new_words: i64,
-) -> Result<LearningSessionV3Response> {
+pub async fn start_session_v3(state: &AppState) -> Result<LearningSessionV3Response> {
     let now = Utc::now();
     let due_entries = learning::list_due_entries(&state.pool, now).await?;
     let mut review_items = VecDeque::new();
     let mut new_items = VecDeque::new();
-    let new_limit = limit_new_words.max(0) as usize;
 
     for (progress, entry) in due_entries {
         if is_new_progress(&progress) {
-            if new_items.len() < new_limit {
-                new_items.push_back(session_item(progress, entry, LearningPhase::New, now));
-            }
+            new_items.push_back(session_item(progress, entry, LearningPhase::New, now));
         } else {
             review_items.push_back(session_item(progress, entry, LearningPhase::Review, now));
         }

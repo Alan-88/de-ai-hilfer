@@ -11,15 +11,13 @@ import type {
 
 const API_BASE = "/learning";
 
-export function getLearningSession(limitNewWords = 5) {
-  return apiFetch<LearningSessionResponse>(`${API_BASE}/session/v2?limit_new_words=${limitNewWords}`);
+export function getLearningSession() {
+  return apiFetch<LearningSessionResponse>(`${API_BASE}/session/v2`);
 }
 
-export function startLearningSession(limitNewWords = 5) {
+export function startLearningSession() {
   return apiFetch<LearningSessionV3Response>(`${API_BASE}/session/v3/start`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ limit_new_words: limitNewWords }),
   });
 }
 

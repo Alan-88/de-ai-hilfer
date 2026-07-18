@@ -110,6 +110,7 @@
   - 新词使用 `认识 / 模糊 / 不认识`。
   - 复习词使用 `认识 / 模糊 / 忘记`。
   - 日界线按业务日 `04:00` 处理。
+  - V3 启动已移除历史遗留的 `limit_new_words=5`：所有到期复习词与所有已明确加入、尚未首次学习的新词都会进入本轮，不再存在隐藏批次上限。
 - 新增 V3 接口：
   - `POST /api/v1/learning/session/v3/start`
   - `GET /api/v1/learning/session/v3/:session_id/next`

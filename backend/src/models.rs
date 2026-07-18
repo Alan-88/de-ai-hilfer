@@ -446,16 +446,6 @@ pub struct LearningSessionResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LearningStartSessionRequest {
-    #[serde(default = "default_learning_new_limit")]
-    pub limit_new_words: i64,
-}
-
-fn default_learning_new_limit() -> i64 {
-    5
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LearningReviewV3Request {
     pub rating: LearningRecallRating,
 }

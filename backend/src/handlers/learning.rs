@@ -1,21 +1,15 @@
 use crate::models::{
     LearningProgressMapResponse, LearningProgressView, LearningReviewV3Request,
-    LearningSessionResponse, LearningSessionV3Response, LearningStartSessionRequest,
-    LearningStatsResponse,
+    LearningSessionResponse, LearningSessionV3Response, LearningStatsResponse,
 };
 use crate::services::learning;
 use crate::state::AppState;
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     Json,
 };
 use serde::Deserialize;
-
-#[derive(Deserialize)]
-pub struct SessionQuery {
-    pub limit_new_words: Option<i64>,
-}
 
 #[derive(Deserialize)]
 pub struct ReviewBody {
@@ -24,9 +18,8 @@ pub struct ReviewBody {
 
 pub async fn get_session(
     State(state): State<AppState>,
-    Query(query): Query<SessionQuery>,
 ) -> Result<Json<LearningSessionResponse>, (StatusCode, String)> {
-    learning::get_session(&state, query.limit_new_words.unwrap_or(5))
+    learning::get_session(&state)
         .await
         .map(Json)
         .map_err(internal_error)
@@ -44,9 +37,8 @@ pub async fn add_word(
 
 pub async fn start_session_v3(
     State(state): State<AppState>,
-    Json(body): Json<LearningStartSessionRequest>,
 ) -> Result<Json<LearningSessionV3Response>, (StatusCode, String)> {
-    learning::start_session_v3(&state, body.limit_new_words)
+    learning::start_session_v3(&state)
         .await
         .map(Json)
         .map_err(internal_error)
