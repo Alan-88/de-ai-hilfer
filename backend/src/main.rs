@@ -29,8 +29,9 @@ async fn main() -> anyhow::Result<()> {
     // 初始化日志
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "de_ai_hilfer=debug,tower_http=debug,axum=trace".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                "server=debug,de_ai_hilfer=debug,tower_http=debug,axum=trace".into()
+            }),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();

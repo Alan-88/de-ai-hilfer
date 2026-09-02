@@ -1,24 +1,14 @@
 use crate::models::{DictionaryRaw, QualityMode};
-use crate::services::analysis_grounded_model_a::ModelAOutput;
+use crate::services::analysis_grounded_ab_cache::GroundedAbCache;
+use crate::services::analysis_grounded_generation::{generate_model_a, generate_stage2_markdown};
 use crate::services::analysis_grounded_runtime::{
-    build_grounded_document, generate_model_a, generate_stage2_markdown, structure_and_assemble,
-    GroundedAnalysis,
+    build_grounded_document, structure_and_assemble, GroundedAnalysis,
 };
 use crate::services::analysis_structure_retry::StructureRetryPolicy;
 use crate::services::analyze_runtime::primary_model_for;
 use crate::state::AppState;
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use std::time::Instant;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GroundedAbCache {
-    pub query_text: String,
-    pub dictionary_facts: Option<String>,
-    pub model_a_output: ModelAOutput,
-    pub stage2_markdown: String,
-    pub stage2_model: String,
-}
 
 pub async fn prepare_grounded_ab_strict_primary(
     state: &AppState,

@@ -1,9 +1,11 @@
 pub mod agent_api;
 pub mod ai_model_resolver;
 pub mod ai_settings;
+pub mod analysis_grounded_ab_cache;
 pub mod analysis_grounded_assembly;
 pub mod analysis_grounded_backfill;
 pub mod analysis_grounded_facts;
+pub mod analysis_grounded_generation;
 pub mod analysis_grounded_model_a;
 pub mod analysis_grounded_options;
 pub mod analysis_grounded_prompt;

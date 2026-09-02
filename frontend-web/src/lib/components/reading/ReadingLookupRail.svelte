@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { resolveStructuredAnalysis, type StructuredAnalysis } from "$lib/analysis/structuredAnalysis";
+  import { markdownToPlainText, resolveStructuredAnalysis, type StructuredAnalysis } from "$lib/analysis/structuredAnalysis";
   import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
   import LearningAnalysisContent from "$lib/components/bento/LearningAnalysisContent.svelte";
   import { addWordToLearning, getLearningProgress } from "$lib/learningApi";
   import { analyzeWord, getEntryDetail, getSuggestions } from "$lib/queryApi";
-  import type { AnalyzeResponse, EntryDetailResponse, GrammarBranch } from "$lib/types";
+  import type { AnalyzeResponse, DBSuggestion, EntryDetailResponse, GrammarBranch } from "$lib/types";
 
   let { selectedKey, selectedEntryId, open = false, onClose } = $props<{
     selectedKey: string;
@@ -25,6 +25,10 @@
   let learningIdsRequest: Promise<Set<number>> | null = null;
   let activeGrammarBranch = $state<GrammarBranch | null>(null);
   let popoverTriggerRect = $state<DOMRect | null>(null);
+  let suggestions = $state<DBSuggestion[]>([]);
+  let suggestionsQuery = $state("");
+  let showSuggestions = $state(false);
+  let suggestionRequestId = 0;
 
   $effect(() => {
     if (selectedEntryId) void showEntry(selectedEntryId, selectedKey);
@@ -34,6 +38,7 @@
 
   function clearEntry() {
     requestId += 1;
+    clearSuggestions();
     query = "";
     entry = null;
     analysis = null;
@@ -58,6 +63,7 @@
 
   async function showEntry(entryId: number, key: string) {
     const currentRequest = ++requestId;
+    clearSuggestions();
     query = key;
     activeGrammarBranch = null;
     learningAdded = false;
@@ -85,6 +91,7 @@
 
   function showUnavailable(key: string) {
     requestId += 1;
+    clearSuggestions();
     query = key;
     entry = null;
     analysis = null;
@@ -92,16 +99,52 @@
     error = `${key} 对应的完整词条已不可用`;
   }
 
-  async function submitSearch() {
+  async function fetchLookupSuggestions() {
     const term = query.trim();
+    const currentRequest = ++suggestionRequestId;
+    if (term.length < 2) {
+      suggestions = [];
+      suggestionsQuery = "";
+      showSuggestions = false;
+      return;
+    }
+
+    try {
+      const response = await getSuggestions(term);
+      if (currentRequest !== suggestionRequestId || query.trim() !== term) return;
+      suggestions = response.suggestions;
+      suggestionsQuery = term;
+      showSuggestions = suggestions.length > 0;
+    } catch {
+      if (currentRequest !== suggestionRequestId) return;
+      suggestions = [];
+      suggestionsQuery = term;
+      showSuggestions = false;
+    }
+  }
+
+  function clearSuggestions() {
+    suggestionRequestId += 1;
+    suggestions = [];
+    suggestionsQuery = "";
+    showSuggestions = false;
+  }
+
+  async function submitSearch(selectedCandidate?: DBSuggestion) {
+    const term = (selectedCandidate?.query_text ?? query).trim();
     if (!term) return;
     const currentRequest = ++requestId;
+    suggestionRequestId += 1;
+    showSuggestions = false;
     loading = true;
     error = "";
     learningAdded = false;
     try {
-      const suggestions = await getSuggestions(term);
-      const candidate = suggestions.suggestions[0];
+      const candidate = selectedCandidate ?? (
+        suggestionsQuery === term && suggestions.length > 0
+          ? suggestions[0]
+          : (await getSuggestions(term)).suggestions[0]
+      );
       if (!candidate) throw new Error("未找到可靠候选");
       if (candidate.entry_id > 0) {
         const next = cache.get(candidate.entry_id) ?? await getEntryDetail(candidate.entry_id);
@@ -114,6 +157,8 @@
         entry = next;
       }
       query = entry.query_text;
+      suggestions = [];
+      suggestionsQuery = "";
       analysis = resolveStructuredAnalysis(entry.analysis_markdown, entry.structured_analysis, entry.query_text);
       if (!analysis) throw new Error("词条缺少结构化释义");
       const resolvedEntry = entry;
@@ -145,15 +190,51 @@
     activeGrammarBranch = branch;
     popoverTriggerRect = triggerRect;
   }
+
+  function handleSearchFocusOut(event: FocusEvent) {
+    const next = event.relatedTarget;
+    if (!(next instanceof Node) || !(event.currentTarget instanceof HTMLElement) || !event.currentTarget.contains(next)) {
+      showSuggestions = false;
+    }
+  }
 </script>
 
 <aside class="lookup-rail" class:mobile-open={open} aria-label="查词栏">
   <header class="lookup-head">
-    <form onsubmit={(event) => { event.preventDefault(); void submitSearch(); }}>
-      <i class="ph ph-magnifying-glass"></i>
-      <input bind:value={query} aria-label="查询单词" autocomplete="off" />
-      <button type="submit" aria-label="查询"><i class="ph ph-arrow-right"></i></button>
-    </form>
+    <div class="lookup-search" onfocusout={handleSearchFocusOut}>
+      <form onsubmit={(event) => { event.preventDefault(); void submitSearch(); }}>
+        <i class="ph ph-magnifying-glass"></i>
+        <input
+          bind:value={query}
+          aria-label="查询单词"
+          aria-expanded={showSuggestions}
+          aria-controls="reading-lookup-suggestions"
+          autocomplete="off"
+          oninput={() => void fetchLookupSuggestions()}
+          onfocus={() => {
+            if (suggestionsQuery === query.trim() && suggestions.length > 0) showSuggestions = true;
+            else void fetchLookupSuggestions();
+          }}
+          onkeydown={(event) => { if (event.key === "Escape") showSuggestions = false; }}
+        />
+        <button type="submit" aria-label="查询"><i class="ph ph-arrow-right"></i></button>
+      </form>
+
+      {#if showSuggestions && suggestions.length > 0}
+        <div id="reading-lookup-suggestions" class="lookup-suggestions">
+          {#each suggestions as suggestion}
+            <button type="button" onclick={() => void submitSearch(suggestion)}>
+              <i class="ph ph-magnifying-glass"></i>
+              <span>
+                <strong>{suggestion.query_text}</strong>
+                <small>{markdownToPlainText(suggestion.preview)}</small>
+              </span>
+              {#if suggestion.entry_id <= 0}<em>生成</em>{/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
     <button class="mobile-close" onclick={onClose} aria-label="关闭查词栏"><i class="ph ph-x"></i></button>
   </header>
 
@@ -197,12 +278,22 @@
 
 <style>
   .lookup-rail { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; border-left: 1px solid var(--border-color); background: color-mix(in srgb, var(--card-bg) 78%, var(--bg-color)); }
-  .lookup-head { display: flex; align-items: center; gap: 0.55rem; padding: 1rem; border-bottom: 1px solid var(--border-color); }
-  form { display: flex; flex: 1; align-items: center; gap: 0.5rem; min-width: 0; height: 42px; padding: 0 0.45rem 0 0.8rem; border: 1px solid var(--border-color); border-radius: var(--radius-full); background: var(--card-bg); box-shadow: var(--shadow-sm); }
+  .lookup-head { position: relative; z-index: 5; display: flex; align-items: center; gap: 0.55rem; padding: 1rem; border-bottom: 1px solid var(--border-color); }
+  .lookup-search { position: relative; min-width: 0; flex: 1; }
+  form { display: flex; width: 100%; align-items: center; gap: 0.5rem; min-width: 0; height: 42px; padding: 0 0.45rem 0 0.8rem; border: 1px solid var(--border-color); border-radius: var(--radius-full); background: var(--card-bg); box-shadow: var(--shadow-sm); }
   form > i { color: var(--text-muted); }
   input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--text-main); font: inherit; font-weight: 700; }
   form button, .mobile-close { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: var(--accent-main); color: white; }
   .mobile-close { display: none; flex: 0 0 auto; background: var(--btn-secondary); color: var(--text-main); }
+  .lookup-suggestions { position: absolute; top: calc(100% + 0.45rem); right: 0; left: 0; display: grid; max-height: min(330px, 48vh); overflow-y: auto; padding: 0.38rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--card-bg); box-shadow: var(--shadow-hover); }
+  .lookup-suggestions > button { display: grid; min-height: 54px; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 0.55rem; padding: 0.55rem 0.6rem; border-radius: 9px; background: transparent; color: var(--text-main); text-align: left; }
+  .lookup-suggestions > button:hover, .lookup-suggestions > button:focus-visible { background: var(--btn-secondary); outline: none; }
+  .lookup-suggestions > button > i { color: var(--text-muted); }
+  .lookup-suggestions span { display: grid; min-width: 0; gap: 0.12rem; }
+  .lookup-suggestions strong, .lookup-suggestions small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lookup-suggestions strong { font-size: 0.84rem; }
+  .lookup-suggestions small { color: var(--text-muted); font-size: 0.7rem; }
+  .lookup-suggestions em { padding: 0.22rem 0.4rem; border-radius: var(--radius-full); background: color-mix(in srgb, var(--accent-main) 10%, transparent); color: var(--accent-main); font-size: 0.6rem; font-style: normal; font-weight: 850; }
   .lookup-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 1.35rem; overscroll-behavior: contain; }
   .word-head { display: grid; gap: 0.65rem; padding: 0.35rem 0 1.2rem; }
   .word-title-row, .word-meta-row { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 0.8rem; }
