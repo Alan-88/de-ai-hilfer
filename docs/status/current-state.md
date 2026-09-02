@@ -18,6 +18,19 @@
 
 ## 最新收口状态（2026-09-02）
 
+### 架构边界收口（2026-09-02）
+
+- 已建立可完整回退的基线分支 `codex/pre-architecture-consolidation-20260902`，结构调整在独立分支 `codex/architecture-consolidation` 分批提交。
+- 本轮目标是纠正没有职责证据的边界，而不是减少文件数量：
+  - 固定的 grounded 模型参数已归还 generation/runtime 所有者，删除 `analysis_grounded_options`。
+  - 失去旧短语职责后只剩转发的 `stream_analyze_runtime` 已删除；结果类型与 meta helper 分别回到实际所有者。
+  - Stage A/B/C prompt 构造已集中到 `analysis_grounded_prompt`，删除单函数 `analysis_structure_prompt`。
+  - 环境模型选择映射已归入统一 `ai_model_resolver`，删除 `analyze_runtime` 残余薄层。
+  - 已删除无入口的旧前端学习、追问、Markdown、评分和词库详情组件链；现行组件未改动。
+- 明确保留拥有独立算法、状态或复用证据的边界：grounded A/B cache、generation、Model C retry/quality/transform、候选排序、字典 raw-entry 合并、预热选择、阅读内容解析以及当前活跃 UI 子组件。
+- `analyze.rs / analyze_stream.rs` 与 `follow_up.rs / follow_up_stream.rs` 仍存在重复编排，但同时牵涉缓存、流取消、持久化和 fallback 语义；不作为简单文件合并处理，后续若调整应单独建回归批次。
+- 当前累计净变化为 `82 insertions / 1134 deletions`；Rust 34 项单元测试、`cargo check --all-targets`、前端 `svelte-check` 与生产构建均通过。
+
 ### 文章学习正式链路（2026-07-17）
 
 - 实验页已迁为正式入口：
