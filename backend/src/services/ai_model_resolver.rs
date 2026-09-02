@@ -1,5 +1,7 @@
 use crate::ai::AiClient;
-use crate::models::{AiModelOverride, AiProviderProfileRecord, AiTaskModelSettingRecord};
+use crate::models::{
+    AiModelOverride, AiProviderProfileRecord, AiTaskModelSettingRecord, QualityMode,
+};
 use crate::repositories::ai_settings;
 use crate::state::AppState;
 use anyhow::{anyhow, Result};
@@ -17,6 +19,20 @@ pub struct ResolvedAiModel {
     pub client: AiClient,
     pub model: String,
     pub persisted: bool,
+}
+
+pub fn primary_model_for(state: &AppState, quality_mode: QualityMode) -> &str {
+    match quality_mode {
+        QualityMode::Default => state.config.ai_models.analyze.as_str(),
+        QualityMode::Pro => state.config.ai_models.analyze_pro.as_str(),
+    }
+}
+
+pub fn fallback_model_for(state: &AppState, quality_mode: QualityMode) -> &str {
+    match quality_mode {
+        QualityMode::Default => state.config.ai_models.fallback_fast.as_str(),
+        QualityMode::Pro => state.config.ai_models.fallback_pro.as_str(),
+    }
 }
 
 pub async fn resolve_task_model(state: &AppState, task: AiModelTask) -> Result<ResolvedAiModel> {

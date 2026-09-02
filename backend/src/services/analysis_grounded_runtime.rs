@@ -3,7 +3,7 @@ use crate::models::{
     AiModelOverride, AnalysisDocument, DictionaryRaw, QualityMode, StructuredAnalysisDocument,
 };
 use crate::services::ai_model_resolver::{
-    resolve_task_model, resolve_task_model_with_override, AiModelTask,
+    fallback_model_for, resolve_task_model, resolve_task_model_with_override, AiModelTask,
 };
 use crate::services::analysis_grounded_ab_cache::{
     get_grounded_ab_cache, put_grounded_ab_cache, remove_grounded_ab_cache, GroundedAbCache,
@@ -24,7 +24,6 @@ use crate::services::analysis_structure_seed::build_structure_seed;
 use crate::services::analysis_structure_transform::{
     merge_structured_with_seed, normalize_structured_analysis,
 };
-use crate::services::analyze_runtime::fallback_model_for;
 use crate::services::analyze_support::extract_json_with_report;
 use crate::services::dictionary_render::build_dictionary_excerpt;
 use crate::services::stream_response::sse_delta;

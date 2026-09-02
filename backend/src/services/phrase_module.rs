@@ -4,9 +4,8 @@ use crate::models::{
     DeletePhraseModuleRequest, PhraseUsageModule,
 };
 use crate::repositories::{follow_up, knowledge};
-use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
+use crate::services::ai_model_resolver::{fallback_model_for, resolve_task_model, AiModelTask};
 use crate::services::analysis_preview::{analysis_markdown, structured_analysis};
-use crate::services::analyze_runtime::fallback_model_for;
 use crate::services::analyze_support::extract_json;
 use crate::services::query_resolution::attached_phrase_modules_from_analysis;
 use crate::state::AppState;

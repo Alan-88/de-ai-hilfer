@@ -1,11 +1,11 @@
 use crate::models::{DictionaryRaw, QualityMode};
+use crate::services::ai_model_resolver::primary_model_for;
 use crate::services::analysis_grounded_ab_cache::GroundedAbCache;
 use crate::services::analysis_grounded_generation::{generate_model_a, generate_stage2_markdown};
 use crate::services::analysis_grounded_runtime::{
     build_grounded_document, structure_and_assemble, GroundedAnalysis,
 };
 use crate::services::analysis_structure_retry::StructureRetryPolicy;
-use crate::services::analyze_runtime::primary_model_for;
 use crate::state::AppState;
 use anyhow::Result;
 use std::time::Instant;
