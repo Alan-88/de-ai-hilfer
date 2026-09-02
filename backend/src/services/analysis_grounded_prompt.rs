@@ -3,6 +3,7 @@ use crate::services::analysis_grounded_model_a::ModelAOutput;
 
 const DEFAULT_MODEL_A_PROMPT: &str = include_str!("../../config/prompts/model_a.md");
 const DEFAULT_STAGE2_PROMPT: &str = include_str!("../../config/prompts/stage2.md");
+const DEFAULT_STRUCTURE_PROMPT: &str = include_str!("../../config/prompts/structure.md");
 
 pub fn build_model_a_prompt(prompts: &PromptConfig) -> String {
     let prompt = prompt_or_default(&prompts.model_a_prompt, DEFAULT_MODEL_A_PROMPT);
@@ -16,6 +17,10 @@ pub fn build_model_a_user_payload(word: &str, dictionary_facts: Option<&str>) ->
 
 pub fn build_stage2_prompt(prompts: &PromptConfig) -> String {
     prompt_or_default(&prompts.stage2_prompt, DEFAULT_STAGE2_PROMPT).to_string()
+}
+
+pub fn build_structure_prompt(prompts: &PromptConfig) -> String {
+    prompt_or_default(&prompts.structure_prompt, DEFAULT_STRUCTURE_PROMPT).to_string()
 }
 
 pub fn build_stage2_user_payload(

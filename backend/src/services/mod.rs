@@ -11,7 +11,6 @@ pub mod analysis_grounded_prompt;
 pub mod analysis_grounded_runtime;
 pub mod analysis_grounded_stage2_quality;
 pub mod analysis_preview;
-pub mod analysis_structure_prompt;
 pub mod analysis_structure_quality;
 pub mod analysis_structure_retry;
 pub mod analysis_structure_seed;

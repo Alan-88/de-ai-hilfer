@@ -14,6 +14,7 @@ use crate::services::analysis_grounded_generation::{
     generate_model_a, generate_stage2_markdown, stream_stage2_markdown,
 };
 use crate::services::analysis_grounded_model_a::ModelAOutput;
+use crate::services::analysis_grounded_prompt::build_structure_prompt;
 use crate::services::analysis_grounded_stage2_quality::validate_stage2_markdown_completeness;
 use crate::services::analysis_structure_quality::validate_structured_capture;
 use crate::services::analysis_structure_retry::{
@@ -266,8 +267,7 @@ pub(crate) async fn structure_and_assemble(
 ) -> Result<(StructuredAnalysisDocument, String)> {
     validate_stage2_markdown_completeness(markdown)?;
 
-    let structure_prompt =
-        crate::services::analysis_structure_prompt::build_structure_prompt(&state.prompts);
+    let structure_prompt = build_structure_prompt(&state.prompts);
     let preliminary_parse = build_structure_seed(target_query, markdown);
     let structure_user_payload = serde_json::json!({
         "query": target_query,
