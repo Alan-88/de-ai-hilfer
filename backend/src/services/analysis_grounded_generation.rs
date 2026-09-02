@@ -10,7 +10,6 @@ use crate::services::analysis_grounded_prompt::{
     build_stage2_user_payload,
 };
 use crate::services::analyze_support::extract_json;
-use crate::services::stream_analyze_runtime::StreamedMarkdown;
 use crate::services::stream_generation::{
     request_and_stream_model, StreamModelOutcome, HARD_FAILURE_RETRY_CYCLES,
     HARD_FAILURE_RETRY_DELAY_MS,
@@ -19,6 +18,11 @@ use crate::state::AppState;
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
+
+pub(crate) struct StreamedMarkdown {
+    pub markdown: String,
+    pub model: String,
+}
 
 fn model_a_chat_options() -> AiChatOptions {
     AiChatOptions {

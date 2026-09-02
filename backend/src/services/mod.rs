@@ -49,6 +49,5 @@ pub mod query_resolution;
 pub mod query_suggestions;
 pub mod reading;
 pub mod reading_content;
-pub mod stream_analyze_runtime;
 pub mod stream_generation;
 pub mod stream_response;

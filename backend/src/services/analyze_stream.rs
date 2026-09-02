@@ -1,17 +1,18 @@
 use crate::models::{
     AnalyzeRequest, AnalyzeResponse, FollowUpItem, NewKnowledgeEntry, QualityMode,
+    StreamMetaPayload,
 };
 use crate::repositories::{dictionary, dictionary_lexemes, knowledge};
 use crate::services::ai_model_resolver::{resolve_task_model_with_override, AiModelTask};
 use crate::services::analysis_grounded_runtime::stream_grounded_analysis;
+use crate::services::analysis_preview::analysis_markdown;
 use crate::services::dictionary_facts::dictionary_pos;
 use crate::services::dictionary_tags::build_tags;
 use crate::services::query_inference::is_form_reference_entry;
 use crate::services::query_resolution::{
     attached_phrase_modules_from_analysis, build_no_candidate_analysis,
 };
-use crate::services::stream_analyze_runtime::{cached_analysis_markdown, send_meta};
-use crate::services::stream_response::sse_complete;
+use crate::services::stream_response::{sse_complete, sse_meta};
 use crate::state::AppState;
 use anyhow::Result;
 use serde_json::Value;
@@ -48,7 +49,7 @@ pub async fn stream_analyze(
             tx.send(sse_complete(&AnalyzeResponse {
                 entry_id: entry.id,
                 query_text: entry.query_text.clone(),
-                analysis_markdown: cached_analysis_markdown(&entry.analysis),
+                analysis_markdown: analysis_markdown(&entry.analysis),
                 structured_analysis: crate::services::analysis_preview::structured_analysis(
                     &entry.analysis,
                 ),
@@ -130,7 +131,7 @@ pub async fn stream_analyze(
             tx.send(sse_complete(&AnalyzeResponse {
                 entry_id: entry.id,
                 query_text: entry.query_text.clone(),
-                analysis_markdown: cached_analysis_markdown(&entry.analysis),
+                analysis_markdown: analysis_markdown(&entry.analysis),
                 structured_analysis: crate::services::analysis_preview::structured_analysis(
                     &entry.analysis,
                 ),
@@ -299,4 +300,22 @@ pub async fn stream_analyze(
 fn is_stream_canceled(err: &anyhow::Error) -> bool {
     err.to_string()
         .contains("stream analyze canceled by client")
+}
+
+fn send_meta(
+    tx: &UnboundedSender<String>,
+    kind: &str,
+    model: &str,
+    quality_mode: QualityMode,
+    source: &str,
+    fallback: bool,
+) {
+    tx.send(sse_meta(&StreamMetaPayload {
+        kind: kind.to_string(),
+        model: model.to_string(),
+        quality_mode,
+        source: source.to_string(),
+        fallback,
+    }))
+    .ok();
 }
