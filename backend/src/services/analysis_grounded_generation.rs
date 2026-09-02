@@ -1,11 +1,10 @@
-use crate::ai::{is_hard_failure, AiClient};
+use crate::ai::{is_hard_failure, AiChatOptions, AiClient};
 use crate::models::{AiModelOverride, QualityMode};
 use crate::services::ai_model_resolver::{resolve_task_model_with_override, AiModelTask};
 use crate::services::analysis_grounded_facts::{
     build_light_dictionary_facts_payload, load_raw_rows_by_headword,
 };
 use crate::services::analysis_grounded_model_a::{normalize_model_a_output, ModelAOutput};
-use crate::services::analysis_grounded_options::{model_a_chat_options, stage2_chat_options};
 use crate::services::analysis_grounded_prompt::{
     build_model_a_prompt, build_model_a_user_payload, build_stage2_prompt,
     build_stage2_user_payload,
@@ -20,6 +19,22 @@ use crate::state::AppState;
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
+
+fn model_a_chat_options() -> AiChatOptions {
+    AiChatOptions {
+        temperature: 0.1,
+        max_tokens: Some(2200),
+        timeout: Duration::from_secs(90),
+    }
+}
+
+fn stage2_chat_options(_quality_mode: QualityMode) -> AiChatOptions {
+    AiChatOptions {
+        temperature: 0.2,
+        max_tokens: Some(1800),
+        timeout: Duration::from_secs(90),
+    }
+}
 
 pub(crate) async fn generate_model_a(
     state: &AppState,

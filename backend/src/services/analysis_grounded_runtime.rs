@@ -1,4 +1,4 @@
-use crate::ai::AiClient;
+use crate::ai::{AiChatOptions, AiClient};
 use crate::models::{
     AiModelOverride, AnalysisDocument, DictionaryRaw, QualityMode, StructuredAnalysisDocument,
 };
@@ -14,7 +14,6 @@ use crate::services::analysis_grounded_generation::{
     generate_model_a, generate_stage2_markdown, stream_stage2_markdown,
 };
 use crate::services::analysis_grounded_model_a::ModelAOutput;
-use crate::services::analysis_grounded_options::structure_chat_options;
 use crate::services::analysis_grounded_stage2_quality::validate_stage2_markdown_completeness;
 use crate::services::analysis_structure_quality::validate_structured_capture;
 use crate::services::analysis_structure_retry::{
@@ -30,7 +29,16 @@ use crate::services::dictionary_render::build_dictionary_excerpt;
 use crate::services::stream_response::sse_delta;
 use crate::state::AppState;
 use anyhow::{anyhow, Result};
+use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
+
+fn structure_chat_options() -> AiChatOptions {
+    AiChatOptions {
+        temperature: 0.0,
+        max_tokens: None,
+        timeout: Duration::from_secs(90),
+    }
+}
 
 pub struct GroundedAnalysis {
     pub analysis: AnalysisDocument,
