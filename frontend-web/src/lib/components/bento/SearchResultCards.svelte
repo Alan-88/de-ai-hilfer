@@ -23,6 +23,7 @@
     result,
     isStreaming = false,
     isAddingToLearning = false,
+    isLearningAdded = false,
     isUpdatingPhraseAttachment = false,
     isAddingPhraseModule = false,
     recentItems = [],
@@ -40,6 +41,7 @@
     result: AnalyzeResponse;
     isStreaming?: boolean;
     isAddingToLearning?: boolean;
+    isLearningAdded?: boolean;
     isUpdatingPhraseAttachment?: boolean;
     isAddingPhraseModule?: boolean;
     recentItems?: RecentItem[];
@@ -314,9 +316,9 @@
           <i class="ph ph-sliders-horizontal"></i>
         </button>
       </div>
-      <button class="btn-primary learn-btn" onclick={onAddToLearning} disabled={result.entry_id <= 0 || isStreaming || isAddingToLearning}>
-        <i class="ph-fill ph-star"></i>
-        <span>{isAddingToLearning ? "..." : "加入学习"}</span>
+      <button class="btn-primary learn-btn" class:added={isLearningAdded} onclick={onAddToLearning} disabled={result.entry_id <= 0 || isStreaming || isAddingToLearning || isLearningAdded}>
+        <i class={isLearningAdded ? "ph ph-check" : "ph-fill ph-star"}></i>
+        <span>{isAddingToLearning ? "..." : isLearningAdded ? "已加入" : "加入学习"}</span>
       </button>
     </div>
   </div>
@@ -636,6 +638,7 @@
     box-shadow: 0 4px 15px var(--accent-glow);
   }
   .learn-btn { padding: 0.5rem 1rem; font-size: 0.85rem; }
+  .learn-btn.added { background: color-mix(in srgb, var(--accent-main) 72%, #4f8665); cursor: default; }
 
   .custom-regenerate-card {
     display: flex;

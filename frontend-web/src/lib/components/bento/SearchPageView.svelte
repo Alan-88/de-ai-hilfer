@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { browser } from "$app/environment";
   import { fade, slide } from "svelte/transition";
-  import { addWordToLearning } from "$lib/learningApi";
+  import { addWordToLearning, getLearningProgress } from "$lib/learningApi";
   import {
     addPhraseModuleToEntry,
     analyzeWord,
@@ -38,6 +38,7 @@
 
   // 本地 UI 状态
   let recentItems = $state<RecentItem[]>([]);
+  let learningEntryIds = $state<Set<number>>(new Set());
   let suggestions = $state<DBSuggestion[]>([]);
   let showSuggestions = $state(false);
   let isAddingToLearning = $state(false);
@@ -232,6 +233,15 @@
     recentItems = await getRecentEntries();
   }
 
+  async function fetchLearningProgress() {
+    try {
+      const { progress } = await getLearningProgress();
+      learningEntryIds = new Set(Object.keys(progress).map(Number));
+    } catch {
+      learningEntryIds = new Set();
+    }
+  }
+
   async function fetchAiSettings() {
     try {
       aiSettings = await getAiSettings();
@@ -301,6 +311,7 @@
     isAddingToLearning = true;
     try {
       await addWordToLearning($s.result.entry_id);
+      learningEntryIds = new Set([...learningEntryIds, $s.result.entry_id]);
     } catch (e) {
       s.setError("加入学习失败");
     } finally {
@@ -421,10 +432,12 @@
   onMount(() => {
     hasMounted = true;
     void fetchRecentItems();
+    void fetchLearningProgress();
     void fetchAiSettings();
   });
 
   const isSearching = $derived(Boolean($s.result || $s.isLoading || $s.error || advancedPending));
+  const isCurrentWordInLearning = $derived(Boolean($s.result && learningEntryIds.has($s.result.entry_id)));
   // 派生：是否处于专注搜索状态（唤起建议面板时）
   const isSearchFocusing = $derived(showSuggestions && (suggestions.length > 0 || (!$s.query.trim() && recentItems.length > 0)));
   const actionModelOptions = $derived(buildActionModelOptions(aiSettings));
@@ -571,6 +584,7 @@
         result={$s.result}
         isStreaming={$s.isStreaming}
         isAddingToLearning={isAddingToLearning}
+        isLearningAdded={isCurrentWordInLearning}
         isUpdatingPhraseAttachment={isUpdatingPhraseAttachment}
         isAddingPhraseModule={isAddingPhraseModule}
         recentItems={recentItems}

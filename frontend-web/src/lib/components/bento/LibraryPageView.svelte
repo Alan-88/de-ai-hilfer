@@ -242,9 +242,12 @@
 
 <LibraryEntryDetailPanel 
   entry={selectedEntryDetail} 
+  learningProgress={selectedEntryDetail ? progressMap[selectedEntryDetail.entry_id] ?? null : null}
+  isAddingToLearning={selectedEntryDetail ? addingEntryId === selectedEntryDetail.entry_id : false}
   isDeleting={isDeleting}
   onClose={() => selectedEntryDetail = null}
   onDelete={handleDelete}
+  onAddToLearning={handleQuickAdd}
   onViewInSearch={handleViewInSearch}
 />
 
