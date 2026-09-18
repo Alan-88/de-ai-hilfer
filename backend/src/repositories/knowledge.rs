@@ -64,6 +64,27 @@ pub async fn find_by_query_text_exact(
     .await
 }
 
+pub async fn find_by_lexeme_ids(
+    pool: &DbPool,
+    lexeme_ids: &[i64],
+) -> Result<Vec<KnowledgeEntry>, sqlx::Error> {
+    if lexeme_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    sqlx::query_as::<_, KnowledgeEntry>(
+        r#"
+        SELECT id, query_text, lexeme_id, prototype, entry_type, analysis, tags, aliases, created_at, updated_at
+        FROM knowledge_entries
+        WHERE lexeme_id = ANY($1)
+        ORDER BY lexeme_id, created_at ASC, id ASC
+        "#,
+    )
+    .bind(lexeme_ids)
+    .fetch_all(pool)
+    .await
+}
+
 pub async fn find_by_id(
     pool: &DbPool,
     entry_id: i64,

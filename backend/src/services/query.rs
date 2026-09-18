@@ -1,6 +1,6 @@
 use crate::models::{
-    AnalyzeResponse, DBSuggestion, IntelligentSearchRequest, LibraryEntriesPageResponse,
-    LibraryQueryTab, RecentItem, StatusResponse, SuggestionResponse,
+    AnalyzeResponse, DBSuggestion, IntelligentSearchRequest, KnowledgeEntry, LexemeCandidate,
+    LibraryEntriesPageResponse, LibraryQueryTab, RecentItem, StatusResponse, SuggestionResponse,
 };
 use crate::repositories::{dictionary, dictionary_lexemes, knowledge};
 use crate::services::analysis_preview::{
@@ -12,7 +12,7 @@ use crate::services::query_inference::{
     infer_headword_with_hint, is_form_reference_analysis, is_form_reference_entry,
     normalize_for_match, run_compact_with_source, should_bypass_knowledge_hit,
 };
-use crate::services::query_suggestions::{rank_candidate, sort_and_limit};
+use crate::services::query_suggestions::{rank_candidate, sort_and_limit, RankedSuggestion};
 use crate::state::AppState;
 use anyhow::Result;
 use serde_json::Value;
@@ -126,6 +126,21 @@ pub async fn get_suggestions(state: &AppState, query: &str) -> Result<Suggestion
 
     let mut ranked = Vec::new();
     let prefer_dictionary_surface = !dictionary_lexeme_matches.is_empty();
+    let mut existing_knowledge_by_lexeme = knowledge::find_by_lexeme_ids(
+        &state.pool,
+        &dictionary_lexeme_matches
+            .iter()
+            .map(|entry| entry.lexeme_id)
+            .collect::<Vec<_>>(),
+    )
+    .await?
+    .into_iter()
+    .fold(HashMap::new(), |mut entries, entry| {
+        if let Some(lexeme_id) = entry.lexeme_id {
+            entries.entry(lexeme_id).or_insert(entry);
+        }
+        entries
+    });
 
     ranked.extend(query_prefix_matches.into_iter().filter_map(|entry| {
         let match_text = entry.query_text.clone();
@@ -154,13 +169,10 @@ pub async fn get_suggestions(state: &AppState, query: &str) -> Result<Suggestion
         );
     }
     ranked.extend(dictionary_lexeme_matches.into_iter().filter_map(|entry| {
-        let match_text = entry.matched_surface.clone();
-        rank_candidate(
+        rank_lexeme_candidate(
             query,
-            &match_text,
-            "词典",
-            build_lexeme_suggestion(&entry, "dictionary_lexeme"),
-            lexeme_relation_tier(&entry.matched_source),
+            &entry,
+            existing_knowledge_by_lexeme.remove(&entry.lexeme_id),
         )
     }));
     ranked.extend(query_fuzzy_matches.into_iter().filter_map(|entry| {
@@ -192,6 +204,25 @@ pub async fn get_suggestions(state: &AppState, query: &str) -> Result<Suggestion
     let suggestions = sort_and_limit(ranked, 10);
 
     Ok(SuggestionResponse { suggestions })
+}
+
+fn rank_lexeme_candidate(
+    query: &str,
+    entry: &LexemeCandidate,
+    knowledge_entry: Option<KnowledgeEntry>,
+) -> Option<RankedSuggestion> {
+    // Rank by dictionary evidence, regardless of whether analysis has been generated.
+    let mut ranked = rank_candidate(
+        query,
+        &entry.matched_surface,
+        "词典",
+        build_lexeme_suggestion(entry, "dictionary_lexeme"),
+        lexeme_relation_tier(&entry.matched_source),
+    )?;
+    if let Some(knowledge_entry) = knowledge_entry {
+        ranked.suggestion = build_knowledge_suggestion(knowledge_entry, "knowledge_lexeme");
+    }
+    Some(ranked)
 }
 
 fn lexeme_relation_tier(matched_source: &str) -> u8 {
@@ -449,4 +480,88 @@ pub async fn status(state: &AppState) -> Result<StatusResponse> {
         status: "ok".to_string(),
         db_status: "ok".to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use serde_json::json;
+
+    #[test]
+    fn lexeme_candidates_reuse_knowledge_without_changing_ranking() {
+        let knowledge = KnowledgeEntry {
+            id: 697,
+            lexeme_id: Some(77791),
+            query_text: "jeder".into(),
+            prototype: None,
+            entry_type: "WORD".into(),
+            analysis: json!({
+                "markdown": "saved analysis",
+                "structured": {
+                    "headword": "jeder",
+                    "grammar_branches": [{
+                        "pos": "adjective",
+                        "meanings": [{"zh": "每个，每一", "en": "every, each"}]
+                    }]
+                }
+            }),
+            tags: None,
+            aliases: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        let direct = build_knowledge_suggestion(knowledge.clone(), "knowledge_prefix");
+        for (surface, source) in [
+            ("jeder", "headword"),
+            ("jeden", "form_of"),
+            ("jedem", "form"),
+        ] {
+            let lexeme = LexemeCandidate {
+                lexeme_id: 77791,
+                surface: "jeder".into(),
+                pos_summary: vec!["det".into(), "pron".into()],
+                gloss_preview: json!([{"glosses": ["each", "every"]}]),
+                matched_surface: surface.into(),
+                matched_source: source.into(),
+            };
+            let uncached = rank_lexeme_candidate(surface, &lexeme, None).unwrap();
+            let cached = rank_lexeme_candidate(surface, &lexeme, Some(knowledge.clone())).unwrap();
+            assert_eq!(cached.suggestion.entry_id, direct.entry_id);
+            assert_eq!(cached.suggestion.query_text, direct.query_text);
+            assert_eq!(cached.suggestion.preview, direct.preview);
+            assert_eq!(cached.suggestion.source, "知识库");
+            assert_eq!(cached.suggestion.suggestion_type, "knowledge_lexeme");
+            assert_eq!(cached.suggestion.analysis_markdown, "saved analysis");
+            assert_eq!(
+                cached
+                    .suggestion
+                    .structured_analysis
+                    .as_ref()
+                    .unwrap()
+                    .headword,
+                "jeder"
+            );
+            assert_eq!(cached.match_tier, uncached.match_tier);
+            assert_eq!(cached.case_tier, uncached.case_tier);
+            assert_eq!(cached.source_tier, uncached.source_tier);
+            assert_eq!(cached.relation_tier, uncached.relation_tier);
+            assert_eq!(cached.distance, uncached.distance);
+            assert_eq!(uncached.suggestion.entry_id, 0);
+            assert_eq!(uncached.suggestion.source, "词典");
+            assert!(uncached.suggestion.preview.starts_with("词典候选"));
+
+            let fuzzy = rank_candidate(
+                surface,
+                "jeder",
+                "知识库",
+                build_knowledge_suggestion(knowledge.clone(), "knowledge_fuzzy"),
+                0,
+            )
+            .unwrap();
+            let suggestions = sort_and_limit(vec![cached, fuzzy], 10);
+            assert_eq!(suggestions.len(), 1);
+            assert_eq!(suggestions[0].suggestion_type, "knowledge_lexeme");
+        }
+    }
 }
