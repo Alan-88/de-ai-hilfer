@@ -54,14 +54,15 @@ impl LearningSessionRuntime {
         business_date: NaiveDate,
         review_items: VecDeque<LearningSessionItem>,
         new_items: VecDeque<LearningSessionItem>,
+        intraday_items: Vec<LearningSessionItem>,
     ) -> Self {
-        let total_count = (review_items.len() + new_items.len()) as i32;
+        let total_count = (review_items.len() + new_items.len() + intraday_items.len()) as i32;
         Self {
             id,
             business_date,
             review_items,
             new_items,
-            intraday_items: Vec::new(),
+            intraday_items,
             current: None,
             completed_count: 0,
             total_count,
@@ -160,6 +161,26 @@ pub(crate) fn session_item(
         success_streak: 0,
         due_after_seen: 0,
         earliest_review_at: now,
+    }
+}
+
+pub(crate) fn restored_session_item(
+    progress: LearningProgress,
+    entry: KnowledgeEntry,
+    first_rating: LearningRecallRating,
+    appearance_count_today: i32,
+    success_streak: i32,
+    next_review_at: DateTime<Utc>,
+) -> LearningSessionItem {
+    LearningSessionItem {
+        progress,
+        entry,
+        phase: LearningPhase::Intraday,
+        first_rating: Some(first_rating),
+        appearance_count_today,
+        success_streak,
+        due_after_seen: 0,
+        earliest_review_at: next_review_at,
     }
 }
 

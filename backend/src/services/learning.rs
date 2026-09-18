@@ -6,15 +6,15 @@ use crate::models::{
 use crate::repositories::{knowledge, learning};
 use crate::services::analysis_preview::{analysis_markdown, structured_analysis};
 use crate::services::learning_session::{
-    session_item, should_complete_today, LearningPhase, LearningSessionItem,
+    restored_session_item, session_item, should_complete_today, LearningPhase, LearningSessionItem,
     LearningSessionRuntime, MAX_INTRADAY_APPEARANCES,
 };
 use crate::services::query_resolution::attached_phrase_modules_from_analysis;
 use crate::state::AppState;
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Duration, Local, NaiveDate, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, FixedOffset, NaiveDate, NaiveTime, TimeZone, Utc};
 use fsrs::{MemoryState, DEFAULT_PARAMETERS, FSRS};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use uuid::Uuid;
 
 const TARGET_RETENTION: f32 = 0.9;
@@ -59,11 +59,25 @@ pub async fn get_session(state: &AppState) -> Result<LearningSessionResponse> {
 
 pub async fn start_session_v3(state: &AppState) -> Result<LearningSessionV3Response> {
     let now = Utc::now();
+    let current_business_date = business_date(now);
     let due_entries = learning::list_due_entries(&state.pool, now).await?;
+    let intraday_recoveries = learning::list_intraday_recoveries(
+        &state.pool,
+        current_business_date,
+        MAX_INTRADAY_APPEARANCES,
+    )
+    .await?;
+    let recovered_entry_ids = intraday_recoveries
+        .iter()
+        .map(|recovery| recovery.entry.id)
+        .collect::<HashSet<_>>();
     let mut review_items = VecDeque::new();
     let mut new_items = VecDeque::new();
 
     for (progress, entry) in due_entries {
+        if recovered_entry_ids.contains(&entry.id) {
+            continue;
+        }
         if is_new_progress(&progress) {
             new_items.push_back(session_item(progress, entry, LearningPhase::New, now));
         } else {
@@ -71,12 +85,32 @@ pub async fn start_session_v3(state: &AppState) -> Result<LearningSessionV3Respo
         }
     }
 
+    let intraday_items = intraday_recoveries
+        .into_iter()
+        .filter_map(|recovery| {
+            let first_rating = match recovery.first_rating.as_str() {
+                "fuzzy" => LearningRecallRating::Fuzzy,
+                "forgotten" => LearningRecallRating::Forgotten,
+                _ => return None,
+            };
+            Some(restored_session_item(
+                recovery.progress,
+                recovery.entry,
+                first_rating,
+                recovery.appearance_count_today,
+                recovery.success_streak,
+                recovery.next_review_at,
+            ))
+        })
+        .collect();
+
     let session_id = Uuid::new_v4().to_string();
     let mut session = LearningSessionRuntime::new(
         session_id.clone(),
-        business_date(now),
+        current_business_date,
         review_items,
         new_items,
+        intraday_items,
     );
     session.select_next(now);
 
@@ -386,7 +420,7 @@ fn is_new_progress(progress: &LearningProgress) -> bool {
 }
 
 fn business_date(now: DateTime<Utc>) -> NaiveDate {
-    let local = now.with_timezone(&Local);
+    let local = now.with_timezone(&business_timezone());
     let day = local.date_naive();
     if local.time() < NaiveTime::from_hms_opt(4, 0, 0).expect("valid time") {
         day.checked_sub_signed(Duration::days(1)).unwrap_or(day)
@@ -404,12 +438,15 @@ fn next_due_date(now: DateTime<Utc>, scheduled_days: i64) -> DateTime<Utc> {
 
 fn business_day_start_utc(day: NaiveDate) -> DateTime<Utc> {
     let naive = day.and_hms_opt(4, 0, 0).expect("valid business day start");
-    let local = Local
+    let local = business_timezone()
         .from_local_datetime(&naive)
         .single()
-        .or_else(|| Local.from_local_datetime(&naive).earliest())
-        .expect("local business day start");
+        .expect("valid UTC+8 business day start");
     local.with_timezone(&Utc)
+}
+
+fn business_timezone() -> FixedOffset {
+    FixedOffset::east_opt(8 * 60 * 60).expect("valid UTC+8 offset")
 }
 
 impl LearningRecallRating {
@@ -419,5 +456,35 @@ impl LearningRecallRating {
             LearningRecallRating::Fuzzy => "fuzzy",
             LearningRecallRating::Forgotten => "forgotten",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn business_date_uses_utc_plus_eight_boundary() {
+        let before = Utc.with_ymd_and_hms(2026, 9, 17, 19, 59, 59).unwrap();
+        let at_boundary = Utc.with_ymd_and_hms(2026, 9, 17, 20, 0, 0).unwrap();
+
+        assert_eq!(
+            business_date(before),
+            NaiveDate::from_ymd_opt(2026, 9, 17).unwrap()
+        );
+        assert_eq!(
+            business_date(at_boundary),
+            NaiveDate::from_ymd_opt(2026, 9, 18).unwrap()
+        );
+    }
+
+    #[test]
+    fn next_due_date_is_four_am_in_utc_plus_eight() {
+        let now = Utc.with_ymd_and_hms(2026, 9, 17, 15, 0, 0).unwrap();
+
+        assert_eq!(
+            next_due_date(now, 1),
+            Utc.with_ymd_and_hms(2026, 9, 17, 20, 0, 0).unwrap()
+        );
     }
 }
