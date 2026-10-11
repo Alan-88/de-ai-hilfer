@@ -326,8 +326,8 @@
   :global(.lookup-rail .learning-content .network-grid article) { max-width: 100%; }
 
   @media (max-width: 900px) {
-    .lookup-rail { position: absolute; inset: 0 0 0 auto; z-index: 30; width: min(390px, 88%); border: 1px solid var(--border-color); border-right: 0; border-radius: var(--radius-md) 0 0 var(--radius-md); transform: translateX(102%); box-shadow: -18px 0 50px rgba(20, 18, 31, 0.2); transition: transform 180ms ease; }
-    .lookup-rail.mobile-open { transform: translateX(0); }
+    .lookup-rail { position: absolute; inset: 0 0 0 auto; z-index: 30; width: min(390px, 88%); border: 1px solid var(--border-color); border-right: 0; border-radius: var(--radius-md) 0 0 var(--radius-md); transform: translateX(102%); pointer-events: none; transition: transform 180ms ease; }
+    .lookup-rail.mobile-open { transform: translateX(0); box-shadow: -18px 0 50px rgba(20, 18, 31, 0.2); pointer-events: auto; }
     .mobile-close { display: grid; }
   }
 </style>
