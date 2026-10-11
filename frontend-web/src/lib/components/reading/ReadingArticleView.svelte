@@ -399,6 +399,9 @@
         </footer>
       </main>
 
+      {#if railOpen}
+        <button class="rail-dismiss" aria-label="关闭查词栏" onclick={() => railOpen = false}></button>
+      {/if}
       <ReadingLookupRail {selectedKey} {selectedEntryId} open={railOpen} onClose={() => railOpen = false} />
     </div>
 
@@ -461,7 +464,7 @@
 
   .bookmark-menu > button { min-height: 36px; padding: 0 0.7rem; background: var(--control-bg); }
 
-  .reading-shell { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--card-bg); box-shadow: var(--shadow-sm); }
+  .reading-shell { position: relative; display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--card-bg); box-shadow: var(--shadow-sm); }
   .article-pane { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; }
   .article-copy { width: min(720px, calc(100% - 5rem)); margin: auto; padding: clamp(4rem, 10vh, 7rem) 0; white-space: pre-wrap; font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif; font-size: clamp(1.3rem, 1.65vw, 1.6rem); font-weight: 540; line-height: 2; letter-spacing: 0.005em; }
   .marked { position: relative; display: inline; padding: 0 0.04em 0.04em; border-radius: 0; background: transparent; color: inherit; font: inherit; font-weight: 690; transition: background 120ms ease, text-decoration-color 120ms ease; }
@@ -472,18 +475,22 @@
   .marked.unavailable { color: var(--text-muted); box-shadow: inset 0 -2px color-mix(in srgb, var(--text-muted) 42%, transparent); }
   .marked.unavailable::after { background: color-mix(in srgb, var(--text-muted) 62%, transparent); }
   .article-foot { display: flex; justify-content: space-between; margin: 0 2rem; padding: 1rem 0; border-top: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.72rem; font-weight: 750; }
+  .rail-dismiss { display: none; }
 
   @media (max-width: 900px) {
     :global(.page-container:has(.reading-view)) { max-width: 100%; }
-    .reading-view { height: auto; min-height: calc(100dvh - 4rem); }
-    .reading-shell { display: block; min-height: calc(100dvh - 8.8rem); }
-    .article-pane { min-height: calc(100dvh - 9rem); }
+    .reading-shell { display: block; height: 100%; }
+    .article-pane { height: 100%; }
     .article-copy { width: min(680px, calc(100% - 2.5rem)); padding: 3.5rem 0; }
     .mobile-lookup { display: flex; }
+    .rail-dismiss { position: absolute; inset: 0; z-index: 20; display: block; width: 100%; height: 100%; border-radius: inherit; background: color-mix(in srgb, var(--text-main) 8%, transparent); cursor: default; }
+  }
+
+  @media (max-width: 768px) {
+    .reading-view { height: calc(100dvh - 179px - env(safe-area-inset-bottom)); min-height: 0; }
   }
 
   @media (max-width: 600px) {
-    .reading-view { min-height: calc(100dvh - 4rem); }
     .page-head { min-height: 66px; align-items: center; gap: 0.5rem; padding: 0.55rem 0.65rem; }
     .title-group { gap: 0.6rem; }
     .back-button { width: 34px; height: 34px; }
