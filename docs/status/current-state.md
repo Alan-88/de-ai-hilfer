@@ -1,6 +1,6 @@
 # Current State
 
-最后更新：2026-09-18
+最后更新：2026-10-11
 
 ## 阶段判断
 
@@ -16,6 +16,32 @@
   - README 正在从“运行说明型”改写为“技术展示型”
   - 同时补简历/面试向的项目说明，不再默认面向普通用户部署
 
+### Gemini Spark 远程 MCP（2026-10-07）
+
+- 新增独立 `mcp-gateway`，使用官方 MCP TypeScript SDK v2 和 Streamable HTTP；网关不访问数据库，也不复制词典、学习或文章业务逻辑。
+- MCP 契约按现有 `deai-learning-import` Skill 收口为 8 个领域级工具：
+  - `deai_guide`
+  - `lexeme_query`
+  - `lexeme_initialize`
+  - `learning_query`
+  - `learning_membership`
+  - `learning_correction`
+  - `article_query`
+  - `article_import`
+- 除 MCP 内置的按需指南和 `learning explain` 说明外，所有操作都转发现有 Agent / Reading API；未新增实时浏览器队列、调度参数、文章编辑或文件夹 Agent 接口。
+- MCP 初始化响应提供简短 server instructions；`deai_guide` 提供系统总览、文章学习、词汇工作流、V3 调度、学习诊断和学习纠错六类结构化说明，避免每次连接加载完整文档。
+- 后续新增或调整 Agent 能力时，同步维护仓库 CLI、Skill 与 MCP 的工具契约和指南；共用内容继续由一致性测试防止漂移。
+- OAuth 使用固定客户端的 Authorization Code + PKCE `S256` 和 owner password；普通客户端使用精确回调白名单，Gemini Spark 仅放行 Google 回调域名的 HTTPS `/r/` 路径。密码失败按来源限流，授权码单次使用且 5 分钟过期，签名 access / refresh token 可跨容器重启继续使用。
+- 批量操作继续逐项返回成功或失败；只读 GET 保留两次网络重试，写请求不自动重试；词条初始化单独使用 10 分钟后端等待上限。
+- Compose 中通过 `mcp` profile 隔离启动，未配置 OAuth 时不影响现有前后端服务。
+- 已完成 TypeScript 构建、Node 端到端测试、Compose 配置检查、Docker 镜像构建和容器健康检查；测试覆盖 OAuth、PKCE、MCP 工具发现、工具调用转发及学习说明读取。
+- 已部署到 `https://de.alan-studio.uk/mcp`，与现有 Web 前端共用域名；Caddy 仅将 `/mcp`、`/authorize`、`/token` 和 `/.well-known/oauth-*` 分流到网关，其余路径继续进入前端。
+- 已从公网完成 Authorization Code + PKCE、Token 交换、8 个工具发现及真实 `learning plan` 转发测试；主站首页保持正常。Spark 会自动提交 Google-owned callback，无需用户填写。
+- Spark 授权页可能从浏览器 opaque context 以 `Origin: null` 提交 owner password；Origin 校验仅应用于 `/mcp` 传输端点，不阻断 OAuth 表单。`/mcp` 仍拒绝 `null` 或非白名单 Web Origin。
+- 生产环境已登记 Spark 界面提供的精确 Google redirect URI，不再依赖域名级回调兼容规则；后者仅保留为无法取得精确 URI 时的受限 fallback。
+- 授权成功响应保持 Spark 已验证的最小形式：显式 `302`，Callback 仅携带 `code` 与原始 `state`，不附加未在 metadata 声明的可选 `iss` 参数。
+- OAuth 授权页 CSP 允许 HTTPS 表单重定向链，以兼容 Chrome 对 callback 后续跳转的 `form-action` 检查；OAuth 服务端仍精确校验已登记 Google callback URI，未放宽实际重定向目标白名单。
+
 ### 知识词库页面状态修复（2026-09-18）
 
 - 知识词库与数据设置页面的标题级描述已移除，功能卡片内部说明保留。
@@ -24,6 +50,36 @@
 - 普通查词页现在会读取同一份学习进度缓存；已加入词条显示禁用的“已加入”状态，不会重复提交。
 - 词库详情抽屉已接入词库页面的学习进度，并复用文章学习查词栏的结构化渲染组件，展示核心释义、应用例句、深度解析和词汇网络。
 - 已完成前端生产构建、容器重建和线上浏览器验证；本轮未新增数据库记录。
+
+### 学习日内调度收口（2026-09-18）
+
+- 日内复现继续以时间为主：卡片达到 `earliest_review_at` 后才进入正常复现；`due_after_seen` 只用于同一时间窗口内排序。
+- 活动日内工作集以 `10` 张作为软上限：未达到上限且没有到期卡时可以继续引入新词；达到上限后，才允许按最近到期卡片数量降级回放，不强行等待时间。
+- 首次反馈仍立即提交长期 FSRS；后续反馈只改变日内状态，不重复写长期排程。
+- 保留单卡当天最多 `6` 次出现；首答为“忘记”的卡片在后续答对后增加 `5` 分钟冷却，普通“忘记 / 模糊 / 认识”分别使用 `45 秒 / 2 分钟 / 1 分钟` 的日内间隔。
+- 如果刷新或重建 session，后端从当天 `learning_review_logs` 恢复尚未完成日内循环的卡片；前端在没有可立即展示的卡片时等待 `next_available_at`，不会把等待态误判为完成。
+- 当前不开放 CLI 调参；先通过真实使用积累日志，再决定哪些参数值得暴露为临时调度配置。
+
+### Agent 学习只读诊断（2026-09-18）
+
+- 受保护 Agent API 新增只读接口：
+  - `GET /api/v1/agent/learning/logs`
+  - `GET /api/v1/agent/learning/plan`
+- `learning logs` 默认读取当前业务日，也支持按日期、entry、session 和数量过滤；返回原始评分时间线及汇总，不写库。
+- `learning plan` 返回按当前调度规则从长期进度和复习日志重建的今日计划，包含新词、长期到期词、未完成日内恢复卡片、下次复现时间和当前调度参数。
+- 仓库 CLI 与局部 Skill 已接入 `learning logs` / `learning plan`；计划明确标记为可重建视图，不冒充已打开浏览器 session 的内存顺序。
+- `tools/deai learning explain` 提供按需读取的 V3 状态机说明，不访问后端、不写库；局部 Skill 与 MiniMax Skill 均提供该入口。
+- 首答为“忘记”后答对增加 5 分钟冷却，就是当前采用的短时稳定机制；不再另设独立的长时间“沉寂”规则。
+- `learning reset-intraday`、`learning undo` 和 `learning correct-first` 已接入 Agent API、CLI 与 Skill；前两者只处理当前业务日，后者使用首答前快照重算长期 FSRS。
+- 修正操作只追加 `learning_review_corrections`，不修改或删除原始评分日志；首次纠正完成后会使该业务日的打开 session 失效，要求重新进入学习页。
+- 迁移前没有快照的历史首答会被 `correct-first` 明确拒绝；当前内存 session 查询仍未作为 Agent 接口暴露。
+- MiniMax 便携 Skill 的 CLI 已增加只读 GET 请求的 60 秒超时、两次网络重试和 DNS/TLS/Socket/超时原因输出；写请求不自动重试，避免连接中断后重复写入。包内示例默认使用 `de.alan-studio.uk`，但若 MiniMax 命令运行时共享 Tailscale/内网路由，也可配置 `de.int.alan-studio.uk`；浏览器可达不代表后台命令运行时可达。
+
+### 候选简介与知识条目复用（2026-09-18）
+
+- 候选命中 form-of / surface form 时，会按 `lexeme_id` 批量查找已有知识条目。
+- 若原型已生成，候选保留原有词典匹配文本与排序，但复用知识库的 `entry_id`、简介、Markdown 和结构化内容，不再显示词典回退简介。
+- `jeder` / `jeden` / `jedem` 已完成单元测试，并通过线上接口回归验证。
 
 ## 最新收口状态（2026-09-02）
 
@@ -87,6 +143,7 @@
   - 学习计划列表、加入、移除和重置
 - 新增仓库内 CLI `tools/deai`：
   - 只通过 HTTP API 操作，不直连数据库
+  - 支持 `--env-file PATH`，可在非仓库环境读取独立 API URL / Token 配置
   - 支持参数批量与 stdin JSON 数组
   - 支持 `article list/get/import`；文章导入从 stdin 读取 `{title, body, folder_id}`，写操作同样要求 `--yes`
   - 批量逐项报告错误
@@ -98,6 +155,7 @@
   - 无可靠候选时停止，不触发隐藏 AI 推断
 - 已完成真实只读验证：`ging -> gehen`、`hätte -> haben`；错误 Token 返回 401。
 - 已完成学习写链路往返验证：对原本未加入学习的 `gehen` 执行 `add -> reset -> remove`，最终恢复 `not_added`，未新增知识词条或残留学习进度。
+- 已提供 `tools/minimax-deai-learning-import/` 便携包源：MiniMax 端通过公开 HTTPS API 调用同一受 Token 保护的 Agent 接口，不依赖 Tailscale 或服务器 Shell。
 
 ### 亮色主题表面语义（2026-07-18）
 
@@ -156,7 +214,9 @@
   - 是否当天第一次出现
   - 今日出现次数
   - 是否触发长期提交
-- 单次 session 的日内队列第一版保存在后端内存；重启会丢当前半轮 session，但不会丢长期学习进度或点击日志。
+  - 单次 session 的日内队列运行时保存在后端内存；刷新或重启后会根据当天 `learning_review_logs` 重建尚未通过的日内卡片，卡片不会再因为重新建 session 而直接消失。仅卡片间的运行时顺序游标会重新计算。
+  - 业务日已改为显式 UTC+8，边界固定为北京时间凌晨 04:00，不再依赖容器的 `Local` 时区。
+  - 已迁移历史复习排程：31 条旧的 `04:00 UTC` 日期调整为对应的 `04:00 UTC+8`，不改 FSRS 参数与复习次数。
 - 前端学习页已切到 V3：
   - 三档评分
   - 显示 `新词 / 复习 / 今日重现`
