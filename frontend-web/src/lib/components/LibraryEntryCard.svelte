@@ -32,13 +32,11 @@
 
 <article class="entry-card bento-card">
   <div class="card-top">
-    <div class="word-info">
-      <h3 class="word-text">{entry.query_text}</h3>
-      <p class="word-preview">{entry.preview}</p>
-    </div>
+    <h3 class="word-text">{entry.query_text}</h3>
     <div class="status-badge {status.class}">
       {status.label}
     </div>
+    <p class="word-preview">{entry.preview}</p>
   </div>
 
   <div class="card-bottom">
@@ -76,11 +74,11 @@
 <style>
   .entry-card { display: flex; flex-direction: column; justify-content: space-between; height: 100%; gap: 1.5rem; padding: 1.5rem; }
   
-  .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
-  .word-text { font-size: 1.4rem; font-weight: 800; color: var(--text-main); margin-bottom: 0.4rem; }
-  .word-preview { font-size: 0.92rem; color: var(--text-muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .card-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: 1rem; row-gap: 0.4rem; }
+  .word-text { min-width: 0; overflow: hidden; overflow-wrap: anywhere; color: var(--text-main); font-size: 1.4rem; font-weight: 800; display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .word-preview { grid-column: 1 / -1; overflow: hidden; color: var(--text-muted); font-size: 0.92rem; line-height: 1.5; display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
-  .status-badge { padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
+  .status-badge { white-space: nowrap; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
   .status-badge.new { background: var(--surface-passive); color: var(--text-muted); }
   .status-badge.learning { background: var(--success-bg); color: var(--success-text); }
   .status-badge.review { background: var(--warning-bg); color: var(--warning-text); }
