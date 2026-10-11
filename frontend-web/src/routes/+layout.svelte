@@ -278,11 +278,27 @@
       z-index: 100;
     }
     .bottom-nav .nav-menu {
-      flex-direction: row;
-      justify-content: space-around;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.25rem;
+    }
+    .bottom-nav .nav-item {
+      min-width: 0;
+      min-height: 3.75rem;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.25rem;
+      padding: 0.5rem 0.25rem;
+      font-size: 0.75rem;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .bottom-nav .nav-item i {
+      font-size: 1.65rem;
+      line-height: 1;
     }
     .main-area {
-      padding: 1.5rem 1rem calc(4rem + env(safe-area-inset-bottom));
+      padding: 1.5rem 1rem calc(5.25rem + env(safe-area-inset-bottom));
     }
     .theme-switcher-group {
       position: absolute;

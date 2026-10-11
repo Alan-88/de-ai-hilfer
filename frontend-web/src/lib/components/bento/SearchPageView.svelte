@@ -778,9 +778,15 @@
     .search-intro p { margin-left: 0; text-align: center; }
     .back-btn { left: 1rem; top: 1rem; width: 2.5rem; height: 2.5rem; }
     .search-main-wrapper { margin-top: 15vh; }
-    .is-searching .search-main-wrapper { position: relative; top: auto; display: block; width: 100%; height: auto; max-width: 740px; margin-top: 0; padding: 0; border-bottom: 0; background: transparent; }
+    .is-searching .search-main-wrapper { top: -1.5rem; display: block; width: calc(100% + 2rem); height: auto; max-width: none; margin: 0 -1rem; padding: 1.5rem 1rem 0.75rem; }
+    .is-searching .search-panel-group { width: calc(100% - 3.5rem); margin-left: 3.5rem; }
     .shortcut-btn { display: none; }
     .search-panel-group { border-radius: 20px; }
     .integrated-suggestions { border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; }
+  }
+
+  @media (max-width: 360px) {
+    .search-submit-btn { width: 3rem; font-size: 0; }
+    .search-submit-btn i { font-size: 1rem; }
   }
 </style>
