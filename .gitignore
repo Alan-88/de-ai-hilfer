@@ -42,6 +42,9 @@ frontend-web/build/
 frontend-web/.svelte-kit/
 frontend-web/node_modules/
 frontend-web/.tmp-*.json
+mcp-gateway/node_modules/
+mcp-gateway/dist/
+.playwright-cli/
 
 # ====================
 # Local logs / reports

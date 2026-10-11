@@ -31,6 +31,40 @@ services:
       - app
       - caddy_net
 
+  mcp-gateway:
+    profiles:
+      - mcp
+    build:
+      context: ./mcp-gateway
+    container_name: de-ai-hilfer-mcp-gateway
+    depends_on:
+      - backend
+    environment:
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:-}
+      MCP_PORT: 3000
+      MCP_OAUTH_CLIENT_ID: ${MCP_OAUTH_CLIENT_ID:-}
+      MCP_OAUTH_CLIENT_SECRET: ${MCP_OAUTH_CLIENT_SECRET:-}
+      MCP_OAUTH_REDIRECT_URIS: ${MCP_OAUTH_REDIRECT_URIS:-}
+      MCP_OAUTH_REDIRECT_HOSTS: ${MCP_OAUTH_REDIRECT_HOSTS:-}
+      MCP_OWNER_PASSWORD: ${MCP_OWNER_PASSWORD:-}
+      MCP_TOKEN_SIGNING_SECRET: ${MCP_TOKEN_SIGNING_SECRET:-}
+      DEAI_API_URL: http://backend:8000/api/v1
+      DEAI_API_TOKEN: ${DEAI_API_TOKEN:-}
+    restart: unless-stopped
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app
+      - caddy_net
+
 networks:
   app:
     name: de_ai_hilfer
