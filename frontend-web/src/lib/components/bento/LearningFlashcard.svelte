@@ -169,11 +169,13 @@
   .rating-bar .known { background: var(--success-bg); color: var(--success-text); }
 
   @media (max-width: 768px) {
-    .flashcard { height: calc(100dvh - 275px - env(safe-area-inset-bottom)); min-height: 0; }
+    .flashcard-shell { position: relative; }
+    .flashcard { height: calc(100dvh - 208px - env(safe-area-inset-bottom)); min-height: 0; }
+    .flashcard:hover { transform: none; box-shadow: var(--shadow-sm); }
     .recall-surface { padding: 1.25rem; }
-    .answer-shell { padding: 1.1rem 1rem 0; }
+    .answer-shell { padding: 1.1rem 1rem 5.25rem; }
     .meta { gap: 0.5rem; font-size: 0.72rem; }
     .answer-meta > strong { font-size: 1.35rem; }
-    .rating-bar { gap: 0.5rem; }
+    .rating-bar { position: absolute; z-index: 4; right: 0; bottom: 0; left: 0; gap: 0.5rem; margin: 0; padding: 1rem; }
   }
 </style>
