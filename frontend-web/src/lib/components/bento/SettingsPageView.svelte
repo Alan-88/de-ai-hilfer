@@ -8,7 +8,6 @@
 
 <header class="page-header">
   <h1>数据与设置</h1>
-  <p>管理本地数据存储、数据库备份以及后端 API 服务连接状态。</p>
 </header>
 
 <div class="settings-grid">
@@ -33,7 +32,6 @@
 <style>
   .page-header { width: 100%; margin-bottom: 2.5rem; }
   .page-header h1 { font-size: 2.25rem; font-weight: 800; margin-bottom: 0.5rem; color: var(--text-main); }
-  .page-header p { color: var(--text-muted); font-size: 1.1rem; }
 
   .settings-grid {
     display: grid;

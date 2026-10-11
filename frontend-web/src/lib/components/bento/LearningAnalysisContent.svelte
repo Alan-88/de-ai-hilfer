@@ -169,6 +169,7 @@
   .usage-list, .insights-stack { display: grid; gap: 0.8rem; }
   .usage-item, .insight-block { padding: 1rem; border-radius: var(--radius-md); background: var(--bg-color); }
   .usage-copy, .insight-copy { margin-top: 0.45rem; color: var(--text-muted); line-height: 1.65; }
+  .insight-copy :global(ol), .insight-copy :global(ul) { padding-inline-start: 1.5rem; }
   .example-box { margin-top: 0.85rem; padding: 0.85rem 1rem; border-left: 3px solid var(--accent-main); border-radius: 8px; background: var(--card-bg); }
   .usage-item.example-box { margin-top: 0; }
   .de-line { font-weight: 750; }

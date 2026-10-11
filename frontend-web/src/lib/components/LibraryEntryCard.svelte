@@ -4,11 +4,13 @@
   let {
     entry,
     progress,
+    isAdding = false,
     onViewDetail,
     onQuickAdd
   }: {
     entry: RecentItem;
     progress?: LearningProgressView;
+    isAdding?: boolean;
     onViewDetail: (id: number) => void;
     onQuickAdd: (id: number) => void;
   } = $props();
@@ -53,8 +55,15 @@
     
     <div class="card-actions">
       {#if !progress}
-        <button class="btn-icon-text" onclick={() => onQuickAdd(entry.entry_id)} title="加入学习">
-          <i class="ph-fill ph-plus-circle"></i>
+        <button
+          class="btn-icon-text"
+          onclick={() => onQuickAdd(entry.entry_id)}
+          title={isAdding ? "正在加入学习" : "加入学习"}
+          aria-label={isAdding ? "正在加入学习" : "加入学习"}
+          aria-busy={isAdding}
+          disabled={isAdding}
+        >
+          <i class={isAdding ? "ph ph-spinner" : "ph-fill ph-plus-circle"}></i>
         </button>
       {/if}
       <button class="btn-secondary small-btn" onclick={() => onViewDetail(entry.entry_id)}>

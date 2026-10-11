@@ -35,7 +35,8 @@
   let selectedEntryDetail = $state<EntryDetailResponse | null>(null);
   let isFetchingDetail = $state(false);
   let isDeleting = $state(false);
-  let wasActive = $state(false);
+  let addingEntryId = $state<number | null>(null);
+  let wasActive = false;
 
   async function loadProgress() {
     try {
@@ -103,12 +104,23 @@
     await loadEntries(true);
   }
 
+  function handleTabChange(tab: LibraryTab) {
+    if (activeTab === tab) return;
+    activeTab = tab;
+    void loadEntries(false);
+  }
+
   async function handleQuickAdd(id: number) {
+    if (addingEntryId !== null) return;
+    addingEntryId = id;
     try {
       const newProgress = await addWordToLearning(id);
-      progressMap[id] = newProgress;
+      progressMap = { ...progressMap, [id]: newProgress };
+      await loadEntries(false);
     } catch (e) {
       alert("加入学习失败");
+    } finally {
+      addingEntryId = null;
     }
   }
 
@@ -154,10 +166,10 @@
 
     const firstActivation = !wasActive;
     wasActive = true;
+    if (firstActivation) {
+      void loadProgress();
+    }
     const timer = setTimeout(() => {
-      if (firstActivation) {
-        void loadProgress();
-      }
       void loadEntries(false);
     }, filterText.trim() ? 180 : 0);
 
@@ -168,7 +180,6 @@
 <header class="page-header">
   <div class="header-main">
     <h1>知识词库</h1>
-    <p>管理你已发现的德语宝库。当前视图共有 {totalCount} 个词条。</p>
   </div>
 
 </header>
@@ -182,16 +193,16 @@
   </div>
 
   <div class="tabs-row">
-    <button class="tab-btn" class:active={activeTab === 'all'} onclick={() => activeTab = 'all'}>
+    <button class="tab-btn" class:active={activeTab === 'all'} onclick={() => handleTabChange('all')}>
       全部 <span class="count">{allCount}</span>
     </button>
-    <button class="tab-btn" class:active={activeTab === 'learning'} onclick={() => activeTab = 'learning'}>
+    <button class="tab-btn" class:active={activeTab === 'learning'} onclick={() => handleTabChange('learning')}>
       学习中 <span class="count">{Object.keys(progressMap).length}</span>
     </button>
-    <button class="tab-btn" class:active={activeTab === 'review'} onclick={() => activeTab = 'review'}>
+    <button class="tab-btn" class:active={activeTab === 'review'} onclick={() => handleTabChange('review')}>
       待复习
     </button>
-    <button class="tab-btn" class:active={activeTab === 'new'} onclick={() => activeTab = 'new'}>
+    <button class="tab-btn" class:active={activeTab === 'new'} onclick={() => handleTabChange('new')}>
       新词
     </button>
   </div>
@@ -220,6 +231,7 @@
         <LibraryEntryCard 
           {entry} 
           progress={progressMap[entry.entry_id]}
+          isAdding={addingEntryId === entry.entry_id}
           onViewDetail={handleViewDetail}
           onQuickAdd={handleQuickAdd}
         />
@@ -260,7 +272,6 @@
 <style>
   .page-header { margin-bottom: 1rem; }
   .header-main h1 { font-size: 2.25rem; font-weight: 800; margin-bottom: 0.5rem; }
-  .header-main p { color: var(--text-muted); }
 
   .library-controls { position: sticky; top: -2rem; z-index: 80; display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: calc(100vw - var(--desktop-sidebar-width)); height: var(--desktop-top-chrome-height); margin-left: calc((100% - (100vw - var(--desktop-sidebar-width))) / 2); margin-bottom: 2rem; padding: 0 max(1rem, calc((100vw - var(--desktop-sidebar-width) - var(--page-content-width)) / 2 + 1rem)); border-bottom: 1px solid var(--border-color); background: var(--bg-color); }
   .header-toolbar { display: flex; flex: 0 0 auto; gap: 0.75rem; align-items: center; order: 2; }
