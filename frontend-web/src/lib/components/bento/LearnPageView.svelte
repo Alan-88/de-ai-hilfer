@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import LearningFlashcard from "$lib/components/bento/LearningFlashcard.svelte";
-  import { startLearningSession, submitLearningReviewV3 } from "$lib/learningApi";
+  import { getLearningSessionNext, startLearningSession, submitLearningReviewV3 } from "$lib/learningApi";
   import type { LearningRecallRating, LearningSessionV3Response } from "$lib/types";
 
   let { active = false } = $props();
@@ -12,16 +12,50 @@
   let isSubmitting = $state(false);
   let error = $state("");
   let maxSessionSize = $state(0);
+  let waitTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function clearWaitTimer() {
+    if (waitTimer) {
+      clearTimeout(waitTimer);
+      waitTimer = undefined;
+    }
+  }
+
+  function applySessionState(nextSession: LearningSessionV3Response) {
+    sessionState = nextSession;
+    maxSessionSize = Math.max(maxSessionSize, nextSession.total_count);
+    hasLoaded = true;
+    scheduleNextIfWaiting(nextSession);
+  }
+
+  function scheduleNextIfWaiting(state: LearningSessionV3Response) {
+    clearWaitTimer();
+    if (state.is_completed || state.current_word || !state.next_available_at) return;
+
+    const waitMs = Math.max(250, new Date(state.next_available_at).getTime() - Date.now());
+    waitTimer = setTimeout(() => {
+      void loadNext(state.session_id);
+    }, waitMs);
+  }
+
+  async function loadNext(sessionId: string) {
+    try {
+      const nextSession = await getLearningSessionNext(sessionId);
+      if (sessionState?.session_id !== sessionId) return;
+      applySessionState(nextSession);
+    } catch (loadError) {
+      error = loadError instanceof Error ? loadError.message : "获取下一张卡片失败";
+    }
+  }
 
   async function loadSession() {
+    clearWaitTimer();
     isLoading = true;
     error = "";
 
     try {
       const nextSession = await startLearningSession();
-      sessionState = nextSession;
-      maxSessionSize = Math.max(maxSessionSize, nextSession.total_count);
-      hasLoaded = true;
+      applySessionState(nextSession);
     } catch (loadError) {
       error = loadError instanceof Error ? loadError.message : "获取学习会话失败";
     } finally {
@@ -37,7 +71,7 @@
     error = "";
 
     try {
-      sessionState = await submitLearningReviewV3(currentSessionId, currentWord.entry_id, rating);
+      applySessionState(await submitLearningReviewV3(currentSessionId, currentWord.entry_id, rating));
     } catch (reviewError) {
       error = reviewError instanceof Error ? reviewError.message : "提交复习失败";
     } finally {
@@ -48,6 +82,8 @@
   onMount(() => {
     if (active) void loadSession();
   });
+
+  onDestroy(clearWaitTimer);
 
   const reviewedCount = $derived(sessionState?.completed_count ?? 0);
   const sessionProgress = $derived(maxSessionSize > 0
@@ -84,6 +120,11 @@
           isSubmitting={isSubmitting}
           onRate={handleReviewed}
         />
+      {:else if sessionState && !sessionState.is_completed}
+        <div class="surface-card waiting-state">
+          <i class="ph ph-hourglass"></i>
+          <p>下一张复现稍后出现</p>
+        </div>
       {/if}
     </div>
   </main>
@@ -102,6 +143,9 @@
   .empty-state { text-align: center; }
   .empty-state i { color: var(--success-text); font-size: 4rem; }
   .empty-state p { font-size: 1.2rem; font-weight: 700; }
+  .waiting-state { display: flex; height: clamp(540px, calc(100vh - 230px), 680px); flex-direction: column; align-items: center; justify-content: center; gap: 1rem; text-align: center; }
+  .waiting-state i { color: var(--accent-main); font-size: 3.5rem; }
+  .waiting-state p { color: var(--text-muted); font-size: 1.05rem; font-weight: 700; }
 
   @media (max-width: 768px) {
     .learning-page { width: 100%; margin-left: 0; transform: none; }

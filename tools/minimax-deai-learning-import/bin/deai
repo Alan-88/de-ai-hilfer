@@ -1,0 +1,368 @@
+#!/usr/bin/env node
+
+import { readFileSync } from "node:fs";
+import { parseArgs } from "node:util";
+import assert from "node:assert/strict";
+
+const REQUEST_TIMEOUT_MS = 60_000;
+const READ_RETRIES = 2;
+
+const LEARNING_GUIDE = String.raw`# De-AI-Hilfer learning V3
+
+This is the current learning state machine. Read this before inspecting or changing learning data.
+
+## Identity and day boundary
+
+- A learning card is a knowledge entry identified by entry_id. lexeme_id identifies a dictionary lexeme and is not interchangeable with entry_id.
+- The business day uses Asia/Shanghai (UTC+8) and rolls over at 04:00 local time.
+
+## First feedback versus intraday feedback
+
+- The first rating for a card in one business day is the long-term decision. It calls FSRS once, updates long-term progress and due_date, and is logged with long_term_committed=true.
+- Later ratings for the same card on that business day are intraday-only. They do not call FSRS again and do not change the long-term due date.
+- New cards use the UI labels known / fuzzy / forgotten. Review cards use known / fuzzy / forgotten, where forgotten is the review-card wording for not remembering.
+
+## Intraday rules
+
+- The scheduler is time-first. A card normally waits until earliest_review_at; due_after_seen only orders cards that are already available in the same window.
+- Delays are forgotten=45 seconds, fuzzy=2 minutes, known=1 minute.
+- If the first rating was forgotten and a later rating is known, an extra 5-minute recovery delay is applied. This is the intentional short-term stabilization rule; there is no separate long silent-period rule.
+- The active intraday workset target is 10 cards. This is a soft intake threshold, not a daily new-card limit. If the workset is full and no card is due, the scheduler may replay the nearest card as a count-based fallback.
+- A card appears at most 6 times in one business day.
+- Completion rules: first known ends that card for today; first fuzzy needs one later known; first forgotten needs two later consecutive known ratings. A fuzzy or forgotten rating resets the current known streak.
+
+## Refresh and diagnostics
+
+- Review logs are persisted, so a new browser session can recover unfinished intraday cards for the current business day.
+- Recovery reconstructs card state and timing, but not the exact in-memory cursor/order of an already open browser session.
+- learning logs is read-only and returns the persisted rating timeline.
+- learning plan is read-only and returns a reconstructible current-day plan. It does not start a session or mutate the database.
+- The browser V3 session endpoints are for the web learning flow. There is currently no Agent command for inspecting the live in-memory queue.
+
+## Safe operation boundaries
+
+- learning add/remove/reset are existing plan operations. learning reset resets the long-term learning card to New while retaining historical review logs; it is not an intraday-only reset.
+- learning reset-intraday voids all effective later ratings for the current business day while keeping the first rating and long-term FSRS state.
+- learning undo voids only the latest effective later rating for the current business day.
+- learning correct-first replaces the first rating and recomputes long-term FSRS from the stored pre-feedback snapshot. It also invalidates open browser sessions for that business day.
+- All corrections are append-only audit records. Historical logs created before snapshot support cannot be corrected automatically; the API rejects them instead of guessing.
+- Do not expose scheduler constants as user-tunable parameters until real review logs justify changing them.
+`;
+
+const parsed = parseArgs({
+  allowPositionals: true,
+  strict: true,
+  options: {
+    url: { type: "string" },
+    token: { type: "string" },
+    "env-file": { type: "string" },
+    limit: { type: "string" },
+    date: { type: "string" },
+    "entry-id": { type: "string" },
+    "session-id": { type: "string" },
+    stdin: { type: "boolean", default: false },
+    yes: { type: "boolean", default: false },
+    lexeme: { type: "boolean", default: false },
+    provider: { type: "string" },
+    model: { type: "string" },
+    rating: { type: "string" },
+    "self-test": { type: "boolean", default: false },
+    help: { type: "boolean", short: "h", default: false },
+  },
+});
+
+if (parsed.values["self-test"]) {
+  assert.equal(apiBase("https://example.test/api/v1/"), "https://example.test/api/v1");
+  assert.deepEqual(parseInput('["ging", "hätte"]'), ["ging", "hätte"]);
+  assert.throws(() => parseInput('{"word":"ging"}'), /JSON array/);
+  assert.deepEqual(parseArticleInput('{"title":" Test ","body":"Text","folder_id":null}'), {
+    title: "Test",
+    body: "Text",
+    folder_id: null,
+  });
+  assert.throws(() => parseArticleInput('{"title":"","body":"Text"}'), /title/);
+  assert.match(LEARNING_GUIDE, /first rating for a card.*long-term decision/);
+  assert.match(LEARNING_GUIDE, /no separate long silent-period rule/);
+  assert.deepEqual(parseEnv('DEAI_API_URL=https://de.alan-studio.uk/api/v1\nDEAI_API_TOKEN="test-token"'), {
+    DEAI_API_URL: "https://de.alan-studio.uk/api/v1",
+    DEAI_API_TOKEN: "test-token",
+  });
+  assert.equal(retryLimit("GET"), READ_RETRIES);
+  assert.equal(retryLimit("POST"), 0);
+  assert.match(describeNetworkError(Object.assign(new TypeError("fetch failed"), {
+    cause: { code: "ECONNRESET", message: "socket reset" },
+  })), /ECONNRESET: socket reset/);
+  console.log("deai self-test passed");
+  process.exit(0);
+}
+
+if (parsed.values.help || parsed.positionals.length < 2) {
+  usage(parsed.values.help ? 0 : 2);
+}
+
+const [group, action, ...positionals] = parsed.positionals;
+if (group === "learning" && action === "explain") {
+  console.log(LEARNING_GUIDE);
+  process.exit(0);
+}
+const fileEnv = parsed.values["env-file"] ? readEnvFile(parsed.values["env-file"]) : {};
+const baseUrl = apiBase(
+  parsed.values.url ?? process.env.DEAI_API_URL ?? fileEnv.DEAI_API_URL ?? localEnv("DEAI_API_URL") ?? "http://localhost:8000/api/v1",
+);
+const token = parsed.values.token ?? process.env.DEAI_API_TOKEN ?? fileEnv.DEAI_API_TOKEN ?? localEnv("DEAI_API_TOKEN");
+if (!token) fail("Set DEAI_API_TOKEN or pass --token.");
+
+const stdinRaw = parsed.values.stdin ? readFileSync(0, "utf8") : null;
+const inputs = stdinRaw === null || (group === "article" && action === "import")
+  ? positionals
+  : parseInput(stdinRaw);
+
+try {
+  let output;
+  if (group === "lexeme" && action === "resolve") {
+    requireInputs(inputs, "surface forms");
+    output = await many(inputs, (surface) =>
+      request(`/agent/lexemes/resolve?q=${encodeURIComponent(surface)}&limit=${parsed.values.limit ?? "8"}`),
+    );
+  } else if (group === "lexeme" && action === "inspect") {
+    requireInputs(inputs, "lexeme ids");
+    output = await many(inputs, (id) => request(`/agent/lexemes/${integer(id, "lexeme id")}`));
+  } else if (group === "entry" && action === "initialize") {
+    requireConfirmation();
+    requireInputs(inputs, "lexeme ids");
+    if (Boolean(parsed.values.provider) !== Boolean(parsed.values.model)) {
+      fail("--provider and --model must be used together.");
+    }
+    const body = parsed.values.provider
+      ? { model_override: { provider_name: parsed.values.provider, model_id: parsed.values.model } }
+      : {};
+    output = await many(inputs, (id) =>
+      request(`/agent/lexemes/${integer(id, "lexeme id")}/initialize`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    );
+  } else if (group === "article" && action === "list") {
+    output = await request("/reading");
+  } else if (group === "article" && action === "get") {
+    requireInputs(inputs, "article ids");
+    output = await many(inputs, (id) => request(`/reading/articles/${integer(id, "article id")}`));
+  } else if (group === "article" && action === "import") {
+    requireConfirmation();
+    if (stdinRaw === null) fail("Article import requires a JSON object through --stdin.");
+    output = await request("/reading/articles", {
+      method: "POST",
+      body: JSON.stringify(parseArticleInput(stdinRaw)),
+    });
+  } else if (group === "learning" && action === "list") {
+    output = await request("/agent/learning");
+  } else if (group === "learning" && action === "logs") {
+    const query = new URLSearchParams();
+    if (parsed.values.date) query.set("date", parsed.values.date);
+    if (parsed.values["entry-id"]) query.set("entry_id", String(integer(parsed.values["entry-id"], "entry id")));
+    if (parsed.values["session-id"]) query.set("session_id", parsed.values["session-id"]);
+    query.set("limit", String(integer(parsed.values.limit ?? "100", "limit")));
+    output = await request(`/agent/learning/logs?${query}`);
+  } else if (group === "learning" && action === "plan") {
+    output = await request("/agent/learning/plan");
+  } else if (group === "learning" && ["reset-intraday", "undo"].includes(action)) {
+    requireConfirmation();
+    requireInputs(inputs, "entry ids");
+    output = await many(inputs, (id) =>
+      request(`/agent/learning/${integer(id, "entry id")}/${action}`, { method: "POST" }),
+    );
+  } else if (group === "learning" && action === "correct-first") {
+    requireConfirmation();
+    requireInputs(inputs, "entry ids");
+    const rating = parsed.values.rating;
+    if (!["known", "fuzzy", "forgotten"].includes(rating)) {
+      fail("--rating must be known, fuzzy, or forgotten.");
+    }
+    output = await many(inputs, (id) =>
+      request(`/agent/learning/${integer(id, "entry id")}/correct-first`, {
+        method: "POST",
+        body: JSON.stringify({ rating }),
+      }),
+    );
+  } else if (group === "learning" && action === "status") {
+    requireInputs(inputs, "lexeme ids");
+    output = await many(inputs, (id) => request(`/agent/lexemes/${integer(id, "lexeme id")}`));
+  } else if (group === "learning" && ["add", "remove", "reset"].includes(action)) {
+    requireConfirmation();
+    requireInputs(inputs, parsed.values.lexeme ? "lexeme ids" : "entry ids");
+    output = await many(inputs, async (input) => {
+      const entryId = parsed.values.lexeme
+        ? await entryIdForLexeme(integer(input, "lexeme id"))
+        : integer(input, "entry id");
+      if (action === "add") return request(`/agent/learning/${entryId}`, { method: "PUT" });
+      if (action === "remove") return request(`/agent/learning/${entryId}`, { method: "DELETE" });
+      return request(`/agent/learning/${entryId}/reset`, { method: "POST" });
+    });
+  } else {
+    usage(2);
+  }
+  console.log(JSON.stringify(output, null, 2));
+} catch (error) {
+  fail(error.message);
+}
+
+async function request(path, init = {}) {
+  const method = String(init.method ?? "GET").toUpperCase();
+  const retries = retryLimit(method);
+  let response;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      response = await fetch(`${baseUrl}${path}`, {
+        ...init,
+        signal: init.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers: {
+          authorization: `Bearer ${token}`,
+          ...(init.body ? { "content-type": "application/json" } : {}),
+        },
+      });
+      break;
+    } catch (error) {
+      if (attempt >= retries) {
+        throw new Error(`${method} ${path}: ${describeNetworkError(error)} after ${attempt + 1} attempt(s)`);
+      }
+      await delay(250 * 2 ** attempt);
+    }
+  }
+  const text = await response.text();
+  let payload = text;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    // Plain-text errors are used by the existing backend handlers.
+  }
+  if (!response.ok) {
+    throw new Error(`${response.status} ${typeof payload === "string" ? payload : JSON.stringify(payload)}`);
+  }
+  return payload;
+}
+
+function retryLimit(method) {
+  return method === "GET" ? READ_RETRIES : 0;
+}
+
+function describeNetworkError(error) {
+  const cause = error?.cause;
+  const code = cause?.code ?? cause?.name;
+  const message = cause?.message ?? error?.message ?? String(error);
+  return `${code ? `${code}: ` : ""}${message}`;
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function many(items, operation) {
+  const results = [];
+  for (const input of items) {
+    try {
+      results.push(await operation(String(input)));
+    } catch (error) {
+      process.exitCode = 1;
+      results.push({ input, error: error.message });
+    }
+  }
+  return results.length === 1 ? results[0] : results;
+}
+
+async function entryIdForLexeme(lexemeId) {
+  const state = await request(`/agent/lexemes/${lexemeId}`);
+  if (!state.knowledge.entry_id) {
+    throw new Error(`lexeme ${lexemeId} is not initialized`);
+  }
+  return state.knowledge.entry_id;
+}
+
+function parseInput(raw) {
+  const value = JSON.parse(raw);
+  if (!Array.isArray(value)) throw new Error("stdin must contain a JSON array");
+  return value;
+}
+
+function parseArticleInput(raw) {
+  const value = JSON.parse(raw);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("article stdin must contain a JSON object");
+  }
+  const title = typeof value.title === "string" ? value.title.trim() : "";
+  if (!title) throw new Error("article title is required");
+  if (typeof value.body !== "string" || !value.body.trim()) throw new Error("article body is required");
+  const folderId = value.folder_id ?? null;
+  if (folderId !== null && (!Number.isSafeInteger(folderId) || folderId <= 0)) {
+    throw new Error(`invalid folder id: ${folderId}`);
+  }
+  return { title, body: value.body, folder_id: folderId };
+}
+
+function apiBase(value) {
+  return value.replace(/\/+$/, "");
+}
+
+function localEnv(name) {
+  try {
+    return readEnvFile("backend/.env")[name];
+  } catch {
+    return undefined;
+  }
+}
+
+function readEnvFile(path) {
+  return parseEnv(readFileSync(path, "utf8"));
+}
+
+function parseEnv(raw) {
+  const values = {};
+  for (const line of raw.split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (!match || match[1].startsWith("#")) continue;
+    const [, name, rawValue] = match;
+    values[name] = rawValue.replace(/^(["'])(.*)\1$/, "$2");
+  }
+  return values;
+}
+
+function integer(value, name) {
+  const result = Number(value);
+  if (!Number.isSafeInteger(result) || result <= 0) throw new Error(`invalid ${name}: ${value}`);
+  return result;
+}
+
+function requireInputs(items, name) {
+  if (!items.length) fail(`Provide ${name} as arguments or a JSON array through --stdin.`);
+}
+
+function requireConfirmation() {
+  if (!parsed.values.yes) fail("Write operations require --yes.");
+}
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}
+
+function usage(code) {
+  console.log(`Usage:
+  tools/deai lexeme resolve <surface...> [--limit 8]
+  tools/deai lexeme inspect <lexeme-id...>
+  tools/deai entry initialize <lexeme-id...> --yes [--provider NAME --model ID]
+  tools/deai article list
+  tools/deai article get <article-id...>
+  tools/deai article import --stdin --yes
+  tools/deai learning status <lexeme-id...>
+  tools/deai learning list
+  tools/deai learning logs [--date YYYY-MM-DD] [--entry-id ID] [--session-id ID] [--limit N]
+  tools/deai learning plan
+  tools/deai learning explain
+  tools/deai learning reset-intraday <entry-id...> --yes
+  tools/deai learning undo <entry-id...> --yes
+  tools/deai learning correct-first <entry-id...> --rating known|fuzzy|forgotten --yes
+  tools/deai learning add|remove|reset <entry-id...> --yes [--lexeme]
+
+Global options: --url URL --token TOKEN --env-file PATH --stdin --help
+Environment: DEAI_API_URL DEAI_API_TOKEN`);
+  process.exit(code);
+}

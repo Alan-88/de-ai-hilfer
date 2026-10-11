@@ -8,7 +8,7 @@ pub async fn replace_database_snapshot(
     let mut tx = pool.begin().await?;
 
     sqlx::query(
-        "TRUNCATE TABLE reading_article_bookmarks, reading_articles, reading_folders, learning_progress, follow_ups, knowledge_entries RESTART IDENTITY CASCADE",
+        "TRUNCATE TABLE learning_review_corrections, learning_review_logs, reading_article_bookmarks, reading_articles, reading_folders, learning_progress, follow_ups, knowledge_entries RESTART IDENTITY CASCADE",
     )
     .execute(&mut *tx)
     .await?;
@@ -73,6 +73,58 @@ pub async fn replace_database_snapshot(
         .bind(progress.due_date)
         .bind(progress.review_count)
         .bind(progress.lapses)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    for log in &backup.learning_review_logs {
+        sqlx::query(
+            r#"
+            INSERT INTO learning_review_logs (
+                id, session_id, entry_id, rating, phase, is_first_today,
+                appearance_count_today, long_term_committed, business_date,
+                created_at, progress_before, progress_after
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            "#,
+        )
+        .bind(log.id)
+        .bind(&log.session_id)
+        .bind(log.entry_id)
+        .bind(&log.rating)
+        .bind(&log.phase)
+        .bind(log.is_first_today)
+        .bind(log.appearance_count_today)
+        .bind(log.long_term_committed)
+        .bind(log.business_date)
+        .bind(log.created_at)
+        .bind(&log.progress_before)
+        .bind(&log.progress_after)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    for correction in &backup.learning_review_corrections {
+        sqlx::query(
+            r#"
+            INSERT INTO learning_review_corrections (
+                id, operation_id, entry_id, business_date, target_log_id,
+                action, replacement_rating, progress_before, progress_after,
+                created_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            "#,
+        )
+        .bind(correction.id)
+        .bind(&correction.operation_id)
+        .bind(correction.entry_id)
+        .bind(correction.business_date)
+        .bind(correction.target_log_id)
+        .bind(&correction.action)
+        .bind(&correction.replacement_rating)
+        .bind(&correction.progress_before)
+        .bind(&correction.progress_after)
+        .bind(correction.created_at)
         .execute(&mut *tx)
         .await?;
     }
@@ -157,6 +209,8 @@ pub async fn replace_database_snapshot(
     .await?;
 
     for table in [
+        "learning_review_logs",
+        "learning_review_corrections",
         "reading_folders",
         "reading_articles",
         "reading_article_bookmarks",

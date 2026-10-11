@@ -313,6 +313,7 @@ export interface LearningSessionV3Response extends LearningSessionResponse {
   session_id: string;
   business_date: string;
   intraday_queue_count: number;
+  next_available_at: string | null;
 }
 
 export interface LearningProgressMapResponse {

@@ -3,6 +3,12 @@ use chrono::{DateTime, Duration, NaiveDate, Utc};
 use std::collections::{HashMap, VecDeque};
 
 pub(crate) const MAX_INTRADAY_APPEARANCES: i32 = 6;
+// This limits unresolved intraday intake, not the number of new words per day.
+pub(crate) const ACTIVE_INTRADAY_WORKSET_TARGET: usize = 10;
+pub(crate) const INTRADAY_FORGOTTEN_DELAY_SECONDS: i64 = 45;
+pub(crate) const INTRADAY_FUZZY_DELAY_SECONDS: i64 = 120;
+pub(crate) const INTRADAY_KNOWN_DELAY_SECONDS: i64 = 60;
+pub(crate) const INTRADAY_RECOVERY_KNOWN_DELAY_SECONDS: i64 = 300;
 
 pub type LearningSessionStore = HashMap<String, LearningSessionRuntime>;
 
@@ -86,12 +92,14 @@ impl LearningSessionRuntime {
             return;
         }
 
-        if let Some(item) = self.new_items.pop_front() {
-            self.set_current(item);
-            return;
+        if self.intraday_items.len() < ACTIVE_INTRADAY_WORKSET_TARGET {
+            if let Some(item) = self.new_items.pop_front() {
+                self.set_current(item);
+                return;
+            }
         }
 
-        if !self.intraday_items.is_empty() {
+        if self.intraday_items.len() >= ACTIVE_INTRADAY_WORKSET_TARGET {
             let index = self.closest_intraday_index();
             let item = self.intraday_items.remove(index);
             self.set_current(item);
@@ -105,8 +113,15 @@ impl LearningSessionRuntime {
     ) {
         item.phase = LearningPhase::Intraday;
         item.due_after_seen = self.seen_cursor + card_gap_for_rating(rating);
-        item.earliest_review_at = Utc::now() + min_delay_for_rating(rating);
+        item.earliest_review_at = Utc::now() + min_delay_for_item(&item, rating);
         self.intraday_items.push(item);
+    }
+
+    pub(crate) fn next_available_at(&self) -> Option<DateTime<Utc>> {
+        self.intraday_items
+            .iter()
+            .map(|item| item.earliest_review_at)
+            .min()
     }
 
     pub(crate) fn is_completed(&self) -> bool {
@@ -120,10 +135,8 @@ impl LearningSessionRuntime {
         self.intraday_items
             .iter()
             .enumerate()
-            .filter(|(_, item)| {
-                item.due_after_seen <= self.seen_cursor && item.earliest_review_at <= now
-            })
-            .min_by_key(|(_, item)| (item.due_after_seen, item.earliest_review_at))
+            .filter(|(_, item)| item.earliest_review_at <= now)
+            .min_by_key(|(_, item)| (item.earliest_review_at, item.due_after_seen))
             .map(|(index, _)| index)
     }
 
@@ -131,7 +144,7 @@ impl LearningSessionRuntime {
         self.intraday_items
             .iter()
             .enumerate()
-            .min_by_key(|(_, item)| (item.due_after_seen, item.earliest_review_at))
+            .min_by_key(|(_, item)| (item.earliest_review_at, item.due_after_seen))
             .map(|(index, _)| index)
             .unwrap_or(0)
     }
@@ -221,11 +234,17 @@ fn card_gap_for_rating(rating: LearningRecallRating) -> i32 {
     }
 }
 
-fn min_delay_for_rating(rating: LearningRecallRating) -> Duration {
+fn min_delay_for_item(item: &LearningSessionItem, rating: LearningRecallRating) -> Duration {
+    if item.first_rating == Some(LearningRecallRating::Forgotten)
+        && rating == LearningRecallRating::Known
+    {
+        return Duration::seconds(INTRADAY_RECOVERY_KNOWN_DELAY_SECONDS);
+    }
+
     match rating {
-        LearningRecallRating::Forgotten => Duration::seconds(45),
-        LearningRecallRating::Fuzzy => Duration::minutes(2),
-        LearningRecallRating::Known => Duration::minutes(1),
+        LearningRecallRating::Forgotten => Duration::seconds(INTRADAY_FORGOTTEN_DELAY_SECONDS),
+        LearningRecallRating::Fuzzy => Duration::seconds(INTRADAY_FUZZY_DELAY_SECONDS),
+        LearningRecallRating::Known => Duration::seconds(INTRADAY_KNOWN_DELAY_SECONDS),
     }
 }
 
@@ -297,6 +316,80 @@ mod tests {
             LearningRecallRating::Forgotten,
             false
         ));
+    }
+
+    #[test]
+    fn time_is_primary_over_card_gap() {
+        let now = Utc::now();
+        let mut item = empty_item(LearningPhase::Intraday);
+        item.due_after_seen = 100;
+        item.earliest_review_at = now - Duration::seconds(1);
+
+        let mut session = LearningSessionRuntime::new(
+            "test".to_string(),
+            NaiveDate::from_ymd_opt(2026, 9, 18).unwrap(),
+            VecDeque::new(),
+            VecDeque::new(),
+            vec![item].into(),
+        );
+        session.select_next(now);
+
+        assert!(session.current.is_some());
+    }
+
+    #[test]
+    fn workset_target_uses_count_fallback_before_new_cards() {
+        let now = Utc::now();
+        let intraday_items = (0..ACTIVE_INTRADAY_WORKSET_TARGET)
+            .map(|_| {
+                let mut item = empty_item(LearningPhase::Intraday);
+                item.earliest_review_at = now + Duration::minutes(5);
+                item
+            })
+            .collect::<Vec<_>>();
+        let mut session = LearningSessionRuntime::new(
+            "test".to_string(),
+            NaiveDate::from_ymd_opt(2026, 9, 18).unwrap(),
+            VecDeque::new(),
+            vec![empty_item(LearningPhase::New)].into(),
+            intraday_items.into(),
+        );
+        session.select_next(now);
+
+        assert_eq!(
+            session.current.as_ref().map(|item| item.phase),
+            Some(LearningPhase::Intraday)
+        );
+    }
+
+    #[test]
+    fn waits_when_intraday_card_is_not_due_and_workset_has_room() {
+        let now = Utc::now();
+        let mut item = empty_item(LearningPhase::Intraday);
+        item.earliest_review_at = now + Duration::minutes(5);
+        let mut session = LearningSessionRuntime::new(
+            "test".to_string(),
+            NaiveDate::from_ymd_opt(2026, 9, 18).unwrap(),
+            VecDeque::new(),
+            VecDeque::new(),
+            vec![item].into(),
+        );
+        session.select_next(now);
+
+        assert!(session.current.is_none());
+        assert!(!session.is_completed());
+        assert!(session.next_available_at().is_some());
+    }
+
+    #[test]
+    fn forgotten_then_known_uses_longer_cooldown() {
+        let mut item = empty_item(LearningPhase::Intraday);
+        item.first_rating = Some(LearningRecallRating::Forgotten);
+
+        assert_eq!(
+            min_delay_for_item(&item, LearningRecallRating::Known),
+            Duration::minutes(5)
+        );
     }
 
     fn empty_item(phase: LearningPhase) -> LearningSessionItem {

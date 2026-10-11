@@ -11,6 +11,8 @@ pub async fn export_database(state: &AppState) -> Result<String> {
         knowledge_entries: knowledge::list_all(&state.pool).await?,
         follow_ups: follow_up::list_all(&state.pool).await?,
         learning_progress: learning::list_all_progress(&state.pool).await?,
+        learning_review_logs: learning::list_all_review_logs(&state.pool).await?,
+        learning_review_corrections: learning::list_all_review_corrections(&state.pool).await?,
         reading_folders: reading::list_folders(&state.pool).await?,
         reading_articles: reading::list_articles_for_backup(&state.pool).await?,
         reading_article_bookmarks: reading::list_bookmarks_for_backup(&state.pool).await?,

@@ -73,8 +73,37 @@ Do not guess or silently rewrite a failing bookmark. Report the backend validati
 ## Other commands
 
 ```bash
+./tools/deai learning explain
 ./tools/deai learning list
 ./tools/deai learning status 123 456
+./tools/deai learning logs --date 2026-09-17 --limit 100
+./tools/deai learning logs --entry-id 2591
+./tools/deai learning plan
+./tools/deai learning reset-intraday 789 --yes
+./tools/deai learning undo 789 --yes
+./tools/deai learning correct-first 789 --rating fuzzy --yes
 ./tools/deai learning remove 789 --yes
 ./tools/deai learning reset 789 --yes
 ```
+
+`learning logs` is read-only and returns the persisted rating timeline for the
+current business day by default. Use `--date`, `--entry-id`, or `--session-id`
+to narrow it. `learning plan` is also read-only: it returns the reconstructible
+current-day plan, including long-term due cards and unfinished intraday
+recoveries. Do not start a web learning session only to inspect the plan.
+
+Run `learning explain` when the Agent needs the current V3 scheduler rules,
+the distinction between first and intraday feedback, or the boundary between
+existing plan reset and current-day correction operations.
+
+Correction commands are targeted write operations. `reset-intraday` keeps the
+first feedback and long-term FSRS state but removes effective later feedback;
+`undo` removes only the latest effective intraday feedback; `correct-first`
+changes the first feedback and recomputes long-term FSRS only when a stored
+progress snapshot makes that correction safe. Always inspect the response and
+do not retry a rejected correction blindly. Logs created before snapshot
+support are intentionally rejected by `correct-first`.
+
+The plan is not a snapshot of the in-memory order of an already open browser
+session. It is the backend's safe reconstruction from learning progress and
+review logs.

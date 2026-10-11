@@ -96,12 +96,32 @@ async fn main() -> anyhow::Result<()> {
         )
         .route("/learning", get(handlers::agent_api::list_learning))
         .route(
+            "/learning/logs",
+            get(handlers::agent_api::list_learning_logs),
+        )
+        .route(
+            "/learning/plan",
+            get(handlers::agent_api::get_learning_plan),
+        )
+        .route(
             "/learning/:entry_id",
             put(handlers::agent_api::add_learning).delete(handlers::agent_api::remove_learning),
         )
         .route(
             "/learning/:entry_id/reset",
             post(handlers::agent_api::reset_learning),
+        )
+        .route(
+            "/learning/:entry_id/reset-intraday",
+            post(handlers::agent_api::reset_intraday),
+        )
+        .route(
+            "/learning/:entry_id/undo",
+            post(handlers::agent_api::undo_last_intraday),
+        )
+        .route(
+            "/learning/:entry_id/correct-first",
+            post(handlers::agent_api::correct_first_rating),
         )
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),

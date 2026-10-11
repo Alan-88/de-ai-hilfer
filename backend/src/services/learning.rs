@@ -7,7 +7,8 @@ use crate::repositories::{knowledge, learning};
 use crate::services::analysis_preview::{analysis_markdown, structured_analysis};
 use crate::services::learning_session::{
     restored_session_item, session_item, should_complete_today, LearningPhase, LearningSessionItem,
-    LearningSessionRuntime, MAX_INTRADAY_APPEARANCES,
+    LearningSessionRuntime, INTRADAY_FORGOTTEN_DELAY_SECONDS, INTRADAY_FUZZY_DELAY_SECONDS,
+    INTRADAY_KNOWN_DELAY_SECONDS, INTRADAY_RECOVERY_KNOWN_DELAY_SECONDS, MAX_INTRADAY_APPEARANCES,
 };
 use crate::services::query_resolution::attached_phrase_modules_from_analysis;
 use crate::state::AppState;
@@ -65,6 +66,10 @@ pub async fn start_session_v3(state: &AppState) -> Result<LearningSessionV3Respo
         &state.pool,
         current_business_date,
         MAX_INTRADAY_APPEARANCES,
+        INTRADAY_RECOVERY_KNOWN_DELAY_SECONDS,
+        INTRADAY_KNOWN_DELAY_SECONDS,
+        INTRADAY_FORGOTTEN_DELAY_SECONDS,
+        INTRADAY_FUZZY_DELAY_SECONDS,
     )
     .await?;
     let recovered_entry_ids = intraday_recoveries
@@ -135,6 +140,16 @@ pub async fn get_session_next_v3(
     Ok(session_to_response(session))
 }
 
+pub async fn invalidate_sessions_for_business_date(
+    state: &AppState,
+    business_date: NaiveDate,
+) -> usize {
+    let mut sessions = state.learning_sessions.lock().await;
+    let before = sessions.len();
+    sessions.retain(|_, session| session.business_date != business_date);
+    before - sessions.len()
+}
+
 pub async fn submit_review_v3(
     state: &AppState,
     session_id: &str,
@@ -157,6 +172,7 @@ pub async fn submit_review_v3(
         ));
     }
 
+    let progress_before = item.progress.clone();
     let is_first_today = item.first_rating.is_none();
     if is_first_today {
         item.first_rating = Some(rating);
@@ -179,6 +195,8 @@ pub async fn submit_review_v3(
         session.requeue_intraday(item.clone(), rating);
     }
 
+    let progress_after = item.progress.clone();
+
     learning::insert_review_log(
         &state.pool,
         &session.id,
@@ -189,6 +207,8 @@ pub async fn submit_review_v3(
         item.appearance_count_today,
         long_term_committed,
         session.business_date,
+        &progress_before,
+        &progress_after,
     )
     .await?;
 
@@ -299,6 +319,7 @@ fn session_to_response(session: &LearningSessionRuntime) -> LearningSessionV3Res
         completed_count: session.completed_count,
         total_count: session.total_count,
         intraday_queue_count: session.intraday_items.len() as i32,
+        next_available_at: session.next_available_at(),
         is_completed: session.is_completed(),
     }
 }
@@ -322,20 +343,31 @@ async fn commit_long_term(
     progress: &mut LearningProgress,
     first_rating: LearningRecallRating,
 ) -> Result<()> {
-    let now = Utc::now();
-    let had_prior_review = progress.review_count > 0;
+    let next = recompute_long_term_progress(progress, first_rating, Utc::now())?;
+    let updated = learning::update_progress(&state.pool, &next).await?;
+    *progress = updated;
+    Ok(())
+}
+
+pub(crate) fn recompute_long_term_progress(
+    progress: &LearningProgress,
+    first_rating: LearningRecallRating,
+    reviewed_at: DateTime<Utc>,
+) -> Result<LearningProgress> {
+    let mut next = progress.clone();
+    let had_prior_review = next.review_count > 0;
     let fsrs = FSRS::new(Some(&DEFAULT_PARAMETERS))?;
-    let elapsed_days = progress
+    let elapsed_days = next
         .last_review_at
-        .map(|last| (now - last).num_days().max(0) as u32)
+        .map(|last| (reviewed_at - last).num_days().max(0) as u32)
         .unwrap_or(0);
     let current_memory =
-        if progress.review_count == 0 || progress.stability <= 0.0 || progress.difficulty <= 0.0 {
+        if next.review_count == 0 || next.stability <= 0.0 || next.difficulty <= 0.0 {
             None
         } else {
             Some(MemoryState {
-                stability: progress.stability,
-                difficulty: progress.difficulty,
+                stability: next.stability,
+                difficulty: next.difficulty,
             })
         };
 
@@ -347,21 +379,19 @@ async fn commit_long_term(
     };
     let scheduled_days = selected.interval.round().max(1.0) as i64;
 
-    progress.stability = selected.memory.stability;
-    progress.difficulty = selected.memory.difficulty;
-    progress.elapsed_days = elapsed_days as i64;
-    progress.scheduled_days = scheduled_days;
-    progress.state = long_term_state(first_rating, had_prior_review);
-    progress.last_review_at = Some(now);
-    progress.due_date = next_due_date(now, scheduled_days);
-    progress.review_count += 1;
+    next.stability = selected.memory.stability;
+    next.difficulty = selected.memory.difficulty;
+    next.elapsed_days = elapsed_days as i64;
+    next.scheduled_days = scheduled_days;
+    next.state = long_term_state(first_rating, had_prior_review);
+    next.last_review_at = Some(reviewed_at);
+    next.due_date = next_due_date(reviewed_at, scheduled_days);
     if first_rating == LearningRecallRating::Forgotten && had_prior_review {
-        progress.lapses += 1;
+        next.lapses += 1;
     }
 
-    let updated = learning::update_progress(&state.pool, progress).await?;
-    *progress = updated;
-    Ok(())
+    next.review_count += 1;
+    Ok(next)
 }
 
 fn long_term_state(first_rating: LearningRecallRating, had_prior_review: bool) -> i32 {
@@ -419,7 +449,7 @@ fn is_new_progress(progress: &LearningProgress) -> bool {
     progress.review_count == 0 || progress.state == 0
 }
 
-fn business_date(now: DateTime<Utc>) -> NaiveDate {
+pub(crate) fn business_date(now: DateTime<Utc>) -> NaiveDate {
     let local = now.with_timezone(&business_timezone());
     let day = local.date_naive();
     if local.time() < NaiveTime::from_hms_opt(4, 0, 0).expect("valid time") {
@@ -486,5 +516,39 @@ mod tests {
             next_due_date(now, 1),
             Utc.with_ymd_and_hms(2026, 9, 17, 20, 0, 0).unwrap()
         );
+    }
+
+    #[test]
+    fn recompute_long_term_progress_is_deterministic_at_a_fixed_time() {
+        let reviewed_at = Utc.with_ymd_and_hms(2026, 9, 18, 12, 0, 0).unwrap();
+        let progress = LearningProgress {
+            entry_id: 7,
+            stability: 0.0,
+            difficulty: 0.0,
+            elapsed_days: 0,
+            scheduled_days: 0,
+            state: 0,
+            last_review_at: None,
+            due_date: reviewed_at,
+            review_count: 0,
+            lapses: 0,
+        };
+
+        let first =
+            recompute_long_term_progress(&progress, LearningRecallRating::Known, reviewed_at)
+                .unwrap();
+        let second =
+            recompute_long_term_progress(&progress, LearningRecallRating::Known, reviewed_at)
+                .unwrap();
+
+        assert_eq!(
+            serde_json::to_value(&first).unwrap(),
+            serde_json::to_value(&second).unwrap()
+        );
+        assert_eq!(first.last_review_at, Some(reviewed_at));
+        assert_eq!(first.review_count, 1);
+        assert!(first.stability > 0.0);
+        assert!(first.difficulty > 0.0);
+        assert!(first.due_date > reviewed_at);
     }
 }

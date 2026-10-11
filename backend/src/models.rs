@@ -118,6 +118,36 @@ pub struct LearningProgress {
     pub lapses: i32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct LearningReviewLog {
+    pub id: i64,
+    pub session_id: String,
+    pub entry_id: i64,
+    pub rating: String,
+    pub phase: String,
+    pub is_first_today: bool,
+    pub appearance_count_today: i32,
+    pub long_term_committed: bool,
+    pub business_date: chrono::NaiveDate,
+    pub created_at: DateTime<Utc>,
+    pub progress_before: Option<serde_json::Value>,
+    pub progress_after: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct LearningReviewCorrection {
+    pub id: i64,
+    pub operation_id: String,
+    pub entry_id: i64,
+    pub business_date: chrono::NaiveDate,
+    pub target_log_id: Option<i64>,
+    pub action: String,
+    pub replacement_rating: Option<String>,
+    pub progress_before: Option<serde_json::Value>,
+    pub progress_after: Option<serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewLearningProgress {
     pub entry_id: i64,
@@ -277,6 +307,10 @@ pub struct DatabaseBackupPayload {
     pub knowledge_entries: Vec<KnowledgeEntry>,
     pub follow_ups: Vec<FollowUp>,
     pub learning_progress: Vec<LearningProgress>,
+    #[serde(default)]
+    pub learning_review_logs: Vec<LearningReviewLog>,
+    #[serde(default)]
+    pub learning_review_corrections: Vec<LearningReviewCorrection>,
     #[serde(default)]
     pub reading_folders: Vec<crate::reading_models::ReadingFolder>,
     #[serde(default)]
@@ -458,6 +492,7 @@ pub struct LearningSessionV3Response {
     pub completed_count: i32,
     pub total_count: i32,
     pub intraday_queue_count: i32,
+    pub next_available_at: Option<DateTime<Utc>>,
     pub is_completed: bool,
 }
 

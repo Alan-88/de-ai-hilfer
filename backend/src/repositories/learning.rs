@@ -1,5 +1,8 @@
 use crate::db::DbPool;
-use crate::models::{KnowledgeEntry, LearningProgress, NewLearningProgress};
+use crate::models::{
+    KnowledgeEntry, LearningProgress, LearningReviewCorrection, LearningReviewLog,
+    NewLearningProgress,
+};
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::Row;
 
@@ -11,6 +14,26 @@ pub struct LearningIntradayRecovery {
     pub appearance_count_today: i32,
     pub success_streak: i32,
     pub next_review_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct LearningReviewLogRow {
+    pub id: i64,
+    pub session_id: String,
+    pub entry_id: i64,
+    pub query_text: String,
+    pub rating: String,
+    pub phase: String,
+    pub is_first_today: bool,
+    pub appearance_count_today: i32,
+    pub long_term_committed: bool,
+    pub business_date: NaiveDate,
+    pub created_at: DateTime<Utc>,
+    pub progress_before: Option<serde_json::Value>,
+    pub effective_rating: Option<String>,
+    pub correction_status: String,
+    pub correction_action: Option<String>,
+    pub effective_progress_after: Option<serde_json::Value>,
 }
 
 pub async fn find_progress(
@@ -153,10 +176,32 @@ pub async fn list_intraday_recoveries(
     pool: &DbPool,
     business_date: NaiveDate,
     max_appearances: i32,
+    recovery_known_delay_seconds: i64,
+    known_delay_seconds: i64,
+    forgotten_delay_seconds: i64,
+    fuzzy_delay_seconds: i64,
 ) -> Result<Vec<LearningIntradayRecovery>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        WITH per_entry AS (
+        WITH effective_logs AS (
+            SELECT
+                l.id,
+                l.entry_id,
+                l.created_at,
+                CASE
+                    WHEN c.id IS NOT NULL AND c.replacement_rating IS NULL THEN NULL
+                    ELSE COALESCE(c.replacement_rating, l.rating)
+                END AS rating
+            FROM learning_review_logs l
+            LEFT JOIN LATERAL (
+                SELECT id, replacement_rating
+                FROM learning_review_corrections
+                WHERE target_log_id = l.id
+                ORDER BY id DESC
+                LIMIT 1
+            ) c ON TRUE
+            WHERE l.business_date = $1
+        ), per_entry AS (
             SELECT
                 entry_id,
                 (array_agg(rating ORDER BY created_at, id))[1] AS first_rating,
@@ -164,8 +209,8 @@ pub async fn list_intraday_recoveries(
                 count(*)::INTEGER AS appearance_count_today,
                 max(created_at) AS last_seen_at,
                 max(created_at) FILTER (WHERE rating <> 'known') AS last_non_known_at
-            FROM learning_review_logs
-            WHERE business_date = $1
+            FROM effective_logs
+            WHERE rating IS NOT NULL
             GROUP BY entry_id
         ), recovered AS (
             SELECT
@@ -176,14 +221,18 @@ pub async fn list_intraday_recoveries(
                     WHERE l.rating = 'known' AND l.created_at > p.last_non_known_at
                 )::INTEGER AS success_streak,
                 CASE p.last_rating
-                    WHEN 'forgotten' THEN p.last_seen_at + INTERVAL '45 seconds'
-                    WHEN 'fuzzy' THEN p.last_seen_at + INTERVAL '2 minutes'
-                    ELSE p.last_seen_at + INTERVAL '1 minute'
+                    WHEN 'known' THEN CASE p.first_rating
+                        WHEN 'forgotten' THEN p.last_seen_at + ($3 * INTERVAL '1 second')
+                        ELSE p.last_seen_at + ($4 * INTERVAL '1 second')
+                    END
+                    WHEN 'forgotten' THEN p.last_seen_at + ($5 * INTERVAL '1 second')
+                    WHEN 'fuzzy' THEN p.last_seen_at + ($6 * INTERVAL '1 second')
+                    ELSE p.last_seen_at + ($4 * INTERVAL '1 second')
                 END AS next_review_at
             FROM per_entry p
-            JOIN learning_review_logs l
+            JOIN effective_logs l
               ON l.entry_id = p.entry_id
-             AND l.business_date = $1
+             AND l.rating IS NOT NULL
             GROUP BY
                 p.entry_id,
                 p.first_rating,
@@ -231,6 +280,10 @@ pub async fn list_intraday_recoveries(
     )
     .bind(business_date)
     .bind(max_appearances)
+    .bind(recovery_known_delay_seconds)
+    .bind(known_delay_seconds)
+    .bind(forgotten_delay_seconds)
+    .bind(fuzzy_delay_seconds)
     .fetch_all(pool)
     .await?;
 
@@ -281,6 +334,63 @@ pub async fn list_all_progress(pool: &DbPool) -> Result<Vec<LearningProgress>, s
     .await
 }
 
+pub async fn list_review_logs(
+    pool: &DbPool,
+    business_date: NaiveDate,
+    entry_id: Option<i64>,
+    session_id: Option<&str>,
+    limit: i64,
+) -> Result<Vec<LearningReviewLogRow>, sqlx::Error> {
+    sqlx::query_as::<_, LearningReviewLogRow>(
+        r#"
+        SELECT
+            l.id,
+            l.session_id,
+            l.entry_id,
+            ke.query_text,
+            l.rating,
+            l.phase,
+            l.is_first_today,
+            l.appearance_count_today,
+            l.long_term_committed,
+            l.business_date,
+            l.created_at,
+            l.progress_before,
+            CASE
+                WHEN c.id IS NOT NULL AND c.replacement_rating IS NULL THEN NULL
+                ELSE COALESCE(c.replacement_rating, l.rating)
+            END AS effective_rating,
+            CASE
+                WHEN c.id IS NULL THEN 'active'
+                WHEN c.replacement_rating IS NULL THEN 'voided'
+                ELSE 'replaced'
+            END AS correction_status,
+            c.action AS correction_action,
+            COALESCE(c.progress_after, l.progress_after) AS effective_progress_after
+        FROM learning_review_logs l
+        JOIN knowledge_entries ke ON ke.id = l.entry_id
+        LEFT JOIN LATERAL (
+            SELECT id, action, replacement_rating, progress_after
+            FROM learning_review_corrections
+            WHERE target_log_id = l.id
+            ORDER BY id DESC
+            LIMIT 1
+        ) c ON TRUE
+        WHERE l.business_date = $1
+          AND ($2::BIGINT IS NULL OR l.entry_id = $2)
+          AND ($3::TEXT IS NULL OR l.session_id = $3)
+        ORDER BY l.created_at ASC, l.id ASC
+        LIMIT $4
+        "#,
+    )
+    .bind(business_date)
+    .bind(entry_id)
+    .bind(session_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_review_log(
     pool: &DbPool,
@@ -292,14 +402,25 @@ pub async fn insert_review_log(
     appearance_count_today: i32,
     long_term_committed: bool,
     business_date: NaiveDate,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
+    progress_before: &LearningProgress,
+    progress_after: &LearningProgress,
+) -> Result<i64, sqlx::Error> {
+    let progress_before = serde_json::to_value(progress_before).map_err(|error| {
+        sqlx::Error::Protocol(format!("failed to serialize progress_before: {error}"))
+    })?;
+    let progress_after = serde_json::to_value(progress_after).map_err(|error| {
+        sqlx::Error::Protocol(format!("failed to serialize progress_after: {error}"))
+    })?;
+
+    sqlx::query_scalar(
         r#"
         INSERT INTO learning_review_logs (
             session_id, entry_id, rating, phase, is_first_today,
-            appearance_count_today, long_term_committed, business_date
+            appearance_count_today, long_term_committed, business_date,
+            progress_before, progress_after
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id
         "#,
     )
     .bind(session_id)
@@ -310,8 +431,141 @@ pub async fn insert_review_log(
     .bind(appearance_count_today)
     .bind(long_term_committed)
     .bind(business_date)
-    .execute(pool)
+    .bind(progress_before)
+    .bind(progress_after)
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn list_all_review_logs(pool: &DbPool) -> Result<Vec<LearningReviewLog>, sqlx::Error> {
+    sqlx::query_as::<_, LearningReviewLog>(
+        r#"
+        SELECT id, session_id, entry_id, rating, phase, is_first_today,
+               appearance_count_today, long_term_committed, business_date,
+               created_at, progress_before, progress_after
+        FROM learning_review_logs
+        ORDER BY id ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn list_all_review_corrections(
+    pool: &DbPool,
+) -> Result<Vec<LearningReviewCorrection>, sqlx::Error> {
+    sqlx::query_as::<_, LearningReviewCorrection>(
+        r#"
+        SELECT id, operation_id, entry_id, business_date, target_log_id,
+               action, replacement_rating, progress_before, progress_after,
+               created_at
+        FROM learning_review_corrections
+        ORDER BY id ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn insert_correction_rows(
+    pool: &DbPool,
+    operation_id: &str,
+    entry_id: i64,
+    business_date: NaiveDate,
+    action: &str,
+    target_log_ids: &[i64],
+    replacement_rating: Option<&str>,
+    progress_before: Option<&serde_json::Value>,
+    progress_after: Option<&serde_json::Value>,
+) -> Result<Vec<i64>, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let mut ids = Vec::with_capacity(target_log_ids.len());
+    for target_log_id in target_log_ids {
+        let id = sqlx::query_scalar::<_, i64>(
+            r#"
+            INSERT INTO learning_review_corrections (
+                operation_id, entry_id, business_date, target_log_id,
+                action, replacement_rating, progress_before, progress_after
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id
+            "#,
+        )
+        .bind(operation_id)
+        .bind(entry_id)
+        .bind(business_date)
+        .bind(target_log_id)
+        .bind(action)
+        .bind(replacement_rating)
+        .bind(progress_before)
+        .bind(progress_after)
+        .fetch_one(&mut *tx)
+        .await?;
+        ids.push(id);
+    }
+    tx.commit().await?;
+    Ok(ids)
+}
+
+pub async fn update_progress_and_insert_correction(
+    pool: &DbPool,
+    progress: &LearningProgress,
+    operation_id: &str,
+    business_date: NaiveDate,
+    target_log_id: i64,
+    replacement_rating: &str,
+    progress_before: &serde_json::Value,
+    progress_after: &serde_json::Value,
+) -> Result<i64, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        r#"
+        UPDATE learning_progress
+        SET stability = $2,
+            difficulty = $3,
+            elapsed_days = $4,
+            scheduled_days = $5,
+            state = $6,
+            last_review_at = $7,
+            due_date = $8,
+            review_count = $9,
+            lapses = $10
+        WHERE entry_id = $1
+        "#,
+    )
+    .bind(progress.entry_id)
+    .bind(progress.stability)
+    .bind(progress.difficulty)
+    .bind(progress.elapsed_days)
+    .bind(progress.scheduled_days)
+    .bind(progress.state)
+    .bind(progress.last_review_at)
+    .bind(progress.due_date)
+    .bind(progress.review_count)
+    .bind(progress.lapses)
+    .execute(&mut *tx)
     .await?;
 
-    Ok(())
+    let correction_id = sqlx::query_scalar::<_, i64>(
+        r#"
+        INSERT INTO learning_review_corrections (
+            operation_id, entry_id, business_date, target_log_id,
+            action, replacement_rating, progress_before, progress_after
+        )
+        VALUES ($1, $2, $3, $4, 'first_rating_correction', $5, $6, $7)
+        RETURNING id
+        "#,
+    )
+    .bind(operation_id)
+    .bind(progress.entry_id)
+    .bind(business_date)
+    .bind(target_log_id)
+    .bind(replacement_rating)
+    .bind(progress_before)
+    .bind(progress_after)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(correction_id)
 }
