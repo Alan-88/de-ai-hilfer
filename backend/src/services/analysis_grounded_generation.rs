@@ -16,7 +16,7 @@ use crate::services::stream_generation::{
 };
 use crate::state::AppState;
 use anyhow::{anyhow, Result};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc::UnboundedSender;
 
 pub(crate) struct StreamedMarkdown {
@@ -28,7 +28,7 @@ fn model_a_chat_options() -> AiChatOptions {
     AiChatOptions {
         temperature: 0.1,
         max_tokens: Some(2200),
-        timeout: Duration::from_secs(90),
+        timeout: Duration::from_secs(180),
     }
 }
 
@@ -53,7 +53,8 @@ pub(crate) async fn generate_model_a(
     let user_payload = build_model_a_user_payload(target_query, dictionary_facts.as_deref());
     let resolved =
         resolve_task_model_with_override(state, AiModelTask::Analyze, model_override).await?;
-    let raw = resolved
+    let started_at = Instant::now();
+    let result = resolved
         .client
         .chat_model_with_options(
             &resolved.model,
@@ -61,7 +62,24 @@ pub(crate) async fn generate_model_a(
             &user_payload,
             model_a_chat_options(),
         )
-        .await?;
+        .await;
+    let elapsed_ms = started_at.elapsed().as_millis();
+    let raw = match result {
+        Ok(raw) => {
+            tracing::info!(
+                "grounded model A complete: target={target_query}, model={}, elapsed_ms={elapsed_ms}",
+                resolved.model
+            );
+            raw
+        }
+        Err(err) => {
+            tracing::warn!(
+                "grounded model A failed: target={target_query}, model={}, elapsed_ms={elapsed_ms}, err={err:#}",
+                resolved.model
+            );
+            return Err(err);
+        }
+    };
     let output = extract_json::<ModelAOutput>(&raw).map(normalize_model_a_output)?;
     if output.entries.is_empty() {
         return Err(anyhow!("model A returned no lexical branches"));
