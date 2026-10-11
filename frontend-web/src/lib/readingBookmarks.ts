@@ -7,6 +7,48 @@ export interface ReadingTextTarget {
   surface: string;
 }
 
+export interface ReadingTextAnchor {
+  offset: number;
+  surface: string;
+}
+
+export function createReadingTextAnchor(
+  segments: ReadingContentSegment[],
+  target: ReadingTextTarget,
+): ReadingTextAnchor {
+  const segment = segments[target.segmentIndex];
+  if (!segment || segment.kind !== "text" || segment.text.slice(target.start, target.end) !== target.surface) {
+    throw new Error("所选文字已变化，请重新选择");
+  }
+
+  let offset = target.start;
+  for (let index = 0; index < target.segmentIndex; index += 1) {
+    const item = segments[index];
+    offset += item.kind === "text" ? item.text.length : item.surface.length;
+  }
+  return { offset, surface: target.surface };
+}
+
+export function resolveReadingTextAnchor(
+  segments: ReadingContentSegment[],
+  anchor: ReadingTextAnchor,
+): ReadingTextTarget {
+  let offset = 0;
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    const text = segment.kind === "text" ? segment.text : segment.surface;
+    const end = offset + text.length;
+    if (anchor.offset >= offset && anchor.offset + anchor.surface.length <= end) {
+      if (segment.kind !== "text") throw new Error("所选文字已被标记");
+      const start = anchor.offset - offset;
+      if (segment.text.slice(start, start + anchor.surface.length) !== anchor.surface) break;
+      return { segmentIndex: index, start, end: start + anchor.surface.length, surface: anchor.surface };
+    }
+    offset = end;
+  }
+  throw new Error("所选文字已变化，请重新选择");
+}
+
 export function insertReadingBookmark(
   body: string,
   segments: ReadingContentSegment[],

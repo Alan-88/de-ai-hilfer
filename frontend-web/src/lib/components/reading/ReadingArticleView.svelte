@@ -2,7 +2,14 @@
   import ReadingBookmarkPicker from "$lib/components/reading/ReadingBookmarkPicker.svelte";
   import ReadingImportDialog from "$lib/components/reading/ReadingImportDialog.svelte";
   import ReadingLookupRail from "$lib/components/reading/ReadingLookupRail.svelte";
-  import { insertReadingBookmark, removeReadingBookmark, type ReadingTextTarget } from "$lib/readingBookmarks";
+  import {
+    createReadingTextAnchor,
+    insertReadingBookmark,
+    removeReadingBookmark,
+    resolveReadingTextAnchor,
+    type ReadingTextAnchor,
+    type ReadingTextTarget,
+  } from "$lib/readingBookmarks";
   import {
     getReadingArticle,
     getReadingIndex,
@@ -15,7 +22,7 @@
   import { analyzeWord, getSuggestions } from "$lib/queryApi";
   import type { DBSuggestion } from "$lib/types";
 
-  type MarkTarget = ReadingTextTarget & { x: number; y: number };
+  type MarkTarget = ReadingTextAnchor & { requestId: number; x: number; y: number };
 
   let { articleId } = $props<{ articleId: number }>();
 
@@ -32,12 +39,14 @@
   let markTarget = $state<MarkTarget | null>(null);
   let markSuggestions = $state<DBSuggestion[]>([]);
   let markLoading = $state(false);
-  let markSaving = $state(false);
+  let markSavingRequestId = $state<number | null>(null);
   let markError = $state("");
   let bookmarkError = $state("");
   let bookmarkRemoving = $state<number | null>(null);
   let editOpen = $state(false);
   let markRequestId = 0;
+  const pendingMarkAnalyses = new Map<string, Promise<void>>();
+  let bookmarkSaveQueue: Promise<void> = Promise.resolve();
 
   const bookmarks = $derived(
     article?.segments.filter((segment): segment is Extract<ReadingContentSegment, { kind: "bookmark" }> => segment.kind === "bookmark") ?? [],
@@ -152,18 +161,19 @@
     const target = readingTextTarget(event);
     if (!target) return;
     event.preventDefault();
+    const requestId = ++markRequestId;
     markTarget = {
-      ...target,
+      ...createReadingTextAnchor(article.segments, target),
+      requestId,
       x: Math.max(12, Math.min(event.clientX, window.innerWidth - 322)),
       y: Math.max(12, Math.min(event.clientY, window.innerHeight - 360)),
     };
     markSuggestions = [];
     markError = "";
-    void loadMarkSuggestions(target.surface);
+    void loadMarkSuggestions(target.surface, requestId);
   }
 
-  async function loadMarkSuggestions(surface: string) {
-    const requestId = ++markRequestId;
+  async function loadMarkSuggestions(surface: string, requestId: number) {
     markLoading = true;
     try {
       const response = await getSuggestions(surface);
@@ -184,25 +194,53 @@
 
   async function chooseMarkCandidate(candidate: DBSuggestion) {
     const target = markTarget;
-    const current = article;
-    if (!target || !current) return;
-    markSaving = true;
+    const articleId = article?.id;
+    if (!target || !articleId || markSavingRequestId === target.requestId) return;
+    const requestId = target.requestId;
+    markSavingRequestId = requestId;
     markError = "";
     try {
-      if (candidate.entry_id <= 0) await analyzeWord(candidate.query_text);
-      const occurrenceIndex = current.segments.slice(0, target.segmentIndex).filter((segment) => segment.kind === "bookmark").length;
-      const body = insertReadingBookmark(current.body, current.segments, target, candidate.query_text);
-      const next = await saveReadingArticle(current.id, { title: current.title, body, folder_id: current.folder_id });
-      article = next;
-      closeMarkPicker();
-      const bookmark = next.segments.find((segment) => segment.kind === "bookmark" && segment.occurrence_index === occurrenceIndex);
-      if (bookmark?.kind === "bookmark") selectWord(bookmark);
-      window.getSelection()?.removeAllRanges();
+      if (candidate.entry_id <= 0) await ensureMarkAnalysis(candidate.query_text);
+
+      const save = bookmarkSaveQueue.then(async () => {
+        const current = article;
+        if (!current || current.id !== articleId) throw new Error("文章已切换，请重新标记");
+        const currentTarget = resolveReadingTextAnchor(current.segments, target);
+        const occurrenceIndex = current.segments.slice(0, currentTarget.segmentIndex)
+          .filter((segment) => segment.kind === "bookmark").length;
+        const body = insertReadingBookmark(current.body, current.segments, currentTarget, candidate.query_text);
+        const next = await saveReadingArticle(current.id, { title: current.title, body, folder_id: current.folder_id });
+        if (selectedOccurrence !== null && selectedOccurrence >= occurrenceIndex) selectedOccurrence += 1;
+        article = next;
+        return next.segments.find(
+          (segment) => segment.kind === "bookmark" && segment.occurrence_index === occurrenceIndex,
+        );
+      });
+      bookmarkSaveQueue = save.then(() => undefined, () => undefined);
+      const bookmark = await save;
+
+      if (markTarget?.requestId === requestId) {
+        closeMarkPicker();
+        if (bookmark?.kind === "bookmark") selectWord(bookmark);
+        window.getSelection()?.removeAllRanges();
+      }
     } catch (cause) {
-      markError = errorMessage(cause);
+      const message = errorMessage(cause);
+      if (markTarget?.requestId === requestId) markError = message;
+      else bookmarkError = `${target.surface} 标记失败：${message}`;
     } finally {
-      markSaving = false;
+      if (markSavingRequestId === requestId) markSavingRequestId = null;
     }
+  }
+
+  async function ensureMarkAnalysis(query: string) {
+    const key = query.trim().toLocaleLowerCase("de");
+    let pending = pendingMarkAnalyses.get(key);
+    if (!pending) {
+      pending = analyzeWord(query).then(() => undefined).finally(() => pendingMarkAnalyses.delete(key));
+      pendingMarkAnalyses.set(key, pending);
+    }
+    await pending;
   }
 
   function closeMarkPicker() {
@@ -371,7 +409,7 @@
         y={markTarget.y}
         suggestions={markSuggestions}
         loading={markLoading}
-        saving={markSaving}
+        saving={markSavingRequestId === markTarget.requestId}
         error={markError}
         onChoose={(suggestion) => void chooseMarkCandidate(suggestion)}
         onClose={closeMarkPicker}

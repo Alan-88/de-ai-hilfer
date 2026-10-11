@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 // @ts-expect-error Node's strip-types test runner requires the source extension.
-import { insertReadingBookmark, removeReadingBookmark } from "../src/lib/readingBookmarks.ts";
+import { createReadingTextAnchor, insertReadingBookmark, removeReadingBookmark, resolveReadingTextAnchor } from "../src/lib/readingBookmarks.ts";
 
 test("marks only the selected repeated occurrence", () => {
   const body = "[Reisen]( Reise ) oder Reisen?";
@@ -26,6 +26,22 @@ test("rejects a stale selection", () => {
     }, "heute"),
     /已变化/,
   );
+});
+
+test("rebases a queued selection after another bookmark is inserted", () => {
+  const anchor = createReadingTextAnchor(
+    [{ kind: "text", text: "eins zwei drei" }],
+    { segmentIndex: 0, start: 10, end: 14, surface: "drei" },
+  );
+  const body = "[eins](eins) zwei drei";
+  const segments = [
+    { kind: "bookmark" as const, occurrence_index: 0, surface: "eins", form_of: "eins", lexeme_id: 1, entry_id: 2 },
+    { kind: "text" as const, text: " zwei drei" },
+  ];
+
+  const target = resolveReadingTextAnchor(segments, anchor);
+  assert.deepEqual(target, { segmentIndex: 1, start: 6, end: 10, surface: "drei" });
+  assert.equal(insertReadingBookmark(body, segments, target, "drei"), "[eins](eins) zwei [drei](drei)");
 });
 
 test("removes only the selected bookmark and preserves its surface", () => {
