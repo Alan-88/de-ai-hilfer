@@ -83,14 +83,14 @@
   .status-badge.learning { background: var(--success-bg); color: var(--success-text); }
   .status-badge.review { background: var(--warning-bg); color: var(--warning-text); }
 
-  .card-bottom { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
+  .card-bottom { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
   
-  .meta-info { display: flex; align-items: center; gap: 0.75rem; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
-  .review-date { display: flex; align-items: center; gap: 0.3rem; }
-  .stat-pill { background: var(--bg-color); padding: 0.1rem 0.4rem; border-radius: 4px; }
+  .meta-info { display: flex; min-width: 0; align-items: center; gap: 0.75rem; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
+  .review-date { display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
+  .stat-pill { white-space: nowrap; background: var(--bg-color); padding: 0.1rem 0.4rem; border-radius: 4px; }
 
   .card-actions { display: flex; align-items: center; gap: 0.5rem; }
   .btn-icon-text { background: transparent; color: var(--accent-main); font-size: 1.5rem; display: flex; align-items: center; }
   .btn-icon-text:hover { transform: scale(1.1); }
-  .small-btn { padding: 0.4rem 0.8rem; font-size: 0.85rem; border-radius: var(--radius-sm); }
+  .small-btn { white-space: nowrap; padding: 0.4rem 0.8rem; font-size: 0.85rem; border-radius: var(--radius-sm); }
 </style>

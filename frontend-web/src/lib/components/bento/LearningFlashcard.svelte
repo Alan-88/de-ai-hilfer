@@ -168,8 +168,8 @@
   .rating-bar .forgotten { background: var(--danger-bg); color: var(--danger-text); }
   .rating-bar .known { background: var(--success-bg); color: var(--success-text); }
 
-  @media (max-width: 600px) {
-    .flashcard { height: calc(100dvh - 250px); min-height: 500px; }
+  @media (max-width: 768px) {
+    .flashcard { height: calc(100dvh - 275px - env(safe-area-inset-bottom)); min-height: 0; }
     .recall-surface { padding: 1.25rem; }
     .answer-shell { padding: 1.1rem 1rem 0; }
     .meta { gap: 0.5rem; font-size: 0.72rem; }
