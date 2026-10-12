@@ -3,7 +3,7 @@
     markdownToPlainText,
     parseAnalysisMarkdown,
     renderMarkdownHtml,
-    resolveStructuredAnalysis,
+    type StructuredAnalysis,
   } from "$lib/analysis/structuredAnalysis";
   import FollowUpCard from "$lib/components/bento/FollowUpCard.svelte";
   import type { AiModelOverride, AnalyzeResponse, AttachedPhraseModule, FollowUpItem, PhraseUsageModule, QualityMode, RecentItem } from "$lib/types";
@@ -13,7 +13,6 @@
   import PhraseModuleAddControl from "$lib/components/bento/PhraseModuleAddControl.svelte";
   import InterleavedMeaning from "$lib/components/bento/InterleavedMeaning.svelte";
 
-  type StructuredAnalysis = ReturnType<typeof resolveStructuredAnalysis>;
   type AttachedPhraseBlock = AttachedPhraseModule & { structured: StructuredAnalysis };
   type ActionModelOption = AiModelOverride & {
     key: string;
@@ -22,6 +21,7 @@
 
   let {
     result,
+    structured,
     isStreaming = false,
     isAddingToLearning = false,
     isLearningAdded = false,
@@ -38,8 +38,9 @@
     onDeleteAttachedPhrase,
     onAddPhraseModule,
     onnewFollowUp
-  } = $props<{
+  }: {
     result: AnalyzeResponse;
+    structured: StructuredAnalysis;
     isStreaming?: boolean;
     isAddingToLearning?: boolean;
     isLearningAdded?: boolean;
@@ -56,7 +57,7 @@
     onDeleteAttachedPhrase?: (item: AttachedPhraseModule) => void;
     onAddPhraseModule?: (phrase: string) => Promise<void> | void;
     onnewFollowUp?: (item: FollowUpItem) => void;
-  }>();
+  } = $props();
 
   let showCustomRegenerate = $state(false);
   let customRegenerateHint = $state("");
@@ -108,14 +109,6 @@
     return branch.pos;
   }
 
-  // 严格同步：使用刚才基于真实数据库样本修复的解析逻辑
-  const structured = $derived(
-    resolveStructuredAnalysis(
-      result.analysis_markdown || "",
-      result.structured_analysis,
-      result.query_text
-    )
-  );
   const useBranchUI = $derived((structured.grammarBranches?.length ?? 0) > 0);
   const attachedPhraseBlocks = $derived(
     (result.attached_phrase_modules ?? []).map((item: AttachedPhraseModule) => ({
@@ -219,16 +212,9 @@
 </script>
 
 <div class="bento-grid">
-  <!-- 精简后的 Header: 修复比例与音标 -->
+  <!-- 词头和音标由页面顶栏展示，正文保留释义与操作。 -->
   <div class="bento-card card-header">
     <div class="header-main-info">
-      <div class="title-row">
-        <h1 class="word-title">{structured.headword || result.query_text}</h1>
-        {#if structured.phonetic}
-          <span class="word-phonetic">{structured.phonetic}</span>
-        {/if}
-      </div>
-
       <div class="meaning-row" class:is-branch-list={useBranchUI}>
         {#if useBranchUI}
             <div class="branch-group-row">
@@ -526,16 +512,6 @@
   }
   .header-main-info { display: flex; flex: 1; flex-direction: column; gap: 0.4rem; min-width: 0; }
 
-  .title-row { display: flex; align-items: baseline; gap: 0.8rem; }
-  .word-title { font-size: 2.2rem; font-weight: 800; color: var(--text-main); letter-spacing: -0.02em; margin: 0; overflow-wrap: anywhere; }
-
-  /* 音标专用字体栈修复：强制使用标准 IPA 支持字体 */
-  .word-phonetic {
-    font-family: "Arial Unicode MS", "Lucida Sans Unicode", sans-serif;
-    color: var(--text-muted); font-size: 1.1rem; line-height: 1.6;
-    background: var(--bg-color); padding: 0.1rem 0.4rem; border-radius: 4px;
-  }
-
   .meaning-row { display: grid; gap: 0.6rem; margin-top: 0.2rem; }
 
   /* Branch UI 专属样式 */
@@ -776,15 +752,12 @@
     .follow-up-wrapper { padding: 8px; }
     .recent-mini-btn { padding: 8px; }
     .recent-mini-btn strong { font-size: 13px; }
-    .word-title { font-size: 26px; }
-    .word-phonetic { font-size: 13px; }
     .mini-label { font-size: 10px; padding: 2px 5px; }
     .learn-btn { min-height: 32px; font-size: 11px; padding: 0 12px; white-space: nowrap; }
     .usage-item.is-attached { padding-right: 40px; }
     .attached-trash-btn { top: 6px; right: 6px; opacity: 1; transform: none; pointer-events: auto; }
     .attached-phrase-label { margin-right: 0; }
-    .header-main-info, .title-row, .branch-group-row { min-width: 0; }
-    .word-title, .word-phonetic { overflow-wrap: anywhere; }
+    .header-main-info, .branch-group-row { min-width: 0; }
     .branch-meaning-item { max-width: 100%; padding-right: 0.5rem; }
     .branch-info-icon { display: none; }
     .header-actions { flex-wrap: wrap; }

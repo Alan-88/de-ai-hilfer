@@ -20,7 +20,7 @@
     buildActionModelOptions,
     defaultActionModelKey,
   } from "$lib/ai/actionModels";
-  import { markdownToPlainText, renderMarkdownHtml } from "$lib/analysis/structuredAnalysis";
+  import { markdownToPlainText, renderMarkdownHtml, resolveStructuredAnalysis } from "$lib/analysis/structuredAnalysis";
   import { shouldPreferDirectAnalyze } from "$lib/search/searchExecution";
   import { streamAnalyze } from "$lib/streamApi";
   import { searchStore } from "$lib/stores/search";
@@ -82,17 +82,42 @@
     const row = mainInputRef?.closest<HTMLElement>(".main-row");
     const panel = row?.closest<HTMLElement>(".search-panel-group");
     const previousTop = row?.getBoundingClientRect().top;
+    const previousReveal = panel && searchMoveAnimation?.playState === "running"
+      ? { clipPath: getComputedStyle(panel).clipPath, opacity: getComputedStyle(panel).opacity, visibility: "visible" }
+      : null;
     searchMoveAnimation?.cancel();
     searchMoveAnimation = null;
     searchFocused = next;
-    if (isSearching || !row || !panel || previousTop === undefined || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!row || !panel || previousTop === undefined || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     await tick();
-    if (searchFocused !== next || isSearching || !panel.isConnected) return;
+    if (searchFocused !== next || !panel.isConnected) return;
+    if (isSearching) {
+      if (getComputedStyle(panel).getPropertyValue("--result-search-wide").trim() === "1") return;
+      const collapsed = { clipPath: "inset(0 0 0 calc(100% - 44px) round 9999px)", opacity: 0, visibility: "visible" };
+      const expanded = { clipPath: "inset(0 round 9999px)", opacity: 1, visibility: "visible" };
+      searchMoveAnimation = panel.animate([previousReveal ?? (next ? collapsed : expanded), next ? expanded : collapsed],
+        { duration: 260, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" });
+      return;
+    }
     const offset = previousTop - row.getBoundingClientRect().top;
     searchMoveAnimation = panel.animate(
       [{ transform: `translateY(${offset}px)` }, { transform: "translateY(0)" }],
       { duration: 260, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
     );
+  }
+
+  async function openResultSearch() {
+    switchingInput = true;
+    void setSearchFocus(true);
+    await tick();
+    mainInputRef?.focus();
+    mainInputRef?.select();
+    switchingInput = false;
+  }
+
+  function handleResultBack() {
+    if (searchFocused) dismissSearchFocus();
+    else clearSearchResult();
   }
 
   async function toggleAdvanced() {
@@ -492,11 +517,14 @@
   });
 
   const isSearching = $derived(Boolean($s.result || $s.isLoading || $s.error || advancedPending));
+  const structuredResult = $derived($s.result ? resolveStructuredAnalysis(
+    $s.result.analysis_markdown || "", $s.result.structured_analysis, $s.result.query_text,
+  ) : null);
   $effect(() => {
     if (!browser || !active || !isSearching) return;
     const mainArea = document.querySelector<HTMLElement>(".main-area");
     if (!mainArea) return;
-    const gesture = edgeSwipe(mainArea, clearSearchResult);
+    const gesture = edgeSwipe(mainArea, handleResultBack);
     return () => gesture.destroy();
   });
   const isCurrentWordInLearning = $derived(Boolean($s.result && learningEntryIds.has($s.result.entry_id)));
@@ -516,13 +544,27 @@
     <button class="search-overlay" aria-label="关闭搜索建议" transition:fade={{ duration: 200 }} onclick={dismissSearchFocus}></button>
   {/if}
 
-  <div class="search-main-wrapper" class:focusing={searchFocused}
+  <div class="search-main-wrapper" class:result-chrome={isSearching} class:focusing={searchFocused}
     onfocusout={(event) => {
       if (!switchingInput && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
         void setSearchFocus(false);
         showSuggestions = false;
       }
     }}>
+    {#if isSearching}
+      <button type="button" class="back-btn" onclick={handleResultBack} aria-label={searchFocused ? "收起搜索" : "返回首页"}>
+        <i class="ph ph-arrow-left" aria-hidden="true"></i>
+      </button>
+      <div class="result-identity">
+        <h1>{structuredResult?.headword || $s.result?.query_text || $s.query}</h1>
+        {#if structuredResult?.phonetic}
+          <div class="result-phonetic">{structuredResult.phonetic}</div>
+        {/if}
+      </div>
+      <button type="button" class="result-search-open" onclick={() => $s.isLoading ? cancelSearch() : openResultSearch()} aria-label={$s.isLoading ? "取消分析" : "展开搜索"} aria-expanded={searchFocused}>
+        <i class={$s.isLoading ? "ph-fill ph-stop" : "ph ph-magnifying-glass"} aria-hidden="true"></i>
+      </button>
+    {/if}
     {#if !isSearching && hasMounted}
       <div class="search-intro" in:fade={{ delay: 100 }}>
         <h1>发现，不仅仅是查词</h1>
@@ -533,15 +575,11 @@
     <div class="search-panel-group" class:has-suggestions={isSearchFocusing}>
       <form class="search-form" onsubmit={(e) => { e.preventDefault(); (showAdvanced && advancedHint.trim()) ? handleAdvancedSearch() : handleSearch(); }}>
         <div class="input-row main-row" class:is-generating-box={$s.isStreaming}>
-          {#if isSearching}
-            <button type="button" class="back-btn" onclick={clearSearchResult} transition:fade aria-label="返回首页">
-              <i class="ph ph-arrow-left" aria-hidden="true"></i>
-            </button>
-          {/if}
           <input
             bind:this={mainInputRef}
             bind:value={$s.query}
             placeholder="输入德语单词或近似拼写..."
+            aria-label="查询德语单词"
             oninput={fetchSuggestions}
             onkeydown={handleKeyDown}
             onfocus={() => { void setSearchFocus(true); showSuggestions = true; }}
@@ -561,7 +599,7 @@
               class="btn-primary search-submit-btn"
               class:is-canceling={$s.isLoading}
               aria-label={$s.isLoading ? "取消分析" : "分析"}
-              onclick={() => { if ($s.isLoading) cancelSearch(); }}
+              onclick={(event) => { if ($s.isLoading) { event.preventDefault(); void cancelSearch(); } }}
             >
               {#if $s.isLoading}
                 <span class="btn-text-content loading-text"><i class="ph-bold ph-spinner-gap spin"></i><span class="search-submit-label">分析中</span></span>
@@ -649,9 +687,10 @@
         <div class="bento-card" style="height: 120px;"><div class="skeleton-block" style="width: 40%;"></div></div>
         <div class="bento-card" style="height: 300px;"><div class="skeleton-block"></div></div>
       </div>
-    {:else if $s.result}
+    {:else if $s.result && structuredResult}
       <SearchResultCards
         result={$s.result}
+        structured={structuredResult}
         isStreaming={$s.isStreaming}
         isAddingToLearning={isAddingToLearning}
         isLearningAdded={isCurrentWordInLearning}
@@ -688,20 +727,20 @@
   }
   .is-searching .search-main-wrapper {
     position: sticky;
-    top: -2rem;
-    display: flex;
+    top: calc(var(--search-viewport-top) - 2rem);
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    column-gap: 12px;
     align-items: center;
-    justify-content: center;
     width: calc(100vw - var(--desktop-sidebar-width));
-    height: var(--desktop-top-chrome-height);
+    min-height: var(--desktop-top-chrome-height);
     max-width: none;
-    margin-top: -2rem;
-    padding: 0;
+    margin: -2rem -2rem 0;
+    padding: 12px 32px;
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-color);
   }
-  .is-searching .search-panel-group { max-width: 740px; margin: 0 auto; }
-  .search-main-wrapper.focusing {
+  .search-main-wrapper.focusing:not(.result-chrome) {
     position: fixed;
     top: calc(var(--search-viewport-top) + 24px);
     left: calc(var(--desktop-sidebar-width) + 32px);
@@ -715,7 +754,7 @@
     background: transparent;
   }
   .focusing .search-intro { display: none; }
-  .search-main-wrapper.focusing .search-panel-group {
+  .search-main-wrapper.focusing:not(.result-chrome) .search-panel-group {
     width: 100%;
     max-width: none;
     display: flex;
@@ -768,13 +807,58 @@
   .shortcut-btn:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 2px; }
 
   .back-btn {
-    position: fixed; top: 1.5rem; left: calc(var(--desktop-sidebar-width) + 1.5rem); z-index: 150;
+    grid-column: 1; grid-row: 1; justify-self: start; align-self: start;
     width: 44px; height: 44px; border-radius: 50%;
     background: transparent; color: var(--text-main);
     display: flex; align-items: center; justify-content: center;
   }
   .back-btn:hover, .back-btn:active { background: var(--btn-secondary); }
   .back-btn:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 2px; }
+
+  .result-identity { grid-column: 2; grid-row: 1; min-width: 0; text-align: center; transition: opacity 180ms ease; }
+  .result-identity h1 { margin: 0; color: var(--text-main); font-size: 40px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+  .result-phonetic { margin-top: 4px; font-family: "Arial Unicode MS", "Lucida Sans Unicode", sans-serif; color: var(--text-muted); font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; }
+  .result-search-open { grid-column: 3; grid-row: 1; justify-self: end; align-self: start; width: 44px; height: 44px; border-radius: 50%; background: transparent; color: var(--text-main); display: flex; align-items: center; justify-content: center; }
+  .result-search-open:hover, .result-search-open:active { background: var(--btn-secondary); }
+  .result-search-open:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 2px; }
+  .back-btn, .result-search-open { font-size: 24px; }
+  .result-chrome.focusing .result-identity, .result-chrome.focusing .result-search-open { opacity: 0; visibility: hidden; pointer-events: none; }
+  .result-chrome .search-panel-group {
+    --result-search-wide: 0;
+    position: absolute; top: 12px; left: 88px; right: 32px; width: auto;
+    max-height: calc(var(--search-viewport-height) - 24px - env(safe-area-inset-bottom));
+    visibility: hidden; pointer-events: none;
+  }
+  .result-chrome.focusing .search-panel-group { visibility: visible; pointer-events: auto; }
+  .result-chrome .search-form { flex-shrink: 0; }
+  .result-chrome .input-row { padding: 6px 16px; gap: 4px; }
+  .result-chrome .main-row { padding-right: 6px; }
+  .result-chrome .input-row input { font-size: 16px; height: 44px; }
+  .result-chrome .actions { gap: 0; flex-shrink: 0; }
+  .result-chrome .actions .icon-btn { width: 32px; height: 44px; flex-shrink: 0; }
+  .result-chrome .shortcut-btn { display: flex; width: 44px; padding: 0; justify-content: center; }
+  .result-chrome .shortcut-btn span { display: none; }
+  .result-chrome .search-submit-btn { width: 44px; height: 44px; flex-shrink: 0; gap: 0; }
+  .result-chrome .search-submit-label { display: none; }
+  .result-chrome .search-submit-btn i { font-size: 18px; line-height: 1; }
+  .result-chrome .btn-text-content { gap: 0; }
+  .result-chrome .search-submit-btn.is-canceling .loading-text { display: none; }
+  .result-chrome .search-submit-btn.is-canceling .cancel-text { transform: none; opacity: 1; }
+
+  @media (min-width: 1201px) {
+    .is-searching .search-main-wrapper { grid-template-columns: clamp(240px, calc((100vw - var(--desktop-sidebar-width) - 64px) * 0.3), 340px) minmax(0, 1fr) clamp(240px, calc((100vw - var(--desktop-sidebar-width) - 64px) * 0.3), 340px); }
+    .result-chrome .search-panel-group {
+      --result-search-wide: 1;
+      grid-column: 3; grid-row: 1; position: relative; top: auto; left: auto; right: auto;
+      width: 100%; align-self: start; visibility: visible; pointer-events: auto;
+    }
+    .result-chrome .result-search-open { display: none; }
+    .result-chrome.focusing .result-identity { opacity: 1; visibility: visible; }
+    .result-chrome:not(.focusing) .actions .icon-btn, .result-chrome:not(.focusing) .shortcut-btn { display: none; }
+    .result-chrome .integrated-suggestions, .result-chrome .sub-row { position: absolute; right: 0; width: min(420px, calc(100vw - var(--desktop-sidebar-width) - 64px)); }
+    .result-chrome .sub-row { top: 66px; }
+    .result-chrome .integrated-suggestions { top: 66px; max-height: calc(var(--search-viewport-height) - 110px - env(safe-area-inset-bottom)); }
+  }
 
   .search-submit-btn {
     position: relative;
@@ -861,20 +945,16 @@
 
   .loading-skeleton { display: flex; flex-direction: column; gap: 1.5rem; }
 
-  @media (min-width: 769px) and (max-width: 1200px) {
-    .is-searching .search-panel-group { width: calc(100% - 15rem); }
-  }
-
-  @media (min-width: 769px) and (max-width: 1000px) {
-    .is-searching .shortcut-btn { display: none; }
+  @media (min-width: 601px) and (max-width: 1200px) {
+    .result-identity h1 { font-size: 32px; }
   }
 
   @media (max-width: 768px) {
     .search-intro p { margin-left: 0; text-align: right; }
     .back-btn { position: static; flex: 0 0 44px; }
     .search-main-wrapper { margin-top: 15vh; }
-    .is-searching .search-main-wrapper { top: -1.5rem; display: block; width: calc(100% + 2rem); height: auto; max-width: none; margin: -1.5rem -1rem 0; padding: 8px 16px; }
-    .is-searching .search-panel-group { width: 100%; margin: 0; }
+    .is-searching .search-main-wrapper { top: calc(var(--search-viewport-top) - 1.5rem); width: calc(100% + 2rem); min-height: 72px; margin: -1.5rem -1rem 0; padding: 8px 16px; }
+    .result-chrome .search-panel-group { top: 8px; left: 72px; right: 16px; max-height: calc(var(--search-viewport-height) - 16px - env(safe-area-inset-bottom)); }
     .input-row { padding: 6px 16px; gap: 4px; }
     .main-row { padding-right: 6px; }
     .input-row input { height: 44px; font-size: 16px; }
@@ -888,14 +968,16 @@
     .btn-text-content { gap: 0; }
     .search-submit-btn.is-canceling .loading-text { display: none; }
     .search-submit-btn.is-canceling .cancel-text { transform: none; opacity: 1; }
-    .search-main-wrapper.focusing { top: calc(var(--search-viewport-top) + 8px); left: 16px; right: 16px; width: auto; margin: 0; padding: 0; }
-    .search-main-wrapper.focusing .search-panel-group { max-height: calc(var(--search-viewport-height) - 16px - env(safe-area-inset-bottom)); }
+    .search-main-wrapper.focusing:not(.result-chrome) { top: calc(var(--search-viewport-top) + 8px); left: 16px; right: 16px; width: auto; margin: 0; padding: 0; }
+    .search-main-wrapper.focusing:not(.result-chrome) .search-panel-group { max-height: calc(var(--search-viewport-height) - 16px - env(safe-area-inset-bottom)); }
     .suggestion-list { overscroll-behavior: contain; }
     .integrated-suggestions { border-radius: 20px; }
     .sub-row { padding: 6px 16px; gap: 8px; }
   }
 
   @media (max-width: 600px) {
+    .result-identity h1 { font-size: 26px; }
+    .result-phonetic { font-size: 13px; }
     .search-main-wrapper { margin-top: clamp(40px, 12dvh, 96px); }
     .search-intro { margin-bottom: 16px; padding-inline: 16px; text-align: left; }
     .search-intro h1 { font-size: 26px; line-height: 1.2; margin-bottom: 8px; }
@@ -905,6 +987,10 @@
     .suggestion-item { padding: 10px 12px; gap: 8px; }
     .suggestion-item .q { font-size: 14px; }
     .suggestion-item .p { font-size: 12px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .result-identity { transition: none; }
   }
 
 </style>
