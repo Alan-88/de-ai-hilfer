@@ -707,6 +707,7 @@
   .recent-mini-list { display: flex; flex-direction: column; gap: 0.6rem; }
   .recent-mini-btn {
     width: 100%; padding: 0.75rem; text-align: left; background: var(--bg-color); border-radius: 8px;
+    color: var(--text-main);
     display: flex; flex-direction: column; border: 1px solid transparent;
   }
   .recent-mini-btn:hover { border-color: var(--accent-main); }
