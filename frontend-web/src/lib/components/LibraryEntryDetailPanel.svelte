@@ -275,7 +275,5 @@
   @media (max-width: 360px) {
     .title-line { flex-direction: column; gap: 10px; }
     .title-actions { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
-    .detail-analysis :global(.meaning-summary) { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
-    .detail-analysis :global(.meaning-summary > span) { grid-column: 1 / -1; justify-self: start; }
   }
 </style>
