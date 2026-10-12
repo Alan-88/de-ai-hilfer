@@ -96,6 +96,11 @@ button {
   cursor: pointer;
 }
 
+/* 触摸反馈使用组件自身样式，避免全屏关闭区域闪出浏览器高亮。 */
+button, a, [role="button"], .detail-overlay, .dialog-backdrop {
+  -webkit-tap-highlight-color: transparent;
+}
+
 @media (pointer: fine) {
   * {
     scrollbar-width: thin;

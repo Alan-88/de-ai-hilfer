@@ -42,6 +42,9 @@
   let learningEntryIds = $state<Set<number>>(new Set());
   let suggestions = $state<DBSuggestion[]>([]);
   let showSuggestions = $state(false);
+  let searchFocused = $state(false);
+  let viewportHeight = $state<number | null>(null);
+  let viewportTop = $state(0);
   let isAddingToLearning = $state(false);
   let showAdvanced = $state(showAdvancedOnMount);
   let advancedHint = $state("");
@@ -68,8 +71,15 @@
     modelOverride: AiModelOverride | null;
   };
 
-  function focusSoon(target: HTMLInputElement | null) {
-    requestAnimationFrame(() => target?.focus());
+  function focusSoon(target: () => HTMLInputElement | null) {
+    requestAnimationFrame(() => target()?.focus());
+  }
+
+  function dismissSearchFocus() {
+    searchFocused = false;
+    showSuggestions = false;
+    mainInputRef?.blur();
+    advancedInputRef?.blur();
   }
 
   async function handleSearch(
@@ -81,6 +91,8 @@
     modelOverride: AiModelOverride | null = null
   ) {
     const rawQuery = term.trim();
+    if (!rawQuery) return;
+    dismissSearchFocus();
     const query = await resolveSearchTarget(rawQuery, {
       enabled: useSuggestionDefault && !forceRefresh && !generationHint.trim(),
     });
@@ -205,6 +217,7 @@
       s.setError("请先在主搜索栏输入一个德语词或近似拼写。");
       return;
     }
+    dismissSearchFocus();
     isAdvancedLoading = true;
     failedAnalysis = null;
     s.setError("");
@@ -266,7 +279,7 @@
       if ($s.query.trim() !== query) return;
       suggestions = resp.suggestions;
       suggestionsQuery = query;
-      showSuggestions = suggestions.length > 0;
+      showSuggestions = searchFocused && document.activeElement === mainInputRef && suggestions.length > 0;
     } catch {
       suggestions = [];
       suggestionsQuery = query;
@@ -283,7 +296,6 @@
         if ($s.query.trim() === query) {
           suggestions = resp.suggestions;
           suggestionsQuery = query;
-          showSuggestions = suggestions.length > 0;
         }
         currentSuggestions = resp.suggestions;
       } catch {
@@ -363,6 +375,7 @@
   }
 
   function clearSearchResult() {
+    dismissSearchFocus();
     currentSearchController?.abort();
     s.reset();
     advancedPending = null;
@@ -412,18 +425,20 @@
       e.preventDefault();
       if (showAdvanced) {
         showAdvanced = false;
-        focusSoon(mainInputRef);
+        focusSoon(() => mainInputRef);
       } else {
         showAdvanced = true;
-        focusSoon(advancedInputRef);
+        focusSoon(() => advancedInputRef);
       }
     }
     if (e.key === "Escape") {
       if (showSuggestions) {
-        showSuggestions = false;
+        dismissSearchFocus();
       } else if (showAdvanced) {
         showAdvanced = false;
-        focusSoon(mainInputRef);
+        focusSoon(() => mainInputRef);
+      } else if (searchFocused) {
+        dismissSearchFocus();
       } else if (isSearching) {
         clearSearchResult();
       }
@@ -435,6 +450,21 @@
     void fetchRecentItems();
     void fetchLearningProgress();
     void fetchAiSettings();
+    // 软键盘通常只缩小 visualViewport，布局视口与 dvh 仍可能保持原高度。
+    const viewport = window.visualViewport;
+    function updateViewport() {
+      viewportHeight = viewport?.height ?? window.innerHeight;
+      viewportTop = viewport?.offsetTop ?? 0;
+    }
+    updateViewport();
+    viewport?.addEventListener("resize", updateViewport);
+    viewport?.addEventListener("scroll", updateViewport);
+    window.addEventListener("resize", updateViewport);
+    return () => {
+      viewport?.removeEventListener("resize", updateViewport);
+      viewport?.removeEventListener("scroll", updateViewport);
+      window.removeEventListener("resize", updateViewport);
+    };
   });
 
   const isSearching = $derived(Boolean($s.result || $s.isLoading || $s.error || advancedPending));
@@ -454,13 +484,21 @@
   );
 </script>
 
-<div id="page-search" class="search-page-container" class:active={active} class:is-searching={isSearching}>
+<div id="page-search" class="search-page-container" class:active={active} class:is-searching={isSearching}
+  style:--search-viewport-height={viewportHeight === null ? "100dvh" : `${viewportHeight}px`}
+  style:--search-viewport-top={`${viewportTop}px`}>
   <!-- 搜索专注遮罩层 -->
-  {#if isSearchFocusing}
-    <button class="search-overlay" aria-label="关闭搜索建议" transition:fade={{ duration: 200 }} onclick={() => showSuggestions = false}></button>
+  {#if searchFocused}
+    <button class="search-overlay" aria-label="关闭搜索建议" transition:fade={{ duration: 200 }} onclick={dismissSearchFocus}></button>
   {/if}
 
-  <div class="search-main-wrapper" class:focusing={isSearchFocusing}>
+  <div class="search-main-wrapper" class:focusing={searchFocused}
+    onfocusout={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+        searchFocused = false;
+        showSuggestions = false;
+      }
+    }}>
     {#if !isSearching && hasMounted}
       <div class="search-intro" in:fade={{ delay: 100 }}>
         <h1>发现，不仅仅是查词</h1>
@@ -483,16 +521,16 @@
             placeholder="输入德语单词或近似拼写..."
             oninput={fetchSuggestions}
             onkeydown={handleKeyDown}
-            onfocus={() => showSuggestions = true}
+            onfocus={() => { searchFocused = true; showSuggestions = true; }}
             autocomplete="off"
           />
           <div class="actions">
             {#if $s.query}
-              <button type="button" class="icon-btn" onclick={() => { s.setQuery(""); focusSoon(mainInputRef); }} title="清空">
+              <button type="button" class="icon-btn" onclick={() => { s.setQuery(""); focusSoon(() => mainInputRef); }} title="清空">
                 <i class="ph ph-x"></i>
               </button>
             {/if}
-            <button type="button" class="shortcut-btn" aria-label="联想线索" aria-expanded={showAdvanced} class:is-active={showAdvanced} onclick={() => { showAdvanced = !showAdvanced; focusSoon(showAdvanced ? advancedInputRef : mainInputRef); }}>
+            <button type="button" class="shortcut-btn" aria-label="联想线索" aria-expanded={showAdvanced} class:is-active={showAdvanced} onclick={() => { showAdvanced = !showAdvanced; focusSoon(() => showAdvanced ? advancedInputRef : mainInputRef); }}>
               <i class="ph ph-magic-wand"></i><span>↹ Tab 联想</span>
             </button>
             <button
@@ -519,6 +557,7 @@
               bind:this={advancedInputRef}
               bind:value={advancedHint}
               placeholder="添加线索，例如：关于法律、口语、或者它的近义词..."
+              onfocus={() => { searchFocused = true; showSuggestions = false; }}
               onkeydown={(e) => { if(e.key === "Tab") handleKeyDown(e); if(e.key === "Escape") handleKeyDown(e); }}
               autocomplete="off"
             />
@@ -639,9 +678,40 @@
     background: var(--bg-color);
   }
   .is-searching .search-panel-group { max-width: 740px; margin: 0 auto; }
-  .is-searching .search-main-wrapper.focusing { transform: none; }
-  .is-searching .search-main-wrapper.focusing .search-panel-group { transform: scale(1.02); }
-  .search-main-wrapper.focusing { transform: scale(1.02); }
+  .search-main-wrapper.focusing {
+    position: fixed;
+    top: calc(var(--search-viewport-top) + 24px);
+    left: calc(var(--desktop-sidebar-width) + 32px);
+    right: 32px;
+    width: auto;
+    max-width: 740px;
+    height: auto;
+    margin: 0 auto;
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+  .focusing .search-intro { display: none; }
+  .search-main-wrapper.focusing .search-panel-group {
+    width: 100%;
+    max-width: none;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(var(--search-viewport-height) - 48px - env(safe-area-inset-bottom));
+  }
+  .focusing .search-form { flex-shrink: 0; }
+  .focusing .integrated-suggestions {
+    position: static;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-inline: none;
+    border-bottom: none;
+    border-bottom-left-radius: inherit;
+    border-bottom-right-radius: inherit;
+  }
+  .focusing .panel-header { flex-shrink: 0; }
+  .focusing .suggestion-list { min-height: 0; }
 
   .search-intro { margin-bottom: 2.5rem; pointer-events: none; }
   .search-intro h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 800; letter-spacing: -0.03em; margin-bottom: 0.5rem; color: var(--text-main); }
@@ -653,7 +723,8 @@
     box-shadow: var(--shadow-sm); transition: all var(--transition-smooth);
   }
 
-  .has-suggestions { border-bottom-left-radius: 0; border-bottom-right-radius: 0; box-shadow: var(--shadow-hover); }
+  .has-suggestions { box-shadow: var(--shadow-hover); }
+  .has-suggestions .search-form { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 
   .search-form { border-radius: inherit; overflow: hidden; }
   .input-row { display: flex; align-items: center; padding: 0.5rem 0.5rem 0.5rem 1.5rem; gap: 1rem; border-radius: inherit; }
@@ -806,8 +877,9 @@
     .btn-text-content { gap: 0; }
     .search-submit-btn.is-canceling .loading-text { display: none; }
     .search-submit-btn.is-canceling .cancel-text { transform: none; opacity: 1; }
-    .search-main-wrapper.focusing, .is-searching .search-main-wrapper.focusing .search-panel-group { transform: none; }
-    .suggestion-list { max-height: min(420px, 35dvh); overscroll-behavior: contain; }
+    .search-main-wrapper.focusing { top: calc(var(--search-viewport-top) + 8px); left: 16px; right: 16px; width: auto; margin: 0; padding: 0; }
+    .search-main-wrapper.focusing .search-panel-group { max-height: calc(var(--search-viewport-height) - 16px - env(safe-area-inset-bottom)); }
+    .suggestion-list { overscroll-behavior: contain; }
     .search-panel-group { border-radius: 20px; }
     .integrated-suggestions { border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; }
     .sub-row { padding: 6px 16px; gap: 8px; }
@@ -823,6 +895,10 @@
     .suggestion-item { padding: 10px 12px; gap: 8px; }
     .suggestion-item .q { font-size: 14px; }
     .suggestion-item .p { font-size: 12px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .search-main-wrapper, .search-panel-group { transition: none; }
   }
 
 </style>
