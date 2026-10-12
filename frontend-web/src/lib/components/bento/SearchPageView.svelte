@@ -787,12 +787,12 @@
   }
 
   @media (max-width: 768px) {
-    .search-intro p { margin-left: 0; text-align: center; }
+    .search-intro p { margin-left: 0; text-align: right; }
     .back-btn { position: static; flex: 0 0 44px; }
     .search-main-wrapper { margin-top: 15vh; }
     .is-searching .search-main-wrapper { top: -1.5rem; display: block; width: calc(100% + 2rem); height: auto; max-width: none; margin: -1.5rem -1rem 0; padding: 8px 16px; }
     .is-searching .search-panel-group { width: 100%; margin: 0; }
-    .input-row { padding: 6px 8px; gap: 4px; }
+    .input-row { padding: 6px 16px; gap: 4px; }
     .input-row input { height: 44px; font-size: 16px; }
     .main-row > .search-icon { display: none; }
     .actions { gap: 0; flex-shrink: 0; }
@@ -815,9 +815,9 @@
 
   @media (max-width: 600px) {
     .search-main-wrapper { margin-top: clamp(40px, 12dvh, 96px); }
-    .search-intro { margin-bottom: 16px; text-align: center; }
+    .search-intro { margin-bottom: 16px; padding-inline: 16px; text-align: left; }
     .search-intro h1 { font-size: 26px; line-height: 1.2; margin-bottom: 8px; }
-    .search-intro p { font-size: 12px; line-height: 1.5; }
+    .search-intro p { font-size: 12px; line-height: 1.5; text-align: right; }
     .result-area { margin-top: 16px; }
     .panel-header { padding: 8px 12px; font-size: 11px; }
     .suggestion-item { padding: 10px 12px; gap: 8px; }
