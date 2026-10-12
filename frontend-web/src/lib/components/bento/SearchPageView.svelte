@@ -731,6 +731,8 @@
   .main-row {
     position: relative;
     z-index: 2;
+    /* 右侧内距等于按钮的上下留白，让内外胶囊的右端圆弧同心。 */
+    padding-right: calc(0.5rem + (3.5rem - 2.8rem) / 2);
   }
   .sub-row {
     padding: 0.85rem 1.5rem;
@@ -763,6 +765,7 @@
     justify-content: center;
     padding: 0;
   }
+  .search-submit-btn:hover { transform: none; }
 
   .btn-text-content {
     position: absolute;
@@ -852,6 +855,7 @@
     .is-searching .search-main-wrapper { top: -1.5rem; display: block; width: calc(100% + 2rem); height: auto; max-width: none; margin: -1.5rem -1rem 0; padding: 8px 16px; }
     .is-searching .search-panel-group { width: 100%; margin: 0; }
     .input-row { padding: 6px 16px; gap: 4px; }
+    .main-row { padding-right: 6px; }
     .input-row input { height: 44px; font-size: 16px; }
     .actions { gap: 0; flex-shrink: 0; }
     .actions .icon-btn { width: 32px; height: 44px; flex-shrink: 0; }
