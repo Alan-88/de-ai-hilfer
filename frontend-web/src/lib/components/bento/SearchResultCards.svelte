@@ -772,6 +772,12 @@
   }
 
   @media (max-width: 600px) {
+    .bento-grid { padding: 0; }
+    .header-main-info, .title-row, .branch-group-row { min-width: 0; }
+    .word-title, .word-phonetic, .zh-text, .en-text { overflow-wrap: anywhere; }
+    .branch-meaning-item { max-width: 100%; text-align: left; }
+    .branch-meaning-item .pos-badge, .branch-info-icon { flex-shrink: 0; }
+    .header-actions { flex-wrap: wrap; }
     .card-header { align-items: stretch; flex-direction: column; gap: 1rem; }
     .header-actions { align-items: center; flex-direction: row; justify-content: flex-end; }
     .title-row, .meta-row { flex-wrap: wrap; }

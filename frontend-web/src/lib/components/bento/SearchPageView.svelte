@@ -455,7 +455,7 @@
 
   <!-- 搜索专注遮罩层 -->
   {#if isSearchFocusing}
-    <div class="search-overlay" transition:fade={{ duration: 200 }} onclick={() => showSuggestions = false}></div>
+    <button class="search-overlay" aria-label="关闭搜索建议" transition:fade={{ duration: 200 }} onclick={() => showSuggestions = false}></button>
   {/if}
 
   <div class="search-main-wrapper" class:focusing={isSearchFocusing}>
@@ -485,13 +485,14 @@
                 <i class="ph ph-x"></i>
               </button>
             {/if}
-            <button type="button" class="shortcut-btn" onclick={() => { showAdvanced = !showAdvanced; focusSoon(advancedInputRef); }}>
-              <span>↹</span> Tab 联想
+            <button type="button" class="shortcut-btn" aria-label="联想线索" aria-expanded={showAdvanced} class:is-active={showAdvanced} onclick={() => { showAdvanced = !showAdvanced; focusSoon(showAdvanced ? advancedInputRef : mainInputRef); }}>
+              <i class="ph ph-magic-wand"></i><span>↹ Tab 联想</span>
             </button>
             <button
               type={$s.isLoading ? "button" : "submit"}
               class="btn-primary search-submit-btn"
               class:is-canceling={$s.isLoading}
+              aria-label={$s.isLoading ? "取消分析" : "分析"}
               onclick={() => { if ($s.isLoading) cancelSearch(); }}
             >
               {#if $s.isLoading}
@@ -757,7 +758,8 @@
   }
   .suggestion-item:hover { background: var(--btn-secondary); }
   .suggestion-item i { margin-top: 0.3rem; color: var(--text-muted); font-size: 1.1rem; }
-  .text-content { display: flex; flex-direction: column; gap: 0.25rem; }
+  .text-content { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+  .suggestion-item .q { overflow-wrap: anywhere; }
   .suggestion-item .q { font-weight: 700; color: var(--text-main); font-size: 1.1rem; }
   .suggestion-item .p { font-size: 0.9rem; color: var(--text-muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 
@@ -778,15 +780,23 @@
     .search-intro p { margin-left: 0; text-align: center; }
     .back-btn { left: 1rem; top: 1rem; width: 2.5rem; height: 2.5rem; }
     .search-main-wrapper { margin-top: 15vh; }
-    .is-searching .search-main-wrapper { top: -1.5rem; display: block; width: calc(100% + 2rem); height: auto; max-width: none; margin: 0 -1rem; padding: 1.5rem 1rem 0.75rem; }
+    .is-searching .search-main-wrapper { top: -1.5rem; display: block; width: calc(100% + 2rem); height: auto; max-width: none; margin: -1.5rem -1rem 0; padding: 1rem 1rem 0.75rem; }
     .is-searching .search-panel-group { width: calc(100% - 3.5rem); margin-left: 3.5rem; }
-    .shortcut-btn { display: none; }
+    .input-row { padding-left: 0.5rem; gap: 0.25rem; }
+    .main-row > .search-icon { display: none; }
+    .actions { gap: 0.125rem; flex-shrink: 0; }
+    .actions .icon-btn { width: 2rem; flex-shrink: 0; }
+    .shortcut-btn { display: flex; width: 2.75rem; height: 2.75rem; padding: 0; justify-content: center; }
+    .shortcut-btn span { display: none; }
+    .shortcut-btn.is-active { color: var(--accent-main); background: var(--btn-secondary); border-radius: 50%; }
+    .search-submit-btn { width: 2.75rem; flex-shrink: 0; font-size: 0; }
+    .search-submit-btn i { font-size: 1rem; }
+    .search-submit-btn.is-canceling .loading-text { display: none; }
+    .search-submit-btn.is-canceling .cancel-text { transform: none; opacity: 1; }
+    .search-main-wrapper.focusing, .is-searching .search-main-wrapper.focusing .search-panel-group { transform: none; }
+    .suggestion-list { max-height: min(420px, 35dvh); overscroll-behavior: contain; }
     .search-panel-group { border-radius: 20px; }
     .integrated-suggestions { border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; }
   }
 
-  @media (max-width: 360px) {
-    .search-submit-btn { width: 3rem; font-size: 0; }
-    .search-submit-btn i { font-size: 1rem; }
-  }
 </style>

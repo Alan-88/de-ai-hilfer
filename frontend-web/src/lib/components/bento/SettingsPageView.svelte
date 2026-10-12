@@ -2,6 +2,7 @@
   import ServerStatus from "$lib/components/ServerStatus.svelte";
   import DataManagementPage from "$lib/components/DataManagementPage.svelte";
   import AiModelSettingsPanel from "$lib/components/bento/AiModelSettingsPanel.svelte";
+  import { theme } from "$lib/stores/ui";
 
   let { active = false } = $props();
 </script>
@@ -11,9 +12,15 @@
 </header>
 
 <div class="settings-grid">
+  <section class="bento-card setting-section mobile-appearance" aria-label="外观设置">
+    <div class="card-title"><i class="ph-fill ph-palette"></i> 外观</div>
+    <div class="theme-options">
+      <button class:chosen={$theme === 'canvas'} aria-label="浅色" aria-pressed={$theme === 'canvas'} onclick={() => $theme = 'canvas'}><i class="ph ph-sun" aria-hidden="true"></i> 浅色</button>
+      <button class:chosen={$theme === 'canvas-dark'} aria-label="深色" aria-pressed={$theme === 'canvas-dark'} onclick={() => $theme = 'canvas-dark'}><i class="ph ph-moon" aria-hidden="true"></i> 深色</button>
+    </div>
+  </section>
   <AiModelSettingsPanel />
 
-  <!-- 移除冗余的主题切换，保留核心的服务状态监测 -->
   <div class="bento-card setting-section">
     <div class="card-title"><i class="ph-fill ph-broadcast"></i> 后端服务状态</div>
     <div class="status-wrapper">
@@ -52,6 +59,13 @@
   }
 
   .card-full { width: 100%; }
+  .mobile-appearance { display: none; }
+  .theme-options { display: flex; gap: 0.75rem; }
+  .theme-options button { flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 0.5rem; border-radius: 12px; border: 1px solid var(--border-color); background: var(--control-bg); color: var(--text-main); }
+  .theme-options button.chosen { border-color: var(--accent-main); background: var(--btn-secondary); color: var(--accent-main); }
+  @media (max-width: 768px) {
+    .mobile-appearance { display: flex; }
+  }
 
   @media (max-width: 900px) {
     .settings-grid { grid-template-columns: 1fr; }

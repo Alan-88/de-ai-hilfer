@@ -301,9 +301,7 @@
       padding: 1.5rem 1rem calc(5.25rem + env(safe-area-inset-bottom));
     }
     .theme-switcher-group {
-      position: absolute;
-      top: 1rem;
-      right: 1rem;
+      display: none;
     }
   }
 </style>

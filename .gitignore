@@ -45,6 +45,7 @@ frontend-web/.tmp-*.json
 mcp-gateway/node_modules/
 mcp-gateway/dist/
 .playwright-cli/
+output/playwright/
 
 # ====================
 # Local logs / reports
