@@ -8,6 +8,7 @@
   import FollowUpCard from "$lib/components/bento/FollowUpCard.svelte";
   import type { AiModelOverride, AnalyzeResponse, AttachedPhraseModule, FollowUpItem, PhraseUsageModule, QualityMode, RecentItem } from "$lib/types";
   import { slide } from "svelte/transition";
+  import { innerWidth } from "svelte/reactivity/window";
   import GrammarFeatureCard from "$lib/components/bento/GrammarFeatureCard.svelte";
   import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
   import PhraseModuleAddControl from "$lib/components/bento/PhraseModuleAddControl.svelte";
@@ -432,7 +433,7 @@
             <div class="network-label">{group.label}</div>
             <div class="tag-cloud-mini">
               {#each group.items as item}
-                <details class="mini-tag-btn">
+                <details class="mini-tag-btn" open={(innerWidth.current ?? 0) > 600}>
                   <summary>{item.term}</summary>
                   <div class="network-definition">
                     {#if item.partOfSpeech}<small>{item.partOfSpeech}</small>{/if}

@@ -107,8 +107,11 @@ async page => {
       if(pills.some(p=>!p.nowrap)&&width<=600)throw Error('Follow-up label wraps');
       if(await page.locator('.network-label').count()!==3)throw Error('Network categories missing');
       const tag=page.locator('.mini-tag-btn summary').first();
+      const initiallyOpen=await page.locator('.mini-tag-btn').evaluateAll(items=>items.every(item=>item.open));
+      if(initiallyOpen!==(width>600))throw Error('Network initial expansion does not match breakpoint');
       await tag.focus();await page.keyboard.press('Enter');
-      if(await page.locator('.mini-tag-btn').first().getAttribute('open')===null)throw Error('Keyboard cannot expand network');
+      const toggledOpen=await page.locator('.mini-tag-btn').first().getAttribute('open')!==null;
+      if(toggledOpen===(width>600))throw Error('Keyboard cannot toggle network');
       await page.keyboard.press('Enter');
       if([390,1280].includes(width))for(const [section,selector] of [['meanings','.card-header'],['usage','.card-title-row'],['insights','.insights-stack'],['network','.word-network'],['followup','.follow-up-wrapper'],['recent','.recent-mini-list']])await screenshot('search',width,theme,section,selector);
       results.push({kind:'search',width,theme,meanings,density,pills});
