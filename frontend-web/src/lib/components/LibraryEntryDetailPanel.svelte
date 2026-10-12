@@ -261,12 +261,14 @@
     .detail-analysis :global(.section-card) { padding: 12px; border-radius: 16px; }
     .detail-analysis :global(.section-title) { margin-bottom: 10px; }
     .detail-analysis :global(.meaning-summary) { position: relative; display: block; padding: 10px; border-radius: 10px; font-size: 0; line-height: 20px; }
-    .detail-analysis :global(.meaning-summary > span) { display: inline-block; margin-right: 8px; line-height: 20px; vertical-align: baseline; }
+    .detail-analysis :global(.meaning-summary > span),
+    .detail-analysis :global(.meaning-summary small::before) { display: inline-block; padding: 0 5px; margin-right: 8px; font-size: 11px; font-weight: 800; }
+    .detail-analysis :global(.meaning-summary > span) { border-radius: 4px; line-height: 20px; vertical-align: baseline; }
     .detail-analysis :global(.meaning-summary > div) { display: contents; }
     .detail-analysis :global(.meaning-summary strong) { font-size: 13px; line-height: 20px; }
     .detail-analysis :global(.meaning-summary small) { display: block; margin-top: 5px; font-size: 12px; }
     /* Match the label's intrinsic width only on the English first line. */
-    .detail-analysis :global(.meaning-summary small::before) { content: attr(data-pos); display: inline-block; height: 0; padding: 0 0.6rem; margin-right: 8px; font-size: 0.8rem; font-weight: 800; visibility: hidden; }
+    .detail-analysis :global(.meaning-summary small::before) { content: attr(data-pos); height: 0; visibility: hidden; }
     .detail-analysis :global(.meaning-summary > i) { display: none; }
     .detail-analysis :global(.usage-list),
     .detail-analysis :global(.insights-stack) { gap: 12px; }
