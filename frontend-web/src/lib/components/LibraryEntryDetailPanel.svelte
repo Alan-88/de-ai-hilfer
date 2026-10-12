@@ -245,8 +245,8 @@
     .title-line { padding-right: 2.8rem; }
     .word-title { font-size: 2rem; }
     .title-actions { align-items: flex-end; flex-direction: column; }
-    .drawer-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; padding-top: 16px; }
-    .drawer-actions button { min-width: 0; min-height: 38px; padding: 8px; border-radius: 12px; font-size: 12px; white-space: nowrap; }
+    .drawer-actions { flex-direction: row; justify-content: flex-start; gap: 8px; margin-top: 12px; padding-top: 16px; }
+    .drawer-actions button { flex: 0 0 auto; min-height: 38px; padding: 8px; font-size: 12px; white-space: nowrap; }
   }
 
   @media (max-width: 600px) {
