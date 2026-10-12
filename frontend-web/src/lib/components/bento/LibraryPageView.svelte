@@ -307,11 +307,9 @@
     .header-toolbar { width: 100%; margin-bottom: 1rem; }
     .search-bar { flex: 1; }
     .tabs-row { position: sticky; top: -1.5rem; z-index: 80; order: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.25rem; width: calc(100% + 2rem); margin: 0 -1rem 2rem; padding: 1.5rem 1rem 0.75rem; overflow-x: hidden; border-bottom: 1px solid var(--border-color); background: var(--bg-color); }
-    .tab-btn { justify-content: center; padding-inline: 0.4rem; }
+    .tab-btn { flex-direction: column; justify-content: flex-start; gap: 2px; min-height: 44px; padding: 0.4rem; }
+    .tab-btn .count { padding: 0; background: transparent; font-size: 11px; line-height: 14px; }
     .results-footer { flex-direction: column; align-items: stretch; }
   }
 
-  @media (max-width: 360px) {
-    .tab-btn .count { display: none; }
-  }
 </style>
