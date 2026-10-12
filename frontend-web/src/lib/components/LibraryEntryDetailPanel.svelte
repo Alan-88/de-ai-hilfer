@@ -245,15 +245,23 @@
     .title-line { padding-right: 2.8rem; }
     .word-title { font-size: 2rem; }
     .title-actions { align-items: flex-end; flex-direction: column; }
-    .drawer-actions { flex-direction: column; }
+    .drawer-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; padding-top: 16px; }
+    .drawer-actions button { min-width: 0; min-height: 38px; padding: 8px; border-radius: 12px; font-size: 12px; white-space: nowrap; }
   }
 
   @media (max-width: 600px) {
     .drawer-panel { padding: 20px 16px; }
-    .drawer-head { min-width: 0; gap: 8px; margin-bottom: 12px; }
-    .title-line { min-width: 0; padding-right: 56px; }
-    .word-title { min-width: 0; font-size: 26px; overflow-wrap: anywhere; }
-    .detail-close-floating { top: 16px; right: 16px; width: 44px; height: 44px; font-size: 20px; }
+    .drawer-head { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 12px; }
+    .title-line { display: contents; }
+    .word-title { grid-column: 1 / -1; min-width: 0; padding-right: 44px; font-size: 26px; overflow-wrap: anywhere; }
+    .title-actions { grid-column: 2; grid-row: 2; align-self: center; gap: 4px; }
+    .learning-action { min-width: 0; min-height: 32px; padding: 0 10px; gap: 4px; font-size: 11px; white-space: nowrap; }
+    .learning-status { padding: 2px 5px; font-size: 10px; }
+    .drawer-meta { grid-column: 1; grid-row: 2; align-content: center; align-items: center; gap: 4px; }
+    .meta-pill { gap: 3px; padding: 2px 5px; font-size: 10px; line-height: 16px; }
+    .detail-close-floating { top: 10px; right: 10px; width: 44px; height: 44px; border: 0; background: transparent; box-shadow: none; font-size: 16px; }
+    .detail-close-floating::before { content: ""; position: absolute; inset: 6px; border: 1px solid var(--border-color); border-radius: 50%; background: var(--card-bg); box-shadow: var(--shadow-sm); }
+    .detail-close-floating i { position: relative; }
     .drawer-content { gap: 16px; }
     .content-section { gap: 8px; }
 
@@ -274,8 +282,4 @@
     .detail-analysis :global(.zh-line) { font-size: 11.5px; line-height: 1.5; margin-top: 4px; }
   }
 
-  @media (max-width: 360px) {
-    .title-line { flex-direction: column; gap: 10px; }
-    .title-actions { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
-  }
 </style>
