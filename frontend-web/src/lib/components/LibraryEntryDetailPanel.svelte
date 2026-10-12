@@ -246,7 +246,7 @@
     .word-title { font-size: 2rem; }
     .title-actions { align-items: flex-end; flex-direction: column; }
     .drawer-actions { flex-direction: row; justify-content: flex-start; gap: 8px; margin-top: 12px; padding-top: 16px; }
-    .drawer-actions button { flex: 0 0 auto; min-height: 38px; padding: 8px; font-size: 12px; white-space: nowrap; }
+    .drawer-actions button { flex: 0 0 auto; min-height: 38px; padding: 8px 20px; font-size: 12px; white-space: nowrap; }
   }
 
   @media (max-width: 600px) {
