@@ -264,6 +264,9 @@
     display: none;
   }
 
+  .app-layout:has(:global(.detail-overlay)) .main-area { overflow-y: hidden; }
+  .app-layout:has(:global(.detail-overlay)) .bottom-nav { visibility: hidden; pointer-events: none; }
+
   @media (max-width: 768px) {
     .sidebar { display: none; }
     .bottom-nav {

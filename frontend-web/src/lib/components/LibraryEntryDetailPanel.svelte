@@ -48,6 +48,21 @@
 
   let activeGrammarBranch = $state<GrammarBranch | null>(null);
   let popoverTriggerRect = $state<DOMRect | null>(null);
+  let drawerElement = $state<HTMLDivElement | null>(null);
+  let wordElement = $state<HTMLHeadingElement | null>(null);
+  let dockedTitle = $state(false);
+
+  $effect(() => {
+    entry?.entry_id;
+    dockedTitle = false;
+  });
+
+  function handleScroll() {
+    if (!drawerElement || !wordElement) return;
+    const bottom = wordElement.getBoundingClientRect().bottom - drawerElement.getBoundingClientRect().top;
+    if (!dockedTitle && bottom <= 12) dockedTitle = true;
+    if (dockedTitle && bottom > 24) dockedTitle = false;
+  }
 
   function formatDateTime(value: string) {
     return new Date(value).toLocaleString("zh-CN", {
@@ -75,14 +90,18 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="detail-overlay" onclick={onClose} transition:fade={{ duration: 200 }}>
-    <div class="drawer-panel" onclick={(event) => event.stopPropagation()} transition:slide={{ axis: "x", duration: 300 }}>
-      <button class="detail-close-floating" onclick={onClose} aria-label="关闭详情">
-        <i class="ph ph-x"></i>
-      </button>
+    <div class="drawer-shell" onclick={(event) => event.stopPropagation()} transition:slide={{ axis: "x", duration: 300 }}>
+      <div class="detail-toolbar" class:docked={dockedTitle}>
+        <strong class="docked-word" aria-hidden="true">{entry.query_text}</strong>
+        <button class="detail-close-floating" onclick={onClose} aria-label="关闭详情">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+    <div class="drawer-panel" bind:this={drawerElement} onscroll={handleScroll}>
 
       <header class="drawer-head">
         <div class="title-line">
-          <h2 class="word-title">{entry.query_text}</h2>
+          <h2 class="word-title" bind:this={wordElement}>{entry.query_text}</h2>
           <div class="title-actions">
             {#if learningStatus}
               <span class="learning-status {learningStatus.className}">{learningStatus.label}</span>
@@ -155,6 +174,7 @@
         </details>
       </div>
     </div>
+    </div>
   </div>
 
   {#if activeGrammarBranch}
@@ -180,6 +200,10 @@
     backdrop-filter: blur(4px);
   }
 
+  .drawer-shell { position: relative; width: 100%; max-width: 800px; height: 100%; }
+  .detail-toolbar { display: contents; }
+  .docked-word { display: none; }
+
   .drawer-panel {
     position: relative;
     display: flex;
@@ -189,6 +213,7 @@
     flex-direction: column;
     padding: 3rem 2rem;
     overflow-y: auto;
+    overscroll-behavior: contain;
     background: var(--bg-color);
     box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
     scrollbar-gutter: stable;
@@ -196,6 +221,7 @@
 
   .detail-close-floating {
     position: fixed;
+    z-index: 3;
     top: 1.5rem;
     right: 1.5rem;
     display: flex;
@@ -250,6 +276,11 @@
   }
 
   @media (max-width: 600px) {
+    .detail-overlay { background: var(--bg-color); backdrop-filter: none; }
+    .detail-toolbar { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; height: 56px; align-items: center; padding: 0 60px 0 16px; pointer-events: none; }
+    .detail-toolbar.docked { background: var(--bg-color); border-bottom: 1px solid var(--border-color); }
+    .docked-word { display: block; min-width: 0; overflow: hidden; color: var(--text-main); font-size: 16px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; visibility: hidden; }
+    .docked .docked-word { visibility: visible; }
     .drawer-panel { padding: 20px 16px; }
     .drawer-head { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 12px; }
     .title-line { display: contents; }
@@ -259,7 +290,7 @@
     .learning-status { padding: 2px 5px; font-size: 10px; }
     .drawer-meta { grid-column: 1; grid-row: 2; align-content: center; align-items: center; gap: 4px; }
     .meta-pill { gap: 3px; padding: 2px 5px; font-size: 10px; line-height: 16px; }
-    .detail-close-floating { top: 10px; right: 10px; width: 44px; height: 44px; border: 0; background: transparent; box-shadow: none; font-size: 16px; }
+    .detail-close-floating { position: absolute; top: 10px; right: 10px; width: 44px; height: 44px; border: 0; background: transparent; box-shadow: none; font-size: 16px; pointer-events: auto; }
     .detail-close-floating::before { content: ""; position: absolute; inset: 6px; border: 1px solid var(--border-color); border-radius: 50%; background: var(--card-bg); box-shadow: var(--shadow-sm); }
     .detail-close-floating i { position: relative; }
     .drawer-content { gap: 16px; }
