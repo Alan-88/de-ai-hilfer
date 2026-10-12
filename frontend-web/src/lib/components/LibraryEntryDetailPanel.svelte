@@ -246,4 +246,36 @@
     .title-actions { align-items: flex-end; flex-direction: column; }
     .drawer-actions { flex-direction: column; }
   }
+
+  @media (max-width: 600px) {
+    .drawer-panel { padding: 20px 16px; }
+    .drawer-head { min-width: 0; gap: 10px; margin-bottom: 16px; }
+    .title-line { min-width: 0; padding-right: 56px; }
+    .word-title { min-width: 0; font-size: 28px; overflow-wrap: anywhere; }
+    .detail-close-floating { top: 16px; right: 16px; width: 44px; height: 44px; font-size: 20px; }
+    .drawer-content { gap: 20px; }
+    .content-section { gap: 10px; }
+
+    /* Keep the density pilot local to library details before adopting it elsewhere. */
+    .detail-analysis :global(.learning-content) { gap: 12px; }
+    .detail-analysis :global(.section-card) { padding: 12px; border-radius: 16px; }
+    .detail-analysis :global(.section-title) { margin-bottom: 10px; }
+    .detail-analysis :global(.meaning-summary) { padding: 10px; gap: 8px; border-radius: 10px; }
+    .detail-analysis :global(.meaning-summary strong) { font-size: 13px; line-height: 20px; }
+    .detail-analysis :global(.meaning-summary small) { font-size: 12px; }
+    .detail-analysis :global(.usage-list),
+    .detail-analysis :global(.insights-stack) { gap: 12px; }
+    .detail-analysis :global(.usage-item),
+    .detail-analysis :global(.insight-block) { padding: 8px; border-radius: 10px; font-size: 15px; }
+    .detail-analysis :global(.example-box) { margin-top: 8px; padding: 10px; }
+    .detail-analysis :global(.usage-item.example-box) { margin-top: 0; }
+    .detail-analysis :global(.zh-line) { font-size: 13.5px; }
+  }
+
+  @media (max-width: 360px) {
+    .title-line { flex-direction: column; gap: 10px; }
+    .title-actions { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
+    .detail-analysis :global(.meaning-summary) { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+    .detail-analysis :global(.meaning-summary > span) { grid-column: 1 / -1; justify-self: start; }
+  }
 </style>
