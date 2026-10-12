@@ -507,14 +507,13 @@
     {/if}
 
     <div class="search-panel-group" class:has-suggestions={isSearchFocusing}>
-      <form class="search-form" onsubmit={(e) => { e.preventDefault(); (showAdvanced && advancedHint.trim()) ? handleAdvancedSearch() : handleSearch(); }}>
-        <div class="input-row main-row" class:is-generating-box={$s.isStreaming} class:is-single-row={!showAdvanced}>
+      <form class="search-form" class:has-advanced={showAdvanced} onsubmit={(e) => { e.preventDefault(); (showAdvanced && advancedHint.trim()) ? handleAdvancedSearch() : handleSearch(); }}>
+        <div class="input-row main-row" class:is-generating-box={$s.isStreaming}>
           {#if isSearching}
             <button type="button" class="back-btn" onclick={clearSearchResult} transition:fade aria-label="返回首页">
               <i class="ph ph-arrow-left" aria-hidden="true"></i>
             </button>
           {/if}
-          <i class="ph-bold ph-magnifying-glass search-icon"></i>
           <input
             bind:this={mainInputRef}
             bind:value={$s.query}
@@ -700,16 +699,6 @@
     max-height: calc(var(--search-viewport-height) - 48px - env(safe-area-inset-bottom));
   }
   .focusing .search-form { flex-shrink: 0; }
-  .focusing .integrated-suggestions {
-    position: static;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    border-inline: none;
-    border-bottom: none;
-    border-bottom-left-radius: inherit;
-    border-bottom-right-radius: inherit;
-  }
   .focusing .panel-header { flex-shrink: 0; }
   .focusing .suggestion-list { min-height: 0; }
 
@@ -718,35 +707,34 @@
   .search-intro p { margin-left: 14rem; color: var(--text-muted); font-size: 1.15rem; }
 
   .search-panel-group {
-    position: relative; width: 100%; background: var(--control-bg);
-    border: 1px solid var(--border-color); border-radius: 28px;
-    box-shadow: var(--shadow-sm); transition: all var(--transition-smooth);
+    position: relative; width: 100%; display: flex; flex-direction: column; gap: 8px;
   }
 
-  .has-suggestions { box-shadow: var(--shadow-hover); }
-  .has-suggestions .search-form { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .has-suggestions .search-form { box-shadow: var(--shadow-hover); }
 
-  .search-form { border-radius: inherit; overflow: hidden; }
+  .search-form {
+    border: 1px solid var(--border-color); border-radius: 9999px;
+    background: var(--control-bg); box-shadow: var(--shadow-sm); overflow: hidden;
+  }
+  .search-form.has-advanced {
+    display: flex; flex-direction: column; gap: 8px;
+    background: transparent; border: none; border-radius: 0; box-shadow: none; overflow: visible;
+  }
+  .has-advanced .input-row {
+    border: 1px solid var(--border-color); border-radius: 9999px;
+    box-shadow: var(--shadow-sm);
+  }
+  .has-advanced .main-row { background: var(--control-bg); }
   .input-row { display: flex; align-items: center; padding: 0.5rem 0.5rem 0.5rem 1.5rem; gap: 1rem; border-radius: inherit; }
   .input-row input { flex: 1; min-width: 0; background: transparent; font-size: 1.25rem; color: var(--text-main); height: 3.5rem; }
 
   .main-row {
     position: relative;
     z-index: 2;
-    border-top-left-radius: inherit;
-    border-top-right-radius: inherit;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
   }
-  .main-row.is-single-row { border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; }
   .sub-row {
-    border-top: 1px solid var(--border-color);
     padding: 0.85rem 1.5rem;
     background: var(--bg-color);
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
-    border-bottom-left-radius: inherit;
-    border-bottom-right-radius: inherit;
   }
   .sub-row input { font-size: 1.05rem; height: 2.5rem; }
 
@@ -812,9 +800,9 @@
   }
 
   .integrated-suggestions {
-    position: absolute; top: 100%; left: -1px; right: -1px;
+    display: flex; flex-direction: column; min-height: 0;
     background: var(--card-bg); border: 1px solid var(--border-color);
-    border-top: none; border-bottom-left-radius: 24px; border-bottom-right-radius: 24px;
+    border-radius: 24px;
     box-shadow: 0 20px 40px rgba(0,0,0,0.12); z-index: 200; overflow: hidden;
   }
 
@@ -865,7 +853,6 @@
     .is-searching .search-panel-group { width: 100%; margin: 0; }
     .input-row { padding: 6px 16px; gap: 4px; }
     .input-row input { height: 44px; font-size: 16px; }
-    .main-row > .search-icon { display: none; }
     .actions { gap: 0; flex-shrink: 0; }
     .actions .icon-btn { width: 32px; height: 44px; flex-shrink: 0; }
     .shortcut-btn { display: flex; width: 32px; height: 44px; padding: 0; justify-content: center; }
@@ -880,8 +867,7 @@
     .search-main-wrapper.focusing { top: calc(var(--search-viewport-top) + 8px); left: 16px; right: 16px; width: auto; margin: 0; padding: 0; }
     .search-main-wrapper.focusing .search-panel-group { max-height: calc(var(--search-viewport-height) - 16px - env(safe-area-inset-bottom)); }
     .suggestion-list { overscroll-behavior: contain; }
-    .search-panel-group { border-radius: 20px; }
-    .integrated-suggestions { border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; }
+    .integrated-suggestions { border-radius: 20px; }
     .sub-row { padding: 6px 16px; gap: 8px; }
   }
 
