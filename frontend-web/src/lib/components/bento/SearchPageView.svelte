@@ -80,16 +80,16 @@
   async function setSearchFocus(next: boolean) {
     if (searchFocused === next) return;
     const row = mainInputRef?.closest<HTMLElement>(".main-row");
-    const wrapper = row?.closest<HTMLElement>(".search-main-wrapper");
+    const panel = row?.closest<HTMLElement>(".search-panel-group");
     const previousTop = row?.getBoundingClientRect().top;
     searchMoveAnimation?.cancel();
     searchMoveAnimation = null;
     searchFocused = next;
-    if (!next || isSearching || !row || !wrapper || previousTop === undefined || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (isSearching || !row || !panel || previousTop === undefined || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     await tick();
-    if (!searchFocused || isSearching || !wrapper.isConnected) return;
+    if (searchFocused !== next || isSearching || !panel.isConnected) return;
     const offset = previousTop - row.getBoundingClientRect().top;
-    searchMoveAnimation = wrapper.animate(
+    searchMoveAnimation = panel.animate(
       [{ transform: `translateY(${offset}px)` }, { transform: "translateY(0)" }],
       { duration: 260, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
     );

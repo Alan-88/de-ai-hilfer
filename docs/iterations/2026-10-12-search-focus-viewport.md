@@ -60,3 +60,11 @@
 - 取消聚焦/卸载会取消旧动画；prefers-reduced-motion启用时跳过运动。状态与动画生命周期留在SearchPageView，无依赖/API/CLI/MCP变更；检查active-roadmap，无优先级变化。
 - 截图与逐帧检查脚本为output/playwright/search-focus-motion-*，覆盖390/1280px双主题、中间与完成状态及减少动态效果。类型检查0错误、2项原有警告，生产构建通过；仅更新frontend容器。尚未实体手机/Safari验证键盘动画与视口事件时序。
 - 实际逐帧检查显示移动首页主行从约200px连续移到8px，PC从394px移到24px，采到15–16个不同位置且无反向跳变；减少动态效果模式无位移动画。复跑双主题320/390/1280px快速按钮/Tab切换，主行位置与高度持续稳定。实际浏览器录屏保存为output/playwright/search-focus-motion-mobile.webm。
+
+## 跟进：取消聚焦归位动画
+
+- 上一轮只恢复进入聚焦的运动，取消聚焦仍直接归位。本轮让首页聚焦的进入/退出共用260ms位移动画；切换前读取当前可见位置，再取消旧动画，中途反向操作从该位置继续。
+- 动画目标收敛到search-panel-group，首页标题不随归位中的搜索栏一起移动；联想切换、已有结果与减少动态效果模式仍不触发位移。tick后检查聚焦状态，避免被相反操作覆盖的动画继续启动。
+- 修改仅涉及SearchPageView内部动画与现有生命周期，无接口/CLI/MCP改动。检查active-roadmap，无优先级变化；仅更新frontend容器。
+- 类型检查0错误、2项原有警告，生产镜像构建通过。部署后的320/390/1280px双主题逐帧验证进入/退出连续运动、空白关闭、动画中途反向接续及减少动态效果均通过；每组20次按钮点击与12次Tab切换保持主行位置/高度稳定。
+- 截图为output/playwright/search-return-{320,390,1280}-{canvas,canvas-dark}-{middle,home}.png，归位检查脚本为search-return-motion-check.js。结构复查保持现状，动画继续由页面组件管理。未复测实体手机/Safari与软键盘联动。
