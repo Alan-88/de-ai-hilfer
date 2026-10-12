@@ -8,6 +8,7 @@
   import type {
     EntryDetailResponse,
     LearningProgressView,
+    LibraryCounts,
     LibraryEntriesPageResponse,
     LibraryTab,
     RecentItem,
@@ -23,7 +24,7 @@
   let isLoadingMore = $state(false);
   let error = $state("");
   let totalCount = $state(0);
-  let allCount = $state(0);
+  let tabCounts = $state<LibraryCounts | null>(null);
   let nextCursor = $state<string | null>(null);
   let requestSerial = 0;
   
@@ -81,11 +82,8 @@
 
   function applyPage(page: LibraryEntriesPageResponse, append: boolean) {
     totalCount = page.total;
+    tabCounts = page.counts;
     nextCursor = page.next_cursor ?? null;
-
-    if (!filterText.trim() && activeTab === "all") {
-      allCount = page.total;
-    }
 
     if (!append) {
       entries = page.items;
@@ -142,9 +140,8 @@
       await deleteEntry(id);
       selectedEntryDetail = null;
       entries = entries.filter(e => e.entry_id !== id);
-      totalCount = Math.max(0, totalCount - 1);
-      allCount = Math.max(0, allCount - 1);
       delete progressMap[id];
+      await loadEntries(false);
     } catch (e) {
       alert("删除失败");
     } finally {
@@ -194,16 +191,16 @@
 
   <div class="tabs-row">
     <button class="tab-btn" class:active={activeTab === 'all'} onclick={() => handleTabChange('all')}>
-      全部 <span class="count">{allCount}</span>
+      全部 <span class="count">{tabCounts?.all ?? '—'}</span>
     </button>
     <button class="tab-btn" class:active={activeTab === 'learning'} onclick={() => handleTabChange('learning')}>
-      学习中 <span class="count">{Object.keys(progressMap).length}</span>
+      学习中 <span class="count">{tabCounts?.learning ?? '—'}</span>
     </button>
     <button class="tab-btn" class:active={activeTab === 'review'} onclick={() => handleTabChange('review')}>
-      待复习
+      待复习 <span class="count">{tabCounts?.review ?? '—'}</span>
     </button>
     <button class="tab-btn" class:active={activeTab === 'new'} onclick={() => handleTabChange('new')}>
-      新词
+      新词 <span class="count">{tabCounts?.new ?? '—'}</span>
     </button>
   </div>
 </div>

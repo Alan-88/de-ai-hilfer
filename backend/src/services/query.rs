@@ -84,6 +84,7 @@ pub async fn get_library_entries_page(
             })
             .collect(),
         total: page.total,
+        counts: page.counts,
         next_cursor: page.next_offset.map(|value| value.to_string()),
         limit,
     })

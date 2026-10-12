@@ -149,9 +149,12 @@ export interface RecentItem {
 
 export type LibraryTab = "all" | "learning" | "review" | "new";
 
+export type LibraryCounts = Record<LibraryTab, number>;
+
 export interface LibraryEntriesPageResponse {
   items: RecentItem[];
   total: number;
+  counts: LibraryCounts;
   next_cursor?: string | null;
   limit: number;
 }

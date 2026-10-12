@@ -233,9 +233,18 @@ pub enum LibraryQueryTab {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LibraryCounts {
+    pub all: i64,
+    pub learning: i64,
+    pub review: i64,
+    pub new: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LibraryEntriesPageResponse {
     pub items: Vec<RecentItem>,
     pub total: i64,
+    pub counts: LibraryCounts,
     pub next_cursor: Option<String>,
     pub limit: i64,
 }

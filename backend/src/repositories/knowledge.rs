@@ -1,5 +1,6 @@
 use crate::db::DbPool;
-use crate::models::{KnowledgeEntry, LibraryQueryTab};
+use crate::models::{KnowledgeEntry, LibraryCounts, LibraryQueryTab};
+use chrono::{DateTime, Utc};
 use sqlx::{FromRow, Postgres, QueryBuilder};
 
 pub use super::knowledge_write::{add_alias, insert, update_analysis};
@@ -22,6 +23,7 @@ struct AliasMatchRow {
 pub struct KnowledgeListPage {
     pub entries: Vec<KnowledgeEntry>,
     pub total: i64,
+    pub counts: LibraryCounts,
     pub next_offset: Option<i64>,
 }
 
@@ -169,17 +171,45 @@ pub async fn list_page(
     let limit = limit.max(1);
     let offset = offset.max(0);
 
-    let mut count_query = QueryBuilder::<Postgres>::new("SELECT COUNT(*)");
-    push_library_filters(&mut count_query, &query_lower, &normalized_query, tab);
-    let total = count_query
-        .build_query_scalar::<i64>()
+    let now = Utc::now();
+    let mut count_query = QueryBuilder::<Postgres>::new(r#"SELECT COUNT(*) AS "all""#);
+    for (count_tab, name) in [
+        (LibraryQueryTab::Learning, "learning"),
+        (LibraryQueryTab::Review, "review"),
+        (LibraryQueryTab::New, "new"),
+    ] {
+        count_query.push(", COUNT(*) FILTER (WHERE ");
+        push_library_tab_filter(&mut count_query, count_tab, now);
+        count_query.push(") AS \"").push(name).push("\"");
+    }
+    push_library_filters(
+        &mut count_query,
+        &query_lower,
+        &normalized_query,
+        LibraryQueryTab::All,
+        now,
+    );
+    let (all, learning, review, new) = count_query
+        .build_query_as::<(i64, i64, i64, i64)>()
         .fetch_one(pool)
         .await?;
+    let counts = LibraryCounts {
+        all,
+        learning,
+        review,
+        new,
+    };
+    let total = match tab {
+        LibraryQueryTab::All => counts.all,
+        LibraryQueryTab::Learning => counts.learning,
+        LibraryQueryTab::Review => counts.review,
+        LibraryQueryTab::New => counts.new,
+    };
 
     let mut list_query = QueryBuilder::<Postgres>::new(
         "SELECT ke.id, ke.query_text, ke.lexeme_id, ke.prototype, ke.entry_type, ke.analysis, ke.tags, ke.aliases, ke.created_at, ke.updated_at",
     );
-    push_library_filters(&mut list_query, &query_lower, &normalized_query, tab);
+    push_library_filters(&mut list_query, &query_lower, &normalized_query, tab, now);
     push_library_ordering(&mut list_query, &query_lower, &normalized_query);
     list_query.push(" LIMIT ");
     list_query.push_bind(limit);
@@ -199,6 +229,7 @@ pub async fn list_page(
     Ok(KnowledgeListPage {
         entries,
         total,
+        counts,
         next_offset,
     })
 }
@@ -402,21 +433,12 @@ fn push_library_filters(
     query_lower: &str,
     normalized_query: &str,
     tab: LibraryQueryTab,
+    now: DateTime<Utc>,
 ) {
-    query.push(" FROM knowledge_entries ke LEFT JOIN learning_progress lp ON lp.entry_id = ke.id WHERE TRUE");
-
-    match tab {
-        LibraryQueryTab::All => {}
-        LibraryQueryTab::Learning => {
-            query.push(" AND lp.entry_id IS NOT NULL");
-        }
-        LibraryQueryTab::Review => {
-            query.push(" AND lp.entry_id IS NOT NULL AND lp.due_date <= NOW()");
-        }
-        LibraryQueryTab::New => {
-            query.push(" AND lp.entry_id IS NULL");
-        }
-    }
+    query.push(
+        " FROM knowledge_entries ke LEFT JOIN learning_progress lp ON lp.entry_id = ke.id WHERE ",
+    );
+    push_library_tab_filter(query, tab, now);
 
     if !normalized_query.is_empty() {
         query.push(" AND (lower(ke.query_text) LIKE ");
@@ -430,6 +452,29 @@ fn push_library_filters(
         query.push(" LIKE ");
         query.push_bind(format!("%{normalized_query}%"));
         query.push(")");
+    }
+}
+
+fn push_library_tab_filter(
+    query: &mut QueryBuilder<'_, Postgres>,
+    tab: LibraryQueryTab,
+    now: DateTime<Utc>,
+) {
+    match tab {
+        LibraryQueryTab::All => {
+            query.push("TRUE");
+        }
+        LibraryQueryTab::Learning => {
+            query.push("lp.entry_id IS NOT NULL");
+        }
+        LibraryQueryTab::Review => {
+            query
+                .push("lp.entry_id IS NOT NULL AND lp.due_date <= ")
+                .push_bind(now);
+        }
+        LibraryQueryTab::New => {
+            query.push("lp.entry_id IS NULL");
+        }
     }
 }
 
