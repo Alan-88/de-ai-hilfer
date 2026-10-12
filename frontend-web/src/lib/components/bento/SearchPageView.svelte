@@ -455,12 +455,6 @@
 </script>
 
 <div id="page-search" class="search-page-container" class:active={active} class:is-searching={isSearching}>
-  {#if isSearching}
-    <button class="back-btn" onclick={clearSearchResult} transition:fade aria-label="返回首页">
-      <i class="ph ph-arrow-left"></i>
-    </button>
-  {/if}
-
   <!-- 搜索专注遮罩层 -->
   {#if isSearchFocusing}
     <button class="search-overlay" aria-label="关闭搜索建议" transition:fade={{ duration: 200 }} onclick={() => showSuggestions = false}></button>
@@ -477,6 +471,11 @@
     <div class="search-panel-group" class:has-suggestions={isSearchFocusing}>
       <form class="search-form" onsubmit={(e) => { e.preventDefault(); (showAdvanced && advancedHint.trim()) ? handleAdvancedSearch() : handleSearch(); }}>
         <div class="input-row main-row" class:is-generating-box={$s.isStreaming} class:is-single-row={!showAdvanced}>
+          {#if isSearching}
+            <button type="button" class="back-btn" onclick={clearSearchResult} transition:fade aria-label="返回首页">
+              <i class="ph ph-arrow-left" aria-hidden="true"></i>
+            </button>
+          {/if}
           <i class="ph-bold ph-magnifying-glass search-icon"></i>
           <input
             bind:this={mainInputRef}
@@ -504,10 +503,10 @@
               onclick={() => { if ($s.isLoading) cancelSearch(); }}
             >
               {#if $s.isLoading}
-                <span class="btn-text-content loading-text"><i class="ph-bold ph-spinner-gap spin"></i> 分析中</span>
-                <span class="btn-text-content cancel-text"><i class="ph-fill ph-stop"></i> 取消</span>
+                <span class="btn-text-content loading-text"><i class="ph-bold ph-spinner-gap spin"></i><span class="search-submit-label">分析中</span></span>
+                <span class="btn-text-content cancel-text"><i class="ph-fill ph-stop"></i><span class="search-submit-label">取消</span></span>
               {:else}
-                <i class="ph-bold ph-magnifying-glass"></i> 分析
+                <i class="ph-bold ph-magnifying-glass"></i><span class="search-submit-label">分析</span>
               {/if}
             </button>
           </div>
@@ -663,12 +662,12 @@
   .main-row {
     position: relative;
     z-index: 2;
-    border-top-left-radius: 28px;
-    border-top-right-radius: 28px;
+    border-top-left-radius: inherit;
+    border-top-right-radius: inherit;
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
   }
-  .main-row.is-single-row { border-bottom-left-radius: 28px; border-bottom-right-radius: 28px; }
+  .main-row.is-single-row { border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; }
   .sub-row {
     border-top: 1px solid var(--border-color);
     padding: 0.85rem 1.5rem;
@@ -708,6 +707,7 @@
 
   .btn-text-content {
     position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     display: flex;
@@ -788,25 +788,41 @@
 
   @media (max-width: 768px) {
     .search-intro p { margin-left: 0; text-align: center; }
-    .back-btn { left: 1rem; top: 1rem; }
+    .back-btn { position: static; flex: 0 0 44px; }
     .search-main-wrapper { margin-top: 15vh; }
-    .is-searching .search-main-wrapper { top: -1.5rem; display: block; width: calc(100% + 2rem); height: auto; max-width: none; margin: -1.5rem -1rem 0; padding: 1rem 1rem 0.75rem; }
-    .is-searching .search-panel-group { width: calc(100% - 3.5rem); margin-left: 3.5rem; }
-    .input-row { padding-left: 0.5rem; gap: 0.25rem; }
+    .is-searching .search-main-wrapper { top: -1.5rem; display: block; width: calc(100% + 2rem); height: auto; max-width: none; margin: -1.5rem -1rem 0; padding: 8px 16px; }
+    .is-searching .search-panel-group { width: 100%; margin: 0; }
+    .input-row { padding: 6px 8px; gap: 4px; }
+    .input-row input { height: 44px; font-size: 16px; }
     .main-row > .search-icon { display: none; }
-    .actions { gap: 0.125rem; flex-shrink: 0; }
-    .actions .icon-btn { width: 2rem; flex-shrink: 0; }
-    .shortcut-btn { display: flex; width: 2.75rem; height: 2.75rem; padding: 0; justify-content: center; }
+    .actions { gap: 0; flex-shrink: 0; }
+    .actions .icon-btn { width: 32px; height: 44px; flex-shrink: 0; }
+    .shortcut-btn { display: flex; width: 32px; height: 44px; padding: 0; justify-content: center; }
     .shortcut-btn span { display: none; }
     .shortcut-btn.is-active { color: var(--accent-main); background: var(--btn-secondary); border-radius: 50%; }
-    .search-submit-btn { width: 2.75rem; flex-shrink: 0; font-size: 0; }
-    .search-submit-btn i { font-size: 1rem; }
+    .search-submit-btn { width: 44px; height: 44px; flex-shrink: 0; gap: 0; }
+    .search-submit-btn .search-submit-label { display: none; }
+    .search-submit-btn i { font-size: 18px; line-height: 1; }
+    .btn-text-content { gap: 0; }
     .search-submit-btn.is-canceling .loading-text { display: none; }
     .search-submit-btn.is-canceling .cancel-text { transform: none; opacity: 1; }
     .search-main-wrapper.focusing, .is-searching .search-main-wrapper.focusing .search-panel-group { transform: none; }
     .suggestion-list { max-height: min(420px, 35dvh); overscroll-behavior: contain; }
     .search-panel-group { border-radius: 20px; }
     .integrated-suggestions { border-bottom-left-radius: 20px; border-bottom-right-radius: 20px; }
+    .sub-row { padding: 6px 16px; gap: 8px; }
+  }
+
+  @media (max-width: 600px) {
+    .search-main-wrapper { margin-top: clamp(40px, 12dvh, 96px); }
+    .search-intro { margin-bottom: 16px; text-align: center; }
+    .search-intro h1 { font-size: 26px; line-height: 1.2; margin-bottom: 8px; }
+    .search-intro p { font-size: 12px; line-height: 1.5; }
+    .result-area { margin-top: 16px; }
+    .panel-header { padding: 8px 12px; font-size: 11px; }
+    .suggestion-item { padding: 10px 12px; gap: 8px; }
+    .suggestion-item .q { font-size: 14px; }
+    .suggestion-item .p { font-size: 12px; }
   }
 
 </style>
