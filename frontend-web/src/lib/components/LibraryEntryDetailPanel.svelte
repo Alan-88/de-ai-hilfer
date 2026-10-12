@@ -48,20 +48,51 @@
 
   let activeGrammarBranch = $state<GrammarBranch | null>(null);
   let popoverTriggerRect = $state<DOMRect | null>(null);
-  let drawerElement = $state<HTMLDivElement | null>(null);
-  let wordElement = $state<HTMLHeadingElement | null>(null);
-  let dockedTitle = $state(false);
-
   $effect(() => {
     entry?.entry_id;
-    dockedTitle = false;
+    activeGrammarBranch = null;
+    popoverTriggerRect = null;
   });
 
-  function handleScroll() {
-    if (!drawerElement || !wordElement) return;
-    const bottom = wordElement.getBoundingClientRect().bottom - drawerElement.getBoundingClientRect().top;
-    if (!dockedTitle && bottom <= 12) dockedTitle = true;
-    if (dockedTitle && bottom > 24) dockedTitle = false;
+  function edgeSwipe(element: HTMLDivElement) {
+    let start: { x: number; y: number } | null = null;
+    const cancel = () => { start = null; };
+    const handleStart = (event: TouchEvent) => {
+      cancel();
+      if (event.defaultPrevented || event.touches.length !== 1 || !matchMedia("(max-width: 600px)").matches) return;
+      const touch = event.touches[0];
+      const edgeOffset = touch.clientX - element.getBoundingClientRect().left;
+      if (edgeOffset >= 0 && edgeOffset <= 20) start = { x: touch.clientX, y: touch.clientY };
+    };
+    const handleMove = (event: TouchEvent) => {
+      if (!start) return;
+      if (event.touches.length !== 1) return cancel();
+      const dx = event.touches[0].clientX - start.x;
+      const dy = Math.abs(event.touches[0].clientY - start.y);
+      if (dx < -8 || (dy > 8 && dy >= Math.abs(dx))) return cancel();
+      // Reserve only a confirmed horizontal edge gesture; vertical scrolling remains native.
+      if (dx > 8 && dx > dy * 1.5 && event.cancelable) event.preventDefault();
+    };
+    const handleEnd = (event: TouchEvent) => {
+      const origin = start;
+      cancel();
+      if (!origin || event.changedTouches.length !== 1 || event.touches.length !== 0) return;
+      const dx = event.changedTouches[0].clientX - origin.x;
+      const dy = Math.abs(event.changedTouches[0].clientY - origin.y);
+      if (dx >= 72 && dx > dy * 1.5) onClose();
+    };
+    element.addEventListener("touchstart", handleStart, { passive: true });
+    element.addEventListener("touchmove", handleMove, { passive: false });
+    element.addEventListener("touchend", handleEnd, { passive: true });
+    element.addEventListener("touchcancel", cancel, { passive: true });
+    return {
+      destroy() {
+        element.removeEventListener("touchstart", handleStart);
+        element.removeEventListener("touchmove", handleMove);
+        element.removeEventListener("touchend", handleEnd);
+        element.removeEventListener("touchcancel", cancel);
+      },
+    };
   }
 
   function formatDateTime(value: string) {
@@ -90,18 +121,16 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="detail-overlay" onclick={onClose} transition:fade={{ duration: 200 }}>
-    <div class="drawer-shell" onclick={(event) => event.stopPropagation()} transition:slide={{ axis: "x", duration: 300 }}>
-      <div class="detail-toolbar" class:docked={dockedTitle}>
-        <strong class="docked-word" aria-hidden="true">{entry.query_text}</strong>
-        <button class="detail-close-floating" onclick={onClose} aria-label="关闭详情">
-          <i class="ph ph-x"></i>
+    <div class="drawer-shell" use:edgeSwipe onclick={(event) => event.stopPropagation()} transition:slide={{ axis: "x", duration: 300 }}>
+      <div class="detail-toolbar">
+        <h2 class="word-title">{entry.query_text}</h2>
+        <button class="detail-close-floating" onclick={onClose} aria-label="返回词库">
+          <i class="ph ph-arrow-left" aria-hidden="true"></i>
         </button>
       </div>
-    <div class="drawer-panel" bind:this={drawerElement} onscroll={handleScroll}>
+    <div class="drawer-panel">
 
       <header class="drawer-head">
-        <div class="title-line">
-          <h2 class="word-title" bind:this={wordElement}>{entry.query_text}</h2>
           <div class="title-actions">
             {#if learningStatus}
               <span class="learning-status {learningStatus.className}">{learningStatus.label}</span>
@@ -117,7 +146,6 @@
               {learningProgress ? "已加入学习" : isAddingToLearning ? "正在加入..." : "加入学习"}
             </button>
           </div>
-        </div>
         <div class="drawer-meta">
           <span class="meta-pill">#{entry.entry_id}</span>
           <span class="meta-pill">{entry.entry_type}</span>
@@ -200,12 +228,8 @@
     backdrop-filter: blur(4px);
   }
 
-  .drawer-shell { position: relative; width: 100%; max-width: 800px; height: 100%; }
-  .detail-toolbar { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; height: 72px; align-items: center; justify-content: center; padding: 0 88px; pointer-events: none; }
-  .detail-toolbar.docked { background: var(--bg-color); border-bottom: 1px solid var(--border-color); }
-  .docked-word { display: block; min-width: 0; overflow: hidden; color: var(--text-main); font-size: 18px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; visibility: hidden; }
-  .docked .docked-word { visibility: visible; }
-  .detail-toolbar.docked .detail-close-floating { top: 12px; }
+  .drawer-shell { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); width: 100%; max-width: 800px; height: 100%; }
+  .detail-toolbar { position: relative; z-index: 2; display: flex; min-height: 72px; align-items: center; justify-content: center; padding: 14px 72px; background: var(--bg-color); border-bottom: 1px solid var(--border-color); }
 
   .drawer-panel {
     position: relative;
@@ -214,7 +238,8 @@
     max-width: 800px;
     height: 100%;
     flex-direction: column;
-    padding: 3rem 2rem;
+    min-height: 0;
+    padding: 1.5rem 2rem;
     overflow-y: auto;
     overscroll-behavior: contain;
     background: var(--bg-color);
@@ -226,33 +251,37 @@
   .detail-close-floating {
     position: absolute;
     z-index: 3;
-    top: 1.5rem;
-    right: 1.5rem;
+    top: 14px;
+    left: 16px;
     display: flex;
-    width: 3rem;
-    height: 3rem;
+    width: 44px;
+    height: 44px;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--border-color);
+    border: 0;
     border-radius: 50%;
-    background: var(--card-bg);
-    box-shadow: var(--shadow-sm);
+    background: transparent;
+    color: var(--text-main);
     cursor: pointer;
     font-size: 1.5rem;
-    pointer-events: auto;
   }
 
-  .drawer-head { display: grid; gap: 0.9rem; margin-bottom: 2rem; }
-  .title-line { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding-right: 3.5rem; }
-  .word-title { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--text-main); font-size: 2.5rem; font-weight: 800; line-height: 1.1; }
-  .title-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.55rem; }
+  @media (hover: hover) {
+    .detail-close-floating:hover { background: var(--card-bg); }
+  }
+  .detail-close-floating:active { background: var(--card-bg); }
+  .detail-close-floating:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 2px; }
+
+  .drawer-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; margin-bottom: 2rem; }
+  .word-title { width: 100%; min-width: 0; margin: 0; text-align: center; overflow-wrap: anywhere; color: var(--text-main); font-size: 2.5rem; font-weight: 800; line-height: 1.1; }
+  .title-actions { grid-column: 2; grid-row: 1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.55rem; }
   .learning-action { display: flex; min-width: 112px; min-height: 36px; align-items: center; justify-content: center; gap: 0.4rem; padding: 0 0.9rem; border-radius: var(--radius-full); background: var(--accent-main); color: white; font-weight: 800; }
   .learning-action.added { background: color-mix(in srgb, var(--accent-main) 72%, #4f8665); cursor: default; }
   .learning-action:disabled { cursor: default; }
   .learning-status { padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; white-space: nowrap; }
   .learning-status.learning { background: var(--success-bg); color: var(--success-text); }
   .learning-status.review { background: var(--warning-bg); color: var(--warning-text); }
-  .drawer-meta { display: flex; flex-wrap: wrap; gap: 0.5rem; color: var(--text-muted); }
+  .drawer-meta { grid-column: 1; grid-row: 1; display: flex; flex-wrap: wrap; gap: 0.5rem; color: var(--text-muted); }
   .meta-pill { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.28rem 0.55rem; border-radius: var(--radius-sm); background: var(--surface-passive); font-size: 0.78rem; }
 
   .drawer-content { display: flex; flex-direction: column; gap: 2.5rem; }
@@ -275,8 +304,7 @@
   .danger-text { color: var(--danger-text); }
 
   @media (max-width: 768px) {
-    .drawer-panel { padding: 2rem 1rem; }
-    .title-line { padding-right: 2.8rem; }
+    .drawer-panel { padding: 1.5rem 1rem; }
     .word-title { font-size: 2rem; }
     .title-actions { align-items: flex-end; flex-direction: column; }
     .drawer-actions { flex-direction: row; justify-content: flex-start; gap: 8px; margin-top: 12px; padding-top: 16px; }
@@ -285,21 +313,16 @@
 
   @media (max-width: 600px) {
     .detail-overlay { background: var(--bg-color); backdrop-filter: none; }
-    .detail-toolbar { height: 56px; padding-inline: 60px; }
-    .docked-word { font-size: 16px; }
-    .detail-toolbar.docked .detail-close-floating { top: 10px; }
-    .drawer-panel { padding: 20px 16px; border-bottom: 0; }
+    .detail-toolbar { min-height: 56px; padding: 13px 60px; }
+    .drawer-panel { padding: 16px; border-bottom: 0; }
     .drawer-head { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 12px; }
-    .title-line { display: contents; }
-    .word-title { grid-column: 1 / -1; min-width: 0; padding-right: 44px; font-size: 26px; overflow-wrap: anywhere; }
-    .title-actions { grid-column: 2; grid-row: 2; align-self: center; gap: 4px; }
+    .word-title { font-size: 26px; }
+    .title-actions { gap: 4px; }
     .learning-action { min-width: 0; min-height: 32px; padding: 0 10px; gap: 4px; font-size: 11px; white-space: nowrap; }
     .learning-status { padding: 2px 5px; font-size: 10px; }
-    .drawer-meta { grid-column: 1; grid-row: 2; align-content: center; align-items: center; gap: 4px; }
+    .drawer-meta { align-content: center; align-items: center; gap: 4px; }
     .meta-pill { gap: 3px; padding: 2px 5px; font-size: 10px; line-height: 16px; }
-    .detail-close-floating { position: absolute; top: 10px; right: 10px; width: 44px; height: 44px; border: 0; background: transparent; box-shadow: none; font-size: 16px; pointer-events: auto; }
-    .detail-close-floating::before { content: ""; position: absolute; inset: 6px; border: 1px solid var(--border-color); border-radius: 50%; background: var(--card-bg); box-shadow: var(--shadow-sm); }
-    .detail-close-floating i { position: relative; }
+    .detail-close-floating { top: 6px; left: 8px; }
     .drawer-content { gap: 16px; }
     .content-section { gap: 8px; }
 

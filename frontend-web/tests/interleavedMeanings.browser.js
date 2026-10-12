@@ -73,8 +73,8 @@ async page => {
         if(fixture.longTitle){
           await page.locator('.drawer-panel').evaluate(e=>e.scrollTop=100000);
           await page.waitForTimeout(200);
-          const fits=await page.evaluate(()=>{const w=document.querySelector('.docked-word').getBoundingClientRect(),b=document.querySelector('.detail-toolbar').getBoundingClientRect(),c=document.querySelector('.detail-close-floating').getBoundingClientRect();return Math.abs(w.x+w.width/2-b.x-b.width/2)<1&&w.right<c.left&&Boolean(document.elementFromPoint(c.x+c.width/2,c.y+c.height/2)?.closest('.detail-close-floating'));});
-          if(!fits)throw Error('Long docked title overlaps close button');
+          const fits=await page.evaluate(()=>{const word=document.querySelector('.word-title'),w=word.getBoundingClientRect(),b=document.querySelector('.detail-toolbar').getBoundingClientRect(),c=document.querySelector('.detail-close-floating').getBoundingClientRect();return Math.abs(w.x+w.width/2-b.x-b.width/2)<1&&c.right<w.left&&w.bottom<b.bottom&&word.scrollWidth<=word.clientWidth&&parseFloat(getComputedStyle(word).fontSize)===(innerWidth<=600?26:40)&&Boolean(document.elementFromPoint(c.x+c.width/2,c.y+c.height/2)?.closest('.detail-close-floating'));});
+          if(!fits)throw Error('Long fixed title overlaps close button or shrinks');
         }
         results.push({width,fixture:fixture.longTitle?'Long title and label':fixture.en?'English tail':'Chinese only',...metrics});
       }
