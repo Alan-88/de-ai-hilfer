@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { browser } from "$app/environment";
   import { edgeSwipe } from "$lib/actions/edgeSwipe";
-  import { fade, slide } from "svelte/transition";
+  import { fade } from "svelte/transition";
   import { addWordToLearning, getLearningProgress } from "$lib/learningApi";
   import {
     addPhraseModuleToEntry,
@@ -60,6 +60,7 @@
   let aiSettings = $state<AiSettingsResponse | null>(null);
   let selectedActionModelKey = $state("");
   let failedAnalysis = $state<FailedAnalysisRequest | null>(null);
+  let switchingInput = false;
 
   const s = searchStore;
 
@@ -73,6 +74,16 @@
 
   function focusSoon(target: () => HTMLInputElement | null) {
     requestAnimationFrame(() => target()?.focus());
+  }
+
+  async function toggleAdvanced() {
+    switchingInput = true;
+    searchFocused = true;
+    showSuggestions = false;
+    showAdvanced = !showAdvanced;
+    await tick();
+    (showAdvanced ? advancedInputRef : mainInputRef)?.focus();
+    switchingInput = false;
   }
 
   function dismissSearchFocus() {
@@ -423,20 +434,13 @@
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === "Tab") {
       e.preventDefault();
-      if (showAdvanced) {
-        showAdvanced = false;
-        focusSoon(() => mainInputRef);
-      } else {
-        showAdvanced = true;
-        focusSoon(() => advancedInputRef);
-      }
+      void toggleAdvanced();
     }
     if (e.key === "Escape") {
       if (showSuggestions) {
         dismissSearchFocus();
       } else if (showAdvanced) {
-        showAdvanced = false;
-        focusSoon(() => mainInputRef);
+        void toggleAdvanced();
       } else if (searchFocused) {
         dismissSearchFocus();
       } else if (isSearching) {
@@ -494,7 +498,7 @@
 
   <div class="search-main-wrapper" class:focusing={searchFocused}
     onfocusout={(event) => {
-      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      if (!switchingInput && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
         searchFocused = false;
         showSuggestions = false;
       }
@@ -507,7 +511,7 @@
     {/if}
 
     <div class="search-panel-group" class:has-suggestions={isSearchFocusing}>
-      <form class="search-form" class:has-advanced={showAdvanced} onsubmit={(e) => { e.preventDefault(); (showAdvanced && advancedHint.trim()) ? handleAdvancedSearch() : handleSearch(); }}>
+      <form class="search-form" onsubmit={(e) => { e.preventDefault(); (showAdvanced && advancedHint.trim()) ? handleAdvancedSearch() : handleSearch(); }}>
         <div class="input-row main-row" class:is-generating-box={$s.isStreaming}>
           {#if isSearching}
             <button type="button" class="back-btn" onclick={clearSearchResult} transition:fade aria-label="返回首页">
@@ -529,7 +533,7 @@
                 <i class="ph ph-x"></i>
               </button>
             {/if}
-            <button type="button" class="shortcut-btn" aria-label="联想线索" aria-expanded={showAdvanced} class:is-active={showAdvanced} onclick={() => { showAdvanced = !showAdvanced; focusSoon(() => showAdvanced ? advancedInputRef : mainInputRef); }}>
+            <button type="button" class="shortcut-btn" aria-label="联想线索" aria-expanded={showAdvanced} class:is-active={showAdvanced} onclick={toggleAdvanced}>
               <i class="ph ph-magic-wand"></i><span>↹ Tab 联想</span>
             </button>
             <button
@@ -550,7 +554,7 @@
         </div>
 
         {#if showAdvanced}
-          <div class="input-row sub-row" transition:slide={{ duration: 300 }}>
+          <div class="input-row sub-row">
             <i class="ph ph-magic-wand sub-icon"></i>
             <input
               bind:this={advancedInputRef}
@@ -660,7 +664,7 @@
 
   .search-main-wrapper {
     width: 100%; max-width: 740px; margin-top: 25vh;
-    transition: all var(--transition-smooth); z-index: 100; position: relative;
+    z-index: 100; position: relative;
   }
   .is-searching .search-main-wrapper {
     position: sticky;
@@ -710,27 +714,22 @@
     position: relative; width: 100%; display: flex; flex-direction: column; gap: 8px;
   }
 
-  .has-suggestions .search-form { box-shadow: var(--shadow-hover); }
+  .has-suggestions .main-row { box-shadow: var(--shadow-hover); }
 
   .search-form {
-    border: 1px solid var(--border-color); border-radius: 9999px;
-    background: var(--control-bg); box-shadow: var(--shadow-sm); overflow: hidden;
-  }
-  .search-form.has-advanced {
     display: flex; flex-direction: column; gap: 8px;
-    background: transparent; border: none; border-radius: 0; box-shadow: none; overflow: visible;
   }
-  .has-advanced .input-row {
+  .input-row {
     border: 1px solid var(--border-color); border-radius: 9999px;
     box-shadow: var(--shadow-sm);
+    display: flex; align-items: center; padding: 0.5rem 0.5rem 0.5rem 1.5rem; gap: 1rem;
   }
-  .has-advanced .main-row { background: var(--control-bg); }
-  .input-row { display: flex; align-items: center; padding: 0.5rem 0.5rem 0.5rem 1.5rem; gap: 1rem; border-radius: inherit; }
   .input-row input { flex: 1; min-width: 0; background: transparent; font-size: 1.25rem; color: var(--text-main); height: 3.5rem; }
 
   .main-row {
     position: relative;
     z-index: 2;
+    background: var(--control-bg);
     /* 右侧内距等于按钮的上下留白，让内外胶囊的右端圆弧同心。 */
     padding-right: calc(0.5rem + (3.5rem - 2.8rem) / 2);
   }
@@ -743,8 +742,10 @@
   .actions { display: flex; align-items: center; gap: 0.5rem; }
   .icon-btn { background: transparent; color: var(--text-muted); width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
   .icon-btn:hover { background: var(--btn-secondary); color: var(--text-main); }
-  .shortcut-btn { background: transparent; color: var(--text-muted); font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem; padding: 0 0.75rem; white-space: nowrap; }
+  .shortcut-btn { background: transparent; color: var(--text-muted); font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem; padding: 0 0.75rem; height: 44px; border-radius: 9999px; white-space: nowrap; flex-shrink: 0; }
   .shortcut-btn:hover { color: var(--accent-main); }
+  .shortcut-btn.is-active { color: var(--accent-main); background: var(--btn-secondary); }
+  .shortcut-btn:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 2px; }
 
   .back-btn {
     position: fixed; top: 1.5rem; left: calc(var(--desktop-sidebar-width) + 1.5rem); z-index: 150;
@@ -859,9 +860,8 @@
     .input-row input { height: 44px; font-size: 16px; }
     .actions { gap: 0; flex-shrink: 0; }
     .actions .icon-btn { width: 32px; height: 44px; flex-shrink: 0; }
-    .shortcut-btn { display: flex; width: 32px; height: 44px; padding: 0; justify-content: center; }
+    .shortcut-btn { display: flex; width: 44px; height: 44px; padding: 0; justify-content: center; }
     .shortcut-btn span { display: none; }
-    .shortcut-btn.is-active { color: var(--accent-main); background: var(--btn-secondary); border-radius: 50%; }
     .search-submit-btn { width: 44px; height: 44px; flex-shrink: 0; gap: 0; }
     .search-submit-btn .search-submit-label { display: none; }
     .search-submit-btn i { font-size: 18px; line-height: 1; }
@@ -885,10 +885,6 @@
     .suggestion-item { padding: 10px 12px; gap: 8px; }
     .suggestion-item .q { font-size: 14px; }
     .suggestion-item .p { font-size: 12px; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .search-main-wrapper, .search-panel-group { transition: none; }
   }
 
 </style>

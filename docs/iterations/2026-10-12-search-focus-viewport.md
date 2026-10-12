@@ -42,3 +42,13 @@
 - 搜索按钮单独取消hover缩放，保留颜色和阴影反馈，使桌面宽胶囊的右端圆心在hover时也保持对齐。改动仅为SearchPageView局部CSS，无状态或接口变更；检查active-roadmap，无优先级变化。
 - 截图与几何检查脚本位于output/playwright/search-concentric-*，覆盖320/390/900/1280px、双主题与首页/候选/联想展开；生产构建与类型检查通过（0错误、2项原有警告）。仅更新frontend容器，未重启backend/MCP。
 - 部署后上述断点和主题的普通/联想展开状态均通过三边等距与圆心断言，移动圆心偏差为0、PC小于0.01px，hover同样保持对齐；未出现横向溢出。近景截图为search-concentric-bar-{390,1280}-{canvas,canvas-dark}.png。尚未在实体设备复测。
+
+## 跟进：联想开关外形与快速切换
+
+- 联想输入栏已同步胶囊外形。原移动开关为32×44px，50%圆角形成椭圆，且开启背景只定义在移动断点；PC实测文字开关高20px、透明背景。
+- 移动开关改为44×44px正圆；PC保留文字标签，改为44px高胶囊。开启态共用主题背景与强调色，并提供键盘焦点轮廓。
+- 原联想行slide退场300ms期间仍占据布局，form却已切回单行描边/圆角；叠加搜索栏transition:all与下一帧焦点切换，快速操作时可能出现高度变化和位置回跳。主/联想输入现在始终由各自行承载胶囊背景与描边，form只负责两行排列；移除联想行高度动画与搜索栏布局动画。
+- 按钮、Tab、Escape统一调用toggleAdvanced，在tick之后聚焦最终可见输入；切换期间的失焦不退出置顶状态。主输入清空仍保留原focusSoon行为，候选面板的淡入淡出保留。
+- 状态与生命周期仍由SearchPageView管理；架构复查保持现状。检查active-roadmap，无优先级变更；只更新frontend，不影响CLI/MCP/后端会话。
+- 改前截图为output/playwright/search-toggle-before-*，改后与近景为search-toggle-after-*及search-toggle-bar-*；快速切换检查脚本为search-toggle-check.js。类型检查0错误、2项原有警告，生产构建通过。
+- 320/390/1280px、双主题各连续点击20次及Tab切换12次，逐帧检查主行上距/高度保持8/58px（移动）和24/74px（PC），无失焦、旧行残留或横向溢出；Escape恢复主输入通过。搜索按钮同心留白继续通过；软键盘可见空间缩小样本的触摸滚动与空白关闭通过。未用实体手机/Safari复测。
