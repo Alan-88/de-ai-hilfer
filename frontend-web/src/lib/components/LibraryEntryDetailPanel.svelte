@@ -277,7 +277,7 @@
 
   @media (max-width: 600px) {
     .detail-overlay { background: var(--bg-color); backdrop-filter: none; }
-    .detail-toolbar { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; height: 56px; align-items: center; padding: 0 60px 0 16px; pointer-events: none; }
+    .detail-toolbar { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; height: 56px; align-items: center; justify-content: center; padding: 0 60px; pointer-events: none; }
     .detail-toolbar.docked { background: var(--bg-color); border-bottom: 1px solid var(--border-color); }
     .docked-word { display: block; min-width: 0; overflow: hidden; color: var(--text-main); font-size: 16px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; visibility: hidden; }
     .docked .docked-word { visibility: visible; }

@@ -4,6 +4,8 @@
 
 - 新增详情外壳与独立顶栏，滚动内容单独在drawer-panel中。≤600px时，完整标题离开顶部后，在56px顶栏显示16px词头与关闭按钮；返回顶部恢复。沿用学习卡片的迟滞判断方向，避免临界点频繁切换。
 - 关闭按钮在手机端定位于详情顶栏，保留32px可见圆形、44px命中区；桌面继续采用原先的固定位置，并明确层级避免被滚动面板覆盖。
+- 收起后的词头相对整个顶栏居中，两侧对称预留60px，长词继续省略，避免占用右侧关闭按钮。
+  - 居中调整已部署，320/390px、canvas/canvas-dark浏览器检查通过：词头中心与顶栏中心误差小于1px，关闭按钮位置及背景导航隐藏保持正常。截图为output/playwright/rich-responsive-references/detail-title-centered-*。
 - drawer-panel增加overscroll-behavior: contain；移动详情遮罩使用不透明主题背景，移除全屏backdrop-filter。
 - 应用布局通过现存detail-overlay判断详情生命周期：打开期间main-area禁用背景滚动，bottom-nav隐藏且不可点击；关闭过渡结束、遮罩移除后恢复。无新增共享状态或全局监听。
 
