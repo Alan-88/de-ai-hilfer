@@ -52,3 +52,11 @@
 - 状态与生命周期仍由SearchPageView管理；架构复查保持现状。检查active-roadmap，无优先级变更；只更新frontend，不影响CLI/MCP/后端会话。
 - 改前截图为output/playwright/search-toggle-before-*，改后与近景为search-toggle-after-*及search-toggle-bar-*；快速切换检查脚本为search-toggle-check.js。类型检查0错误、2项原有警告，生产构建通过。
 - 320/390/1280px、双主题各连续点击20次及Tab切换12次，逐帧检查主行上距/高度保持8/58px（移动）和24/74px（PC），无失焦、旧行残留或横向溢出；Escape恢复主输入通过。搜索按钮同心留白继续通过；软键盘可见空间缩小样本的触摸滚动与空白关闭通过。未用实体手机/Safari复测。
+
+## 跟进：首页聚焦位移动画
+
+- 用户指出上一轮去掉transition:all时，也去掉了首页搜索框移到顶部的动画。本轮恢复这段运动，同时不恢复联想行高度动画或全属性过渡。
+- setSearchFocus统一管理聚焦变化：读取主行原位置，tick后读取置顶位置，用浏览器原生Web Animations执行260ms的translateY位移动画；首页进入聚焦时执行，相同聚焦状态下的联想切换及已有结果不触发。
+- 取消聚焦/卸载会取消旧动画；prefers-reduced-motion启用时跳过运动。状态与动画生命周期留在SearchPageView，无依赖/API/CLI/MCP变更；检查active-roadmap，无优先级变化。
+- 截图与逐帧检查脚本为output/playwright/search-focus-motion-*，覆盖390/1280px双主题、中间与完成状态及减少动态效果。类型检查0错误、2项原有警告，生产构建通过；仅更新frontend容器。尚未实体手机/Safari验证键盘动画与视口事件时序。
+- 实际逐帧检查显示移动首页主行从约200px连续移到8px，PC从394px移到24px，采到15–16个不同位置且无反向跳变；减少动态效果模式无位移动画。复跑双主题320/390/1280px快速按钮/Tab切换，主行位置与高度持续稳定。实际浏览器录屏保存为output/playwright/search-focus-motion-mobile.webm。

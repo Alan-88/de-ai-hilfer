@@ -61,6 +61,7 @@
   let selectedActionModelKey = $state("");
   let failedAnalysis = $state<FailedAnalysisRequest | null>(null);
   let switchingInput = false;
+  let searchMoveAnimation: Animation | null = null;
 
   const s = searchStore;
 
@@ -76,9 +77,27 @@
     requestAnimationFrame(() => target()?.focus());
   }
 
+  async function setSearchFocus(next: boolean) {
+    if (searchFocused === next) return;
+    const row = mainInputRef?.closest<HTMLElement>(".main-row");
+    const wrapper = row?.closest<HTMLElement>(".search-main-wrapper");
+    const previousTop = row?.getBoundingClientRect().top;
+    searchMoveAnimation?.cancel();
+    searchMoveAnimation = null;
+    searchFocused = next;
+    if (!next || isSearching || !row || !wrapper || previousTop === undefined || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    await tick();
+    if (!searchFocused || isSearching || !wrapper.isConnected) return;
+    const offset = previousTop - row.getBoundingClientRect().top;
+    searchMoveAnimation = wrapper.animate(
+      [{ transform: `translateY(${offset}px)` }, { transform: "translateY(0)" }],
+      { duration: 260, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
+    );
+  }
+
   async function toggleAdvanced() {
     switchingInput = true;
-    searchFocused = true;
+    void setSearchFocus(true);
     showSuggestions = false;
     showAdvanced = !showAdvanced;
     await tick();
@@ -87,7 +106,7 @@
   }
 
   function dismissSearchFocus() {
-    searchFocused = false;
+    void setSearchFocus(false);
     showSuggestions = false;
     mainInputRef?.blur();
     advancedInputRef?.blur();
@@ -465,6 +484,7 @@
     viewport?.addEventListener("scroll", updateViewport);
     window.addEventListener("resize", updateViewport);
     return () => {
+      searchMoveAnimation?.cancel();
       viewport?.removeEventListener("resize", updateViewport);
       viewport?.removeEventListener("scroll", updateViewport);
       window.removeEventListener("resize", updateViewport);
@@ -499,7 +519,7 @@
   <div class="search-main-wrapper" class:focusing={searchFocused}
     onfocusout={(event) => {
       if (!switchingInput && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
-        searchFocused = false;
+        void setSearchFocus(false);
         showSuggestions = false;
       }
     }}>
@@ -524,7 +544,7 @@
             placeholder="输入德语单词或近似拼写..."
             oninput={fetchSuggestions}
             onkeydown={handleKeyDown}
-            onfocus={() => { searchFocused = true; showSuggestions = true; }}
+            onfocus={() => { void setSearchFocus(true); showSuggestions = true; }}
             autocomplete="off"
           />
           <div class="actions">
@@ -560,7 +580,7 @@
               bind:this={advancedInputRef}
               bind:value={advancedHint}
               placeholder="添加线索，例如：关于法律、口语、或者它的近义词..."
-              onfocus={() => { searchFocused = true; showSuggestions = false; }}
+              onfocus={() => { void setSearchFocus(true); showSuggestions = false; }}
               onkeydown={(e) => { if(e.key === "Tab") handleKeyDown(e); if(e.key === "Escape") handleKeyDown(e); }}
               autocomplete="off"
             />
