@@ -134,7 +134,7 @@
             <div class="card-title"><i class="ph-fill ph-article"></i> 词条解析</div>
             <div class="detail-analysis">
               <LearningAnalysisContent
-                compactMeanings
+                interleavedMeanings
                 analysis={structured}
                 attachedPhraseModules={entry.attached_phrase_modules}
                 onGrammarOpen={openGrammar}
@@ -201,8 +201,11 @@
   }
 
   .drawer-shell { position: relative; width: 100%; max-width: 800px; height: 100%; }
-  .detail-toolbar { display: contents; }
-  .docked-word { display: none; }
+  .detail-toolbar { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; height: 72px; align-items: center; justify-content: center; padding: 0 88px; pointer-events: none; }
+  .detail-toolbar.docked { background: var(--bg-color); border-bottom: 1px solid var(--border-color); }
+  .docked-word { display: block; min-width: 0; overflow: hidden; color: var(--text-main); font-size: 18px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; visibility: hidden; }
+  .docked .docked-word { visibility: visible; }
+  .detail-toolbar.docked .detail-close-floating { top: 12px; }
 
   .drawer-panel {
     position: relative;
@@ -217,10 +220,11 @@
     background: var(--bg-color);
     box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
     scrollbar-gutter: stable;
+    border-bottom: 16px solid var(--bg-color);
   }
 
   .detail-close-floating {
-    position: fixed;
+    position: absolute;
     z-index: 3;
     top: 1.5rem;
     right: 1.5rem;
@@ -235,11 +239,12 @@
     box-shadow: var(--shadow-sm);
     cursor: pointer;
     font-size: 1.5rem;
+    pointer-events: auto;
   }
 
   .drawer-head { display: grid; gap: 0.9rem; margin-bottom: 2rem; }
   .title-line { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding-right: 3.5rem; }
-  .word-title { margin: 0; color: var(--text-main); font-size: 2.5rem; font-weight: 800; line-height: 1.1; }
+  .word-title { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--text-main); font-size: 2.5rem; font-weight: 800; line-height: 1.1; }
   .title-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.55rem; }
   .learning-action { display: flex; min-width: 112px; min-height: 36px; align-items: center; justify-content: center; gap: 0.4rem; padding: 0 0.9rem; border-radius: var(--radius-full); background: var(--accent-main); color: white; font-weight: 800; }
   .learning-action.added { background: color-mix(in srgb, var(--accent-main) 72%, #4f8665); cursor: default; }
@@ -253,6 +258,9 @@
   .drawer-content { display: flex; flex-direction: column; gap: 2.5rem; }
   .content-section { display: flex; flex-direction: column; gap: 1rem; }
   .detail-analysis :global(.learning-content) { padding-bottom: 0; }
+  .detail-analysis :global(.meaning-summary) { position: relative; display: block; }
+  .detail-analysis :global(.meaning-summary.interactive) { padding-right: 2rem; }
+  .detail-analysis :global(.meaning-summary > i) { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); }
 
   .fu-q { margin-bottom: 0.75rem; color: var(--accent-main); font-size: 1.05rem; font-weight: 700; }
   .fu-a { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color); }
@@ -277,11 +285,10 @@
 
   @media (max-width: 600px) {
     .detail-overlay { background: var(--bg-color); backdrop-filter: none; }
-    .detail-toolbar { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; height: 56px; align-items: center; justify-content: center; padding: 0 60px; pointer-events: none; }
-    .detail-toolbar.docked { background: var(--bg-color); border-bottom: 1px solid var(--border-color); }
-    .docked-word { display: block; min-width: 0; overflow: hidden; color: var(--text-main); font-size: 16px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; visibility: hidden; }
-    .docked .docked-word { visibility: visible; }
-    .drawer-panel { padding: 20px 16px; }
+    .detail-toolbar { height: 56px; padding-inline: 60px; }
+    .docked-word { font-size: 16px; }
+    .detail-toolbar.docked .detail-close-floating { top: 10px; }
+    .drawer-panel { padding: 20px 16px; border-bottom: 0; }
     .drawer-head { min-width: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 12px; }
     .title-line { display: contents; }
     .word-title { grid-column: 1 / -1; min-width: 0; padding-right: 44px; font-size: 26px; overflow-wrap: anywhere; }
@@ -301,6 +308,7 @@
     .detail-analysis :global(.section-card) { padding: 10px; border-radius: 16px; }
     .detail-analysis :global(.section-title) { margin-bottom: 8px; font-size: 12px; }
     .detail-analysis :global(.meaning-summary) { position: relative; display: block; padding: 10px; border-radius: 10px; font-size: 0; line-height: 20px; }
+    .detail-analysis :global(.meaning-summary.interactive) { padding-right: 10px; }
     .detail-analysis :global(.meaning-summary > i) { display: none; }
     .detail-analysis :global(.usage-list),
     .detail-analysis :global(.insights-stack) { gap: 10px; }

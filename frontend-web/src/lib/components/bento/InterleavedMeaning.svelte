@@ -83,14 +83,22 @@
 <style>
   .interleaved-meaning { position: relative; min-width: 0; text-align: left; }
   .visual-lines { position: relative; }
-  .pos-label { position: absolute; top: 0; left: 0; max-width: 100%; padding: 0 5px; border-radius: 4px; background: var(--accent-main); color: white; font-size: 11px; font-weight: 800; line-height: 20px; }
-  .pos-label.bilingual { top: 7.5px; }
-  .line-pair + .line-pair { margin-top: 3px; }
+  .pos-label { position: absolute; top: 0; left: 0; max-width: 100%; padding: 0 6px; border-radius: 4px; background: var(--accent-main); color: white; font-size: 12px; font-weight: 800; line-height: 24px; }
+  .pos-label.bilingual { top: 9.5px; }
+  .line-pair + .line-pair { margin-top: 4px; }
   p { margin: 0; overflow-wrap: anywhere; }
-  .chinese { font-size: 13px; font-weight: 700; line-height: 20px; }
-  .english { font-size: 11px; font-weight: 400; line-height: 14px; color: var(--text-muted); }
+  .chinese { font-size: 16px; font-weight: 700; line-height: 24px; }
+  .english { font-size: 13px; font-weight: 400; line-height: 18px; color: var(--text-muted); }
   .chinese + .english { margin-top: 1px; }
   .first p { padding-left: var(--meaning-indent); }
   .probe { position: absolute; top: 0; left: 0; width: 100%; padding: 0; visibility: hidden; pointer-events: none; }
   .accessible-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  @media (max-width: 600px) {
+    .pos-label { padding-inline: 5px; font-size: 11px; line-height: 20px; }
+    .pos-label.bilingual { top: 7.5px; }
+    .line-pair + .line-pair { margin-top: 3px; }
+    .chinese { font-size: 13px; line-height: 20px; }
+    .english { font-size: 11px; line-height: 14px; }
+  }
 </style>

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import InterleavedMeaning from "./InterleavedMeaning.svelte";
   import { renderMarkdownHtml, type StructuredAnalysis } from "$lib/analysis/structuredAnalysis";
   import type { AttachedPhraseModule, GrammarBranch, ModelAMeaning } from "$lib/types";
@@ -9,24 +8,14 @@
     attachedPhraseModules = [],
     onGrammarOpen,
     usageElement = $bindable(null),
-    compactMeanings = false,
+    interleavedMeanings = false,
   } = $props<{
     analysis: StructuredAnalysis;
     attachedPhraseModules?: AttachedPhraseModule[];
     onGrammarOpen: (branch: GrammarBranch, triggerRect: DOMRect) => void;
     usageElement?: HTMLElement | null;
-    compactMeanings?: boolean;
+    interleavedMeanings?: boolean;
   }>();
-
-  let mobile = $state(false);
-  onMount(() => {
-    if (!compactMeanings) return;
-    const query = window.matchMedia("(max-width: 600px)");
-    const update = () => { mobile = query.matches; };
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  });
 
   const usageModules = $derived([
     ...analysis.usageModules,
@@ -81,8 +70,9 @@
             onclick={(event) => onGrammarOpen(branch, event.currentTarget.getBoundingClientRect())}
             title="点击查看详细语法"
           >
-            {#if compactMeanings && mobile}
+            {#if interleavedMeanings}
               <InterleavedMeaning pos={formatPos(branch)} chinese={branch.meanings.map((meaning: ModelAMeaning) => meaning.zh).filter(Boolean).join("；")} english={branch.meanings.map((meaning: ModelAMeaning) => meaning.en).filter(Boolean).join("; ")} />
+              <i class="ph ph-info"></i>
             {:else}
             <span>{formatPos(branch)}</span>
             <div>
@@ -98,7 +88,7 @@
       {:else}
         {#each analysis.meanings as meaning}
           <div class="meaning-summary">
-            {#if compactMeanings && mobile}
+            {#if interleavedMeanings}
               <InterleavedMeaning pos={meaning.partOfSpeech} chinese={meaning.chinese} english={meaning.english} />
             {:else}
             <span>{meaning.partOfSpeech}</span>

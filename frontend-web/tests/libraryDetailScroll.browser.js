@@ -14,17 +14,19 @@ async page => {
   const results=[];
   for(const theme of ['canvas','canvas-dark']){
     await page.evaluate(t=>document.documentElement.setAttribute('data-theme',t),theme);
-    for(const width of [320,390]){
+    for(const width of [320,390,1024,1280]){
       await page.setViewportSize({width,height:844});
       for(const [name,top] of [['top',0],['docked',400],['bottom',100000],['returned',0]]){
         await page.locator('.drawer-panel').evaluate((e,t)=>e.scrollTop=t,top);
         await page.waitForTimeout(250);
         const result=await page.evaluate(()=>{
-          const panel=document.querySelector('.drawer-panel'),toolbar=document.querySelector('.detail-toolbar'),close=document.querySelector('.detail-close-floating');
-          return {docked:toolbar.classList.contains('docked'),barTop:toolbar.getBoundingClientRect().top,closeTop:close.getBoundingClientRect().top,nav:getComputedStyle(document.querySelector('.bottom-nav')).visibility,backgroundOverflow:getComputedStyle(document.querySelector('.main-area')).overflowY,overflow:panel.scrollWidth>panel.clientWidth};
+          const panel=document.querySelector('.drawer-panel'),toolbar=document.querySelector('.detail-toolbar'),close=document.querySelector('.detail-close-floating'),word=document.querySelector('.docked-word');
+          const b=toolbar.getBoundingClientRect(),w=word.getBoundingClientRect(),c=close.getBoundingClientRect();
+          return {docked:toolbar.classList.contains('docked'),barTop:b.top,closeTop:c.top,titleOffset:w.x+w.width/2-b.x-b.width/2,overlap:w.right>c.left,closeClickable:Boolean(document.elementFromPoint(c.x+c.width/2,c.y+c.height/2)?.closest('.detail-close-floating')),bottomInset:parseFloat(getComputedStyle(panel).borderBottomWidth),nav:getComputedStyle(document.querySelector('.bottom-nav')).visibility,backgroundOverflow:getComputedStyle(document.querySelector('.main-area')).overflowY,overflow:panel.scrollWidth>panel.clientWidth};
         });
-        if(result.nav!=='hidden'||result.backgroundOverflow!=='hidden'||result.overflow||Math.abs(result.barTop)>1||Math.abs(result.closeTop-10)>1||result.docked!==(top>0))throw Error(JSON.stringify(result));
-        if(name!=='returned')await page.screenshot({path:`output/playwright/rich-responsive-references/detail-scroll-${width}-${theme}-${name}.png`});
+        const expectedCloseTop=width<=600?10:(top>0?12:24);
+        if(result.nav!=='hidden'||result.backgroundOverflow!=='hidden'||result.overflow||Math.abs(result.barTop)>1||Math.abs(result.closeTop-expectedCloseTop)>1||result.docked!==(top>0)||!result.closeClickable||Math.abs(result.titleOffset)>1||result.overlap||result.bottomInset!==(width<=600?0:16))throw Error(JSON.stringify(result));
+        if(name!=='returned')await page.screenshot({path:`output/playwright/rich-responsive-references/desktop-library-after-${width}-${theme}-${name}.png`});
         results.push({theme,width,name,...result});
       }
     }
