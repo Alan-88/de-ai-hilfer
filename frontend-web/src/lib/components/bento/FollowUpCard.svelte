@@ -164,4 +164,18 @@
   .follow-up-history article { padding: 1.25rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-color); }
   .follow-up-history p { margin-bottom: 0.5rem; color: var(--accent-main); font-weight: 700; font-size: 1rem; }
   .inline-actions { display: flex; gap: 0.75rem; }
+  @media (max-width: 600px) {
+    .card-title { font-size: 12px; margin-bottom: 8px; }
+    .form-grid { gap: 8px; }
+    .auto-expand-input { padding: 10px; }
+    .inline-actions { gap: 8px; flex-wrap: wrap; }
+    .inline-actions button { flex: 0 0 auto; white-space: nowrap; font-size: 12px; padding: 8px 20px; min-height: 38px; }
+    .follow-up-history { margin-top: 8px; gap: 10px; }
+    .follow-up-history article { padding: 8px; font-size: 13px; line-height: 1.5; }
+    .follow-up-history p { font-size: 13px; }
+    .markdown-compact { line-height: 1.5; }
+    .markdown-compact :global(p), .markdown-compact :global(ul), .markdown-compact :global(ol) { margin-bottom: 6px; }
+    .markdown-compact :global(li) { margin-bottom: 4px; }
+    .markdown-compact :global(:last-child) { margin-bottom: 0; }
+  }
 </style>

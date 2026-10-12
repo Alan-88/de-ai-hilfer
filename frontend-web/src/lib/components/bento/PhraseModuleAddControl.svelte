@@ -55,7 +55,7 @@
   }
 </script>
 
-<div class="phrase-module-control">
+<div class="phrase-module-control" class:is-open={isOpen}>
   <div class="phrase-module-add" class:is-open={isOpen}>
     <form
       class="phrase-module-search"
@@ -213,8 +213,8 @@
   }
 
   @media (max-width: 900px) {
-    .phrase-module-control,
-    .phrase-module-add,
+    .phrase-module-control.is-open,
+    .phrase-module-add.is-open,
     .phrase-module-add.is-open .phrase-module-search {
       width: 100%;
     }
@@ -223,5 +223,7 @@
     .phrase-module-add.is-open .phrase-module-search {
       max-width: none;
     }
+    .phrase-module-control { margin-left: auto; }
+    .phrase-module-search input { font-size: 16px; }
   }
 </style>

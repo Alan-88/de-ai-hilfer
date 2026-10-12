@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { edgeSwipe } from "$lib/actions/edgeSwipe";
   import { fade, slide } from "svelte/transition";
   import {
     renderMarkdownHtml,
@@ -54,47 +55,6 @@
     popoverTriggerRect = null;
   });
 
-  function edgeSwipe(element: HTMLDivElement) {
-    let start: { x: number; y: number } | null = null;
-    const cancel = () => { start = null; };
-    const handleStart = (event: TouchEvent) => {
-      cancel();
-      if (event.defaultPrevented || event.touches.length !== 1 || !matchMedia("(max-width: 600px)").matches) return;
-      const touch = event.touches[0];
-      const edgeOffset = touch.clientX - element.getBoundingClientRect().left;
-      if (edgeOffset >= 0 && edgeOffset <= 20) start = { x: touch.clientX, y: touch.clientY };
-    };
-    const handleMove = (event: TouchEvent) => {
-      if (!start) return;
-      if (event.touches.length !== 1) return cancel();
-      const dx = event.touches[0].clientX - start.x;
-      const dy = Math.abs(event.touches[0].clientY - start.y);
-      if (dx < -8 || (dy > 8 && dy >= Math.abs(dx))) return cancel();
-      // Reserve only a confirmed horizontal edge gesture; vertical scrolling remains native.
-      if (dx > 8 && dx > dy * 1.5 && event.cancelable) event.preventDefault();
-    };
-    const handleEnd = (event: TouchEvent) => {
-      const origin = start;
-      cancel();
-      if (!origin || event.changedTouches.length !== 1 || event.touches.length !== 0) return;
-      const dx = event.changedTouches[0].clientX - origin.x;
-      const dy = Math.abs(event.changedTouches[0].clientY - origin.y);
-      if (dx >= 72 && dx > dy * 1.5) onClose();
-    };
-    element.addEventListener("touchstart", handleStart, { passive: true });
-    element.addEventListener("touchmove", handleMove, { passive: false });
-    element.addEventListener("touchend", handleEnd, { passive: true });
-    element.addEventListener("touchcancel", cancel, { passive: true });
-    return {
-      destroy() {
-        element.removeEventListener("touchstart", handleStart);
-        element.removeEventListener("touchmove", handleMove);
-        element.removeEventListener("touchend", handleEnd);
-        element.removeEventListener("touchcancel", cancel);
-      },
-    };
-  }
-
   function formatDateTime(value: string) {
     return new Date(value).toLocaleString("zh-CN", {
       month: "short",
@@ -121,7 +81,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="detail-overlay" onclick={onClose} transition:fade={{ duration: 200 }}>
-    <div class="drawer-shell" use:edgeSwipe onclick={(event) => event.stopPropagation()} transition:slide={{ axis: "x", duration: 300 }}>
+    <div class="drawer-shell" use:edgeSwipe={onClose} onclick={(event) => event.stopPropagation()} transition:slide={{ axis: "x", duration: 300 }}>
       <div class="detail-toolbar">
         <h2 class="word-title">{entry.query_text}</h2>
         <button class="detail-close-floating" onclick={onClose} aria-label="返回词库">
@@ -287,9 +247,6 @@
   .drawer-content { display: flex; flex-direction: column; gap: 2.5rem; }
   .content-section { display: flex; flex-direction: column; gap: 1rem; }
   .detail-analysis :global(.learning-content) { padding-bottom: 0; }
-  .detail-analysis :global(.meaning-summary) { position: relative; display: block; }
-  .detail-analysis :global(.meaning-summary.interactive) { padding-right: 2rem; }
-  .detail-analysis :global(.meaning-summary > i) { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); }
 
   .fu-q { margin-bottom: 0.75rem; color: var(--accent-main); font-size: 1.05rem; font-weight: 700; }
   .fu-a { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color); }
@@ -326,22 +283,6 @@
     .drawer-content { gap: 16px; }
     .content-section { gap: 8px; }
 
-    /* Keep the density pilot local to library details before adopting it elsewhere. */
-    .detail-analysis :global(.learning-content) { gap: 10px; }
-    .detail-analysis :global(.section-card) { padding: 10px; border-radius: 16px; }
-    .detail-analysis :global(.section-title) { margin-bottom: 8px; font-size: 12px; }
-    .detail-analysis :global(.meaning-summary) { position: relative; display: block; padding: 10px; border-radius: 10px; font-size: 0; line-height: 20px; }
-    .detail-analysis :global(.meaning-summary.interactive) { padding-right: 10px; }
-    .detail-analysis :global(.meaning-summary > i) { display: none; }
-    .detail-analysis :global(.usage-list),
-    .detail-analysis :global(.insights-stack) { gap: 10px; }
-    .detail-analysis :global(.usage-item),
-    .detail-analysis :global(.insight-block) { padding: 6px; border-radius: 10px; font-size: 13px; line-height: 1.5; }
-    .detail-analysis :global(.usage-copy),
-    .detail-analysis :global(.insight-copy) { margin-top: 5px; line-height: 1.5; }
-    .detail-analysis :global(.example-box) { margin-top: 6px; padding: 8px; }
-    .detail-analysis :global(.usage-item.example-box) { margin-top: 0; }
-    .detail-analysis :global(.zh-line) { font-size: 11.5px; line-height: 1.5; margin-top: 4px; }
   }
 
 </style>

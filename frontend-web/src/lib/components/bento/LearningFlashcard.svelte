@@ -13,9 +13,7 @@
 
   let showingAnswer = $state(false);
   let contentElement = $state<HTMLDivElement | null>(null);
-  let wordElement = $state<HTMLHeadingElement | null>(null);
   let usageElement = $state<HTMLElement | null>(null);
-  let dockedTitle = $state(false);
   let activeGrammarBranch = $state<GrammarBranch | null>(null);
   let popoverTriggerRect = $state<DOMRect | null>(null);
 
@@ -25,7 +23,6 @@
     wordData.query_text,
   ));
   const headword = $derived(structured.headword || wordData.query_text);
-  const primaryPartOfSpeech = $derived(structured.meanings[0]?.partOfSpeech ?? structured.grammarBranches[0]?.pos ?? "");
   const ratingOptions = $derived([
     {
       label: wordData.phase === "new" ? "不认识" : "忘记",
@@ -39,7 +36,6 @@
   $effect(() => {
     wordData.entry_id;
     showingAnswer = false;
-    dockedTitle = false;
     activeGrammarBranch = null;
     usageElement = null;
   });
@@ -56,14 +52,6 @@
     return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(new Date(value));
   }
 
-  function handleScroll() {
-    if (!contentElement || !wordElement) return;
-    const boundary = contentElement.getBoundingClientRect().top;
-    const wordTop = wordElement.getBoundingClientRect().top;
-    if (!dockedTitle && wordTop <= boundary) dockedTitle = true;
-    if (dockedTitle && wordTop > boundary + 12) dockedTitle = false;
-  }
-
   async function revealAnswer() {
     showingAnswer = true;
     await tick();
@@ -75,7 +63,6 @@
           + contentElement.scrollTop
         : 0;
       contentElement.scrollTo({ top, behavior: "auto" });
-      handleScroll();
     });
   }
 
@@ -97,21 +84,18 @@
       </button>
     {:else}
       <div class="answer-shell">
+        <h2 class="answer-title">{headword}</h2>
         <div class="meta answer-meta">
           <span>{learningStateLabel()} · 第 {wordData.appearance_count_today ?? 1} 次</span>
-          <strong class:visible={dockedTitle}>{headword}</strong>
           <span>上次：{formatDate(wordData.progress?.last_reviewed_at)}</span>
         </div>
-        <div class="scroll-content" bind:this={contentElement} onscroll={handleScroll}>
-          <header class="word-intro">
-            <h2 bind:this={wordElement}>{headword}</h2>
-            {#if primaryPartOfSpeech}<span>{primaryPartOfSpeech}</span>{/if}
-          </header>
+        <div class="scroll-content" bind:this={contentElement}>
           <LearningAnalysisContent
             analysis={structured}
             attachedPhraseModules={wordData.attached_phrase_modules ?? []}
             onGrammarOpen={openGrammar}
             bind:usageElement
+            interleavedMeanings
           />
         </div>
       </div>
@@ -153,13 +137,10 @@
   .recall-prompt strong { color: var(--text-main); font-size: 1.08rem; }
   .recall-prompt span { font-size: 0.9rem; }
 
-  .answer-shell { height: 100%; display: flex; flex-direction: column; padding: 1.5rem clamp(1.5rem, 3vw, 2.5rem) 0; }
-  .answer-meta { position: relative; flex: 0 0 auto; min-height: 42px; padding-bottom: 0.8rem; }
-  .answer-meta > strong { position: absolute; left: 50%; bottom: 0.8rem; max-width: 52%; overflow: hidden; transform: translateX(-50%) translateY(3px); color: var(--text-main); font-size: 1.8rem; line-height: 1.15; opacity: 0; text-overflow: ellipsis; white-space: nowrap; transition: opacity 140ms ease, transform 140ms ease; pointer-events: none; }
-  .answer-meta > strong.visible { transform: translateX(-50%) translateY(0); opacity: 1; }
+  .answer-shell { height: 100%; display: flex; flex-direction: column; padding: 1.5rem clamp(1.5rem, 3vw, 2.5rem) 16px; }
+  .answer-title { flex: 0 0 auto; font-size: 40px; line-height: 1.15; text-align: center; overflow-wrap: anywhere; margin-bottom: 12px; }
+  .answer-meta { flex: 0 0 auto; padding-bottom: 12px; }
   .scroll-content { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-  .word-intro { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 190px; padding: 1.5rem 0; }
-  .word-intro > span { margin-top: 0.4rem; color: var(--text-muted); font-size: 0.82rem; font-weight: 700; }
 
   .rating-bar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; margin-top: 1rem; }
   .rating-bar button { min-height: 52px; border-radius: var(--radius-md); background: var(--btn-secondary); color: var(--btn-secondary-text); font-weight: 800; }
@@ -175,7 +156,10 @@
     .recall-surface { padding: 1.25rem; }
     .answer-shell { padding: 1.1rem 1rem 5.25rem; }
     .meta { gap: 0.5rem; font-size: 0.72rem; }
-    .answer-meta > strong { font-size: 1.35rem; }
+    .answer-title { font-size: 32px; }
     .rating-bar { position: absolute; z-index: 4; right: 0; bottom: 0; left: 0; gap: 0.5rem; margin: 0; padding: 1rem; }
+  }
+  @media (max-width: 600px) {
+    .answer-title { font-size: 26px; margin-bottom: 8px; }
   }
 </style>

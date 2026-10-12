@@ -59,7 +59,7 @@
   }
 </script>
 
-<div class="learning-content">
+<div class="learning-content" class:interleaved={interleavedMeanings}>
   <section class="section-card meaning-section">
     <div class="section-title"><i class="ph-fill ph-translate"></i> 核心释义</div>
     <div class="meaning-list">
@@ -177,6 +177,9 @@
   .meaning-summary small { color: var(--text-muted); line-height: 1.45; }
   .meaning-summary > i { align-self: center; color: var(--text-muted); opacity: 0; transition: opacity 0.15s ease; }
   .meaning-summary.interactive:hover > i, .meaning-summary.interactive:focus-visible > i { opacity: 1; }
+  .interleaved .meaning-summary { position: relative; display: block; }
+  .interleaved .meaning-summary.interactive { padding-right: 2rem; }
+  .interleaved .meaning-summary > i { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); }
 
   .usage-list, .insights-stack { display: grid; gap: 0.8rem; }
   .usage-item, .insight-block { padding: 1rem; border-radius: var(--radius-md); background: var(--bg-color); }
@@ -198,5 +201,17 @@
   @media (max-width: 600px) {
     .section-card { padding: 0.9rem; }
     .meaning-summary { padding: 0.85rem; }
+    .interleaved { gap: 10px; }
+    .interleaved .section-card { padding: 10px; border-radius: 16px; }
+    .interleaved .section-title { margin-bottom: 8px; font-size: 12px; }
+    .interleaved .meaning-summary { padding: 10px; border-radius: 10px; font-size: 0; line-height: 20px; }
+    .interleaved .meaning-summary.interactive { padding-right: 10px; }
+    .interleaved .meaning-summary > i { display: none; }
+    .interleaved .usage-list, .interleaved .insights-stack { gap: 10px; }
+    .interleaved .usage-item, .interleaved .insight-block { padding: 6px; border-radius: 10px; font-size: 13px; line-height: 1.5; }
+    .interleaved .usage-copy, .interleaved .insight-copy { margin-top: 5px; line-height: 1.5; }
+    .interleaved .example-box { margin-top: 6px; padding: 8px; }
+    .interleaved .usage-item.example-box { margin-top: 0; }
+    .interleaved .zh-line { font-size: 11.5px; line-height: 1.5; margin-top: 4px; }
   }
 </style>

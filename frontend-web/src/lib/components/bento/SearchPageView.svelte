@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { browser } from "$app/environment";
+  import { edgeSwipe } from "$lib/actions/edgeSwipe";
   import { fade, slide } from "svelte/transition";
   import { addWordToLearning, getLearningProgress } from "$lib/learningApi";
   import {
@@ -437,6 +438,13 @@
   });
 
   const isSearching = $derived(Boolean($s.result || $s.isLoading || $s.error || advancedPending));
+  $effect(() => {
+    if (!browser || !active || !isSearching) return;
+    const mainArea = document.querySelector<HTMLElement>(".main-area");
+    if (!mainArea) return;
+    const gesture = edgeSwipe(mainArea, clearSearchResult);
+    return () => gesture.destroy();
+  });
   const isCurrentWordInLearning = $derived(Boolean($s.result && learningEntryIds.has($s.result.entry_id)));
   // 派生：是否处于专注搜索状态（唤起建议面板时）
   const isSearchFocusing = $derived(showSuggestions && (suggestions.length > 0 || (!$s.query.trim() && recentItems.length > 0)));
@@ -680,10 +688,12 @@
 
   .back-btn {
     position: fixed; top: 1.5rem; left: calc(var(--desktop-sidebar-width) + 1.5rem); z-index: 150;
-    width: 2.8rem; height: 2.8rem; border-radius: 50%;
-    background: var(--card-bg); border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-sm); display: flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: transparent; color: var(--text-main);
+    display: flex; align-items: center; justify-content: center;
   }
+  .back-btn:hover, .back-btn:active { background: var(--btn-secondary); }
+  .back-btn:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 2px; }
 
   .search-submit-btn {
     position: relative;
@@ -778,7 +788,7 @@
 
   @media (max-width: 768px) {
     .search-intro p { margin-left: 0; text-align: center; }
-    .back-btn { left: 1rem; top: 1rem; width: 2.5rem; height: 2.5rem; }
+    .back-btn { left: 1rem; top: 1rem; }
     .search-main-wrapper { margin-top: 15vh; }
     .is-searching .search-main-wrapper { top: -1.5rem; display: block; width: calc(100% + 2rem); height: auto; max-width: none; margin: -1.5rem -1rem 0; padding: 1rem 1rem 0.75rem; }
     .is-searching .search-panel-group { width: calc(100% - 3.5rem); margin-left: 3.5rem; }

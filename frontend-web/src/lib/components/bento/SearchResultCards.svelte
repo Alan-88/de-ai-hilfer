@@ -11,6 +11,7 @@
   import GrammarFeatureCard from "$lib/components/bento/GrammarFeatureCard.svelte";
   import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
   import PhraseModuleAddControl from "$lib/components/bento/PhraseModuleAddControl.svelte";
+  import InterleavedMeaning from "$lib/components/bento/InterleavedMeaning.svelte";
 
   type StructuredAnalysis = ReturnType<typeof resolveStructuredAnalysis>;
   type AttachedPhraseBlock = AttachedPhraseModule & { structured: StructuredAnalysis };
@@ -107,26 +108,6 @@
     return branch.pos;
   }
 
-  function formatMeanings(meanings: {zh: string, en: string}[]): string {
-    return meanings.map(m => m.zh).filter(Boolean).join("；");
-  }
-
-  // 分支按词性分组，同词性放一排
-  const branchGroups = $derived(() => {
-    const groups: (import("$lib/types").GrammarBranch[])[] = [];
-    if (!structured.grammarBranches) return groups;
-
-    structured.grammarBranches.forEach(branch => {
-      const lastGroup = groups[groups.length - 1];
-      if (lastGroup && lastGroup[0].pos === branch.pos) {
-        lastGroup.push(branch);
-      } else {
-        groups.push([branch]);
-      }
-    });
-    return groups;
-  });
-
   // 严格同步：使用刚才基于真实数据库样本修复的解析逻辑
   const structured = $derived(
     resolveStructuredAnalysis(
@@ -176,8 +157,11 @@
     })
   ]);
 
-  const hasMeanings = $derived(structured.meanings.length > 0);
-  const mainMeaning = $derived(structured.meanings[0]);
+  const networkGroups = $derived([
+    { label: "词族", items: structured.wordNetwork.family },
+    { label: "近义", items: structured.wordNetwork.synonyms },
+    { label: "反义", items: structured.wordNetwork.antonyms },
+  ].filter((group) => group.items.length > 0));
   const deepInsights = $derived(structured.deepInsights);
   const actionProviderOptions = $derived(
     Array.from(new Map(actionModelOptions.map((option: ActionModelOption) => [option.provider_name, option.provider_name])).values())
@@ -247,9 +231,8 @@
 
       <div class="meaning-row" class:is-branch-list={useBranchUI}>
         {#if useBranchUI}
-          {#each branchGroups() as group}
             <div class="branch-group-row">
-              {#each group as branch}
+              {#each structured.grammarBranches as branch}
                 <button
                   class="branch-meaning-item"
                   onclick={(e) => {
@@ -258,21 +241,15 @@
                   }}
                   title="点击查看详细语法"
                 >
-                  <span class="pos-badge compact">{formatPos(branch)}</span>
-                  <span class="zh-text">{formatMeanings(branch.meanings)}</span>
+                  <InterleavedMeaning pos={formatPos(branch)} chinese={branch.meanings.map((meaning) => meaning.zh).filter(Boolean).join("；")} english={branch.meanings.map((meaning) => meaning.en).filter(Boolean).join("; ")} />
                   <i class="ph ph-info branch-info-icon"></i>
                 </button>
               {/each}
             </div>
-          {/each}
         {:else}
-          {#if mainMeaning}
-            <span class="pos-badge">{mainMeaning.partOfSpeech}</span>
-            <span class="zh-text">{mainMeaning.chinese}</span>
-            {#if mainMeaning.english}
-              <span class="en-text">{mainMeaning.english}</span>
-            {/if}
-          {/if}
+          {#each structured.meanings as meaning}
+            <InterleavedMeaning pos={meaning.partOfSpeech} chinese={meaning.chinese} english={meaning.english} />
+          {/each}
         {/if}
       </div>
 
@@ -462,19 +439,24 @@
       {/if}
     </div>
 
-    {#if structured.wordNetwork.family.length > 0 || structured.wordNetwork.synonyms.length > 0 || structured.wordNetwork.antonyms.length > 0}
-      <div class="tag-cloud-mini">
-        {#each [
-          ...structured.wordNetwork.family,
-          ...structured.wordNetwork.synonyms,
-          ...structured.wordNetwork.antonyms
-        ] as item}
-          <span
-            class="mini-tag-btn"
-            title="{item.partOfSpeech ? `[${item.partOfSpeech}] ` : ''}${item.chinese || item.english || ''}"
-          >
-            {item.term}
-          </span>
+    {#if networkGroups.length}
+      <div class="word-network">
+        {#each networkGroups as group}
+          <div class="network-group">
+            <div class="network-label">{group.label}</div>
+            <div class="tag-cloud-mini">
+              {#each group.items as item}
+                <details class="mini-tag-btn">
+                  <summary>{item.term}</summary>
+                  <div class="network-definition">
+                    {#if item.partOfSpeech}<small>{item.partOfSpeech}</small>{/if}
+                    {#if item.chinese}<span>{item.chinese}</span>{/if}
+                    {#if item.english}<span>{item.english}</span>{/if}
+                  </div>
+                </details>
+              {/each}
+            </div>
+          </div>
         {/each}
       </div>
     {/if}
@@ -529,7 +511,7 @@
   .bento-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1.25rem;
+    gap: 0.6rem;
     width: 100%;
     max-width: 1400px;
     margin: 0 auto 4rem;
@@ -539,13 +521,13 @@
 
   /* Header 优化 */
   .card-header {
-    grid-column: span 4; display: flex; justify-content: space-between; align-items: flex-end;
+    grid-column: span 4; display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem;
     padding: 1.5rem 2rem;
   }
-  .header-main-info { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
+  .header-main-info { display: flex; flex: 1; flex-direction: column; gap: 0.4rem; min-width: 0; }
 
   .title-row { display: flex; align-items: baseline; gap: 0.8rem; }
-  .word-title { font-size: 2.2rem; font-weight: 800; color: var(--text-main); letter-spacing: -0.02em; margin: 0; }
+  .word-title { font-size: 2.2rem; font-weight: 800; color: var(--text-main); letter-spacing: -0.02em; margin: 0; overflow-wrap: anywhere; }
 
   /* 音标专用字体栈修复：强制使用标准 IPA 支持字体 */
   .word-phonetic {
@@ -554,12 +536,10 @@
     background: var(--bg-color); padding: 0.1rem 0.4rem; border-radius: 4px;
   }
 
-  .meaning-row { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.2rem; }
+  .meaning-row { display: grid; gap: 0.6rem; margin-top: 0.2rem; }
 
   /* Branch UI 专属样式 */
   .meaning-row.is-branch-list {
-    flex-direction: column;
-    align-items: flex-start;
     gap: 0.35rem;
     margin-top: 0.85rem;
   }
@@ -571,11 +551,14 @@
     width: 100%;
   }
   .branch-meaning-item {
-    display: flex;
-    align-items: center;
-    gap: 0.65rem;
-    padding: 0.25rem 0.5rem;
+    position: relative;
+    display: block;
+    width: 100%;
+    min-width: 0;
+    padding: 0.25rem 2rem 0.25rem 0.5rem;
+    text-align: left;
     background: transparent;
+    color: var(--text-main);
     border: 1px solid transparent;
     border-radius: 6px;
     transition: all 0.2s ease;
@@ -587,6 +570,10 @@
     transform: translateX(4px);
   }
   .branch-info-icon {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
     font-size: 0.85rem;
     color: var(--text-muted);
     opacity: 0;
@@ -596,16 +583,7 @@
     color: var(--accent-main);
     opacity: 1;
   }
-
-  .pos-badge { background: var(--accent-main); color: white; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: 800; }
-  .pos-badge.compact {
-    min-width: 2rem;
-    text-align: center;
-    background: var(--text-main);
-    color: var(--bg-color);
-  }
-  .zh-text { font-size: 1.1rem; font-weight: 700; color: var(--text-main); }
-  .en-text { font-size: 0.98rem; font-style: italic; color: var(--text-muted); }
+  .branch-meaning-item:focus-visible { outline: 2px solid var(--accent-main); }
 
   .meta-row { display: flex; gap: 0.5rem; margin-top: 0.4rem; }
   .mini-label { font-size: 0.65rem; font-weight: 800; padding: 0.15rem 0.4rem; border-radius: 4px; text-transform: uppercase; opacity: 0.7; }
@@ -685,9 +663,11 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 1rem;
     margin-bottom: 1rem;
   }
+  .card-title-row .card-title { margin-bottom: 0; }
   .attached-trash-btn svg {
     width: 1.05rem;
     height: 1.05rem;
@@ -737,8 +717,15 @@
   .de-line { font-weight: 700; font-size: 1.05rem; }
   .zh-line { color: var(--text-muted); font-size: 0.9rem; margin-top: 0.4rem; }
 
-  .tag-cloud-mini { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; }
+  .word-network { display: grid; gap: 12px; margin-top: 1.5rem; }
+  .network-label { margin-bottom: 6px; color: var(--text-muted); font-size: 12px; font-weight: 800; }
+  .tag-cloud-mini { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 0.5rem; }
   .mini-tag-btn { font-size: 0.8rem; padding: 0.25rem 0.6rem; background: var(--bg-color); border-radius: 6px; border: 1px solid var(--border-color); }
+  .mini-tag-btn summary { cursor: pointer; }
+  .mini-tag-btn summary:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 3px; }
+  .mini-tag-btn[open] { max-width: 100%; }
+  .network-definition { display: grid; gap: 4px; margin-top: 6px; color: var(--text-muted); overflow-wrap: anywhere; }
+  .network-definition small { color: var(--accent-main); }
 
   .recent-mini-list { display: flex; flex-direction: column; gap: 0.6rem; }
   .recent-mini-btn {
@@ -765,20 +752,43 @@
     .custom-action-head { align-items: flex-start; flex-direction: column; }
     .custom-model-controls { width: 100%; justify-content: flex-start; }
     .custom-model-controls select { min-width: 0; }
-    .card-title-row {
-      align-items: flex-start;
-      flex-direction: column;
-    }
   }
 
   @media (max-width: 600px) {
-    .bento-grid { padding: 0; }
+    .bento-grid { padding: 0; gap: 10px; }
+    .bento-card { padding: 10px; border-radius: 16px; }
+    .card-title { font-size: 12px; margin-bottom: 8px; }
+    .card-title-row { gap: 8px; margin-bottom: 8px; }
+    .card-main, .card-side { gap: 8px; }
+    .usage-list, .insights-stack { gap: 10px; }
+    .usage-item, .insight-block, .example-item { padding: 6px; border-radius: 10px; font-size: 13px; line-height: 1.5; }
+    .small-copy, .usage-explanation, .insight-label { font-size: 13px; line-height: 1.5; }
+    .usage-head { gap: 6px; }
+    .usage-head p, .insight-label { margin-bottom: 5px; }
+    .example-box { margin-top: 6px; padding: 8px; }
+    .de-line { font-size: 13px; line-height: 1.5; }
+    .zh-line { font-size: 11.5px; line-height: 1.5; margin-top: 4px; }
+    .markdown-compact { line-height: 1.5; }
+    .markdown-compact :global(p) { margin-bottom: 6px; }
+    .markdown-compact :global(ul), .markdown-compact :global(ol) { margin-bottom: 6px; padding-left: 18px; }
+    .markdown-compact :global(li) { margin-bottom: 4px; }
+    .markdown-compact :global(:last-child) { margin-bottom: 0; }
+    .follow-up-wrapper { padding: 8px; }
+    .recent-mini-btn { padding: 8px; }
+    .recent-mini-btn strong { font-size: 13px; }
+    .word-title { font-size: 26px; }
+    .word-phonetic { font-size: 13px; }
+    .mini-label { font-size: 10px; padding: 2px 5px; }
+    .learn-btn { min-height: 32px; font-size: 11px; padding: 0 12px; white-space: nowrap; }
+    .usage-item.is-attached { padding-right: 40px; }
+    .attached-trash-btn { top: 6px; right: 6px; opacity: 1; transform: none; pointer-events: auto; }
+    .attached-phrase-label { margin-right: 0; }
     .header-main-info, .title-row, .branch-group-row { min-width: 0; }
-    .word-title, .word-phonetic, .zh-text, .en-text { overflow-wrap: anywhere; }
-    .branch-meaning-item { max-width: 100%; text-align: left; }
-    .branch-meaning-item .pos-badge, .branch-info-icon { flex-shrink: 0; }
+    .word-title, .word-phonetic { overflow-wrap: anywhere; }
+    .branch-meaning-item { max-width: 100%; padding-right: 0.5rem; }
+    .branch-info-icon { display: none; }
     .header-actions { flex-wrap: wrap; }
-    .card-header { align-items: stretch; flex-direction: column; gap: 1rem; }
+    .card-header { align-items: stretch; flex-direction: column; gap: 8px; }
     .header-actions { align-items: center; flex-direction: row; justify-content: flex-end; }
     .title-row, .meta-row { flex-wrap: wrap; }
   }
