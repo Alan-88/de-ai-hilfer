@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+  import InterleavedMeaning from "./InterleavedMeaning.svelte";
   import { renderMarkdownHtml, type StructuredAnalysis } from "$lib/analysis/structuredAnalysis";
   import type { AttachedPhraseModule, GrammarBranch, ModelAMeaning } from "$lib/types";
 
@@ -7,12 +9,24 @@
     attachedPhraseModules = [],
     onGrammarOpen,
     usageElement = $bindable(null),
+    compactMeanings = false,
   } = $props<{
     analysis: StructuredAnalysis;
     attachedPhraseModules?: AttachedPhraseModule[];
     onGrammarOpen: (branch: GrammarBranch, triggerRect: DOMRect) => void;
     usageElement?: HTMLElement | null;
+    compactMeanings?: boolean;
   }>();
+
+  let mobile = $state(false);
+  onMount(() => {
+    if (!compactMeanings) return;
+    const query = window.matchMedia("(max-width: 600px)");
+    const update = () => { mobile = query.matches; };
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  });
 
   const usageModules = $derived([
     ...analysis.usageModules,
@@ -67,21 +81,29 @@
             onclick={(event) => onGrammarOpen(branch, event.currentTarget.getBoundingClientRect())}
             title="点击查看详细语法"
           >
+            {#if compactMeanings && mobile}
+              <InterleavedMeaning pos={formatPos(branch)} chinese={branch.meanings.map((meaning: ModelAMeaning) => meaning.zh).filter(Boolean).join("；")} english={branch.meanings.map((meaning: ModelAMeaning) => meaning.en).filter(Boolean).join("; ")} />
+            {:else}
             <span>{formatPos(branch)}</span>
             <div>
               <strong>{branch.meanings.map((meaning: ModelAMeaning) => meaning.zh).filter(Boolean).join("；")}</strong>
               {#if branch.meanings.some((meaning: ModelAMeaning) => meaning.en)}
-                <small data-pos={formatPos(branch)}>{branch.meanings.map((meaning: ModelAMeaning) => meaning.en).filter(Boolean).join("; ")}</small>
+                <small>{branch.meanings.map((meaning: ModelAMeaning) => meaning.en).filter(Boolean).join("; ")}</small>
               {/if}
             </div>
             <i class="ph ph-info"></i>
+            {/if}
           </button>
         {/each}
       {:else}
         {#each analysis.meanings as meaning}
           <div class="meaning-summary">
+            {#if compactMeanings && mobile}
+              <InterleavedMeaning pos={meaning.partOfSpeech} chinese={meaning.chinese} english={meaning.english} />
+            {:else}
             <span>{meaning.partOfSpeech}</span>
-            <div><strong>{meaning.chinese}</strong>{#if meaning.english}<small data-pos={meaning.partOfSpeech}>{meaning.english}</small>{/if}</div>
+            <div><strong>{meaning.chinese}</strong>{#if meaning.english}<small>{meaning.english}</small>{/if}</div>
+            {/if}
           </div>
         {/each}
       {/if}

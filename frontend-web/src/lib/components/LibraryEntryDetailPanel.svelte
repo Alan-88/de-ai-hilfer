@@ -115,6 +115,7 @@
             <div class="card-title"><i class="ph-fill ph-article"></i> 词条解析</div>
             <div class="detail-analysis">
               <LearningAnalysisContent
+                compactMeanings
                 analysis={structured}
                 attachedPhraseModules={entry.attached_phrase_modules}
                 onGrammarOpen={openGrammar}
@@ -249,34 +250,28 @@
 
   @media (max-width: 600px) {
     .drawer-panel { padding: 20px 16px; }
-    .drawer-head { min-width: 0; gap: 10px; margin-bottom: 16px; }
+    .drawer-head { min-width: 0; gap: 8px; margin-bottom: 12px; }
     .title-line { min-width: 0; padding-right: 56px; }
-    .word-title { min-width: 0; font-size: 28px; overflow-wrap: anywhere; }
+    .word-title { min-width: 0; font-size: 26px; overflow-wrap: anywhere; }
     .detail-close-floating { top: 16px; right: 16px; width: 44px; height: 44px; font-size: 20px; }
-    .drawer-content { gap: 20px; }
-    .content-section { gap: 10px; }
+    .drawer-content { gap: 16px; }
+    .content-section { gap: 8px; }
 
     /* Keep the density pilot local to library details before adopting it elsewhere. */
-    .detail-analysis :global(.learning-content) { gap: 12px; }
-    .detail-analysis :global(.section-card) { padding: 12px; border-radius: 16px; }
-    .detail-analysis :global(.section-title) { margin-bottom: 10px; }
+    .detail-analysis :global(.learning-content) { gap: 10px; }
+    .detail-analysis :global(.section-card) { padding: 10px; border-radius: 16px; }
+    .detail-analysis :global(.section-title) { margin-bottom: 8px; font-size: 12px; }
     .detail-analysis :global(.meaning-summary) { position: relative; display: block; padding: 10px; border-radius: 10px; font-size: 0; line-height: 20px; }
-    .detail-analysis :global(.meaning-summary > span),
-    .detail-analysis :global(.meaning-summary small::before) { display: inline-block; padding: 0 5px; margin-right: 8px; font-size: 11px; font-weight: 800; }
-    .detail-analysis :global(.meaning-summary > span) { border-radius: 4px; line-height: 20px; vertical-align: baseline; }
-    .detail-analysis :global(.meaning-summary > div) { display: contents; }
-    .detail-analysis :global(.meaning-summary strong) { font-size: 13px; line-height: 20px; }
-    .detail-analysis :global(.meaning-summary small) { display: block; margin-top: 5px; font-size: 12px; }
-    /* Match the label's intrinsic width only on the English first line. */
-    .detail-analysis :global(.meaning-summary small::before) { content: attr(data-pos); height: 0; visibility: hidden; }
     .detail-analysis :global(.meaning-summary > i) { display: none; }
     .detail-analysis :global(.usage-list),
-    .detail-analysis :global(.insights-stack) { gap: 12px; }
+    .detail-analysis :global(.insights-stack) { gap: 10px; }
     .detail-analysis :global(.usage-item),
-    .detail-analysis :global(.insight-block) { padding: 8px; border-radius: 10px; font-size: 15px; }
-    .detail-analysis :global(.example-box) { margin-top: 8px; padding: 10px; }
+    .detail-analysis :global(.insight-block) { padding: 6px; border-radius: 10px; font-size: 13px; line-height: 1.5; }
+    .detail-analysis :global(.usage-copy),
+    .detail-analysis :global(.insight-copy) { margin-top: 5px; line-height: 1.5; }
+    .detail-analysis :global(.example-box) { margin-top: 6px; padding: 8px; }
     .detail-analysis :global(.usage-item.example-box) { margin-top: 0; }
-    .detail-analysis :global(.zh-line) { font-size: 13.5px; }
+    .detail-analysis :global(.zh-line) { font-size: 11.5px; line-height: 1.5; margin-top: 4px; }
   }
 
   @media (max-width: 360px) {
