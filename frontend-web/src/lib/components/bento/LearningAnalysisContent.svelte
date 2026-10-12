@@ -71,7 +71,7 @@
             <div>
               <strong>{branch.meanings.map((meaning: ModelAMeaning) => meaning.zh).filter(Boolean).join("；")}</strong>
               {#if branch.meanings.some((meaning: ModelAMeaning) => meaning.en)}
-                <small>{branch.meanings.map((meaning: ModelAMeaning) => meaning.en).filter(Boolean).join("; ")}</small>
+                <small data-pos={formatPos(branch)}>{branch.meanings.map((meaning: ModelAMeaning) => meaning.en).filter(Boolean).join("; ")}</small>
               {/if}
             </div>
             <i class="ph ph-info"></i>
@@ -81,7 +81,7 @@
         {#each analysis.meanings as meaning}
           <div class="meaning-summary">
             <span>{meaning.partOfSpeech}</span>
-            <div><strong>{meaning.chinese}</strong>{#if meaning.english}<small>{meaning.english}</small>{/if}</div>
+            <div><strong>{meaning.chinese}</strong>{#if meaning.english}<small data-pos={meaning.partOfSpeech}>{meaning.english}</small>{/if}</div>
           </div>
         {/each}
       {/if}
