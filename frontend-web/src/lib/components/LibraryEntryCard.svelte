@@ -93,4 +93,15 @@
   .btn-icon-text { background: transparent; color: var(--accent-main); font-size: 1.5rem; display: flex; align-items: center; }
   .btn-icon-text:hover { transform: scale(1.1); }
   .small-btn { white-space: nowrap; padding: 0.4rem 0.8rem; font-size: 0.85rem; border-radius: var(--radius-sm); }
+
+  @media (max-width: 600px) {
+    .entry-card { padding: 14px; gap: 10px; }
+    .card-top { column-gap: 8px; row-gap: 4px; }
+    .word-text { font-size: 18px; line-height: 1.3; }
+    .word-preview { font-size: 13px; line-height: 1.5; }
+    .status-badge { font-size: 10px; padding: 3px 6px; }
+    .card-bottom { gap: 8px; padding-top: 8px; }
+    .meta-info { gap: 6px; font-size: 11px; }
+    .small-btn { font-size: 12px; padding: 6px 9px; }
+  }
 </style>

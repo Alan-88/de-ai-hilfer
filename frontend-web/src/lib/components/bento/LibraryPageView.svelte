@@ -309,4 +309,8 @@
     .results-footer { flex-direction: column; align-items: stretch; }
   }
 
+  @media (max-width: 600px) {
+    .library-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  }
+
 </style>
