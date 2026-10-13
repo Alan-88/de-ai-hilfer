@@ -722,6 +722,7 @@
   }
 
   .search-main-wrapper {
+    --theme-clearance: 0px;
     width: 100%; max-width: 740px; margin-top: 25vh;
     z-index: 100; position: relative;
   }
@@ -729,7 +730,7 @@
     position: sticky;
     top: calc(var(--search-viewport-top) - 2rem);
     display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    grid-template-columns: calc(44px + var(--theme-clearance)) minmax(0, 1fr) calc(44px + var(--theme-clearance));
     column-gap: 12px;
     align-items: center;
     width: calc(100vw - var(--desktop-sidebar-width));
@@ -744,7 +745,7 @@
     position: fixed;
     top: calc(var(--search-viewport-top) + 24px);
     left: calc(var(--desktop-sidebar-width) + 32px);
-    right: 32px;
+    right: calc(32px + var(--theme-clearance));
     width: auto;
     max-width: 740px;
     height: auto;
@@ -818,14 +819,14 @@
   .result-identity { grid-column: 2; grid-row: 1; min-width: 0; text-align: center; transition: opacity 180ms ease; }
   .result-identity h1 { margin: 0; color: var(--text-main); font-size: 40px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; overflow-wrap: anywhere; }
   .result-phonetic { margin-top: 4px; font-family: "Arial Unicode MS", "Lucida Sans Unicode", sans-serif; color: var(--text-muted); font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; }
-  .result-search-open { grid-column: 3; grid-row: 1; justify-self: end; align-self: start; width: 44px; height: 44px; border-radius: 50%; background: transparent; color: var(--text-main); display: flex; align-items: center; justify-content: center; }
+  .result-search-open { grid-column: 3; grid-row: 1; justify-self: end; align-self: start; width: 44px; height: 44px; margin-right: var(--theme-clearance); border-radius: 50%; background: transparent; color: var(--text-main); display: flex; align-items: center; justify-content: center; }
   .result-search-open:hover, .result-search-open:active { background: var(--btn-secondary); }
   .result-search-open:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 2px; }
   .back-btn, .result-search-open { font-size: 24px; }
   .result-chrome.focusing .result-identity, .result-chrome.focusing .result-search-open { opacity: 0; visibility: hidden; pointer-events: none; }
   .result-chrome .search-panel-group {
     --result-search-wide: 0;
-    position: absolute; top: 12px; left: 88px; right: 32px; width: auto;
+    position: absolute; top: 12px; left: 88px; right: calc(32px + var(--theme-clearance)); width: auto;
     max-height: calc(var(--search-viewport-height) - 24px - env(safe-area-inset-bottom));
     visibility: hidden; pointer-events: none;
   }
@@ -845,17 +846,24 @@
   .result-chrome .search-submit-btn.is-canceling .loading-text { display: none; }
   .result-chrome .search-submit-btn.is-canceling .cancel-text { transform: none; opacity: 1; }
 
+  @media (min-width: 769px) {
+    .search-main-wrapper { --theme-clearance: 96px; }
+  }
+
   @media (min-width: 1201px) {
-    .is-searching .search-main-wrapper { grid-template-columns: clamp(240px, calc((100vw - var(--desktop-sidebar-width) - 64px) * 0.3), 340px) minmax(0, 1fr) clamp(240px, calc((100vw - var(--desktop-sidebar-width) - 64px) * 0.3), 340px); }
+    .is-searching .search-main-wrapper {
+      --search-column-width: calc(var(--theme-clearance) + clamp(220px, calc((100vw - var(--desktop-sidebar-width) - 64px - 2 * var(--theme-clearance)) * 0.3), 340px));
+      grid-template-columns: var(--search-column-width) minmax(0, 1fr) var(--search-column-width);
+    }
     .result-chrome .search-panel-group {
       --result-search-wide: 1;
       grid-column: 3; grid-row: 1; position: relative; top: auto; left: auto; right: auto;
-      width: 100%; align-self: start; visibility: visible; pointer-events: auto;
+      width: calc(100% - var(--theme-clearance)); align-self: start; visibility: visible; pointer-events: auto;
     }
     .result-chrome .result-search-open { display: none; }
     .result-chrome.focusing .result-identity { opacity: 1; visibility: visible; }
     .result-chrome:not(.focusing) .actions .icon-btn, .result-chrome:not(.focusing) .shortcut-btn { display: none; }
-    .result-chrome .integrated-suggestions, .result-chrome .sub-row { position: absolute; right: 0; width: min(420px, calc(100vw - var(--desktop-sidebar-width) - 64px)); }
+    .result-chrome .integrated-suggestions, .result-chrome .sub-row { position: absolute; right: 0; width: min(420px, calc(100vw - var(--desktop-sidebar-width) - 64px - var(--theme-clearance))); }
     .result-chrome .sub-row { top: 66px; }
     .result-chrome .integrated-suggestions { top: 66px; max-height: calc(var(--search-viewport-height) - 110px - env(safe-area-inset-bottom)); }
   }

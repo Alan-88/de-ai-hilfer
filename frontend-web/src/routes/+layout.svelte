@@ -141,13 +141,6 @@
     z-index: 200;
   }
 
-  .app-layout:has(:global(.result-chrome)) .theme-switcher-group {
-    top: auto;
-    right: auto;
-    bottom: 24px;
-    left: calc((var(--desktop-sidebar-width) - 80px) / 2);
-  }
-
   .theme-switch-track {
     background: var(--btn-secondary);
     border: 1px solid var(--border-color);
