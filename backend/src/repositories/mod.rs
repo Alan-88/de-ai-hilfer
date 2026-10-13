@@ -1,5 +1,7 @@
 pub mod agent_api;
+pub mod agent_batches;
 pub mod ai_settings;
+pub mod analysis_checkpoints;
 pub mod dictionary;
 pub mod dictionary_lexemes;
 pub(crate) mod dictionary_merge;

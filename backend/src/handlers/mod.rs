@@ -1,4 +1,5 @@
 pub mod agent_api;
+pub mod agent_batches;
 pub mod ai_settings;
 pub mod analyze;
 pub mod follow_up;

@@ -4,6 +4,9 @@
 
 ## 阶段判断
 
+- 通用异步批量Agent API支持有序操作清单、前序结果ID引用、逐项进度、失败继续/停止及未成功项重试；MCP新增batch_submit/query/retry，lexeme_initialize改为立即返回任务ID，CLI新增batch命令与initialize --async，Skill/指南同步。当前操作覆盖初始化、学习add/remove/reset、创建文件夹、导入文章，可自由组合，不限定文章场景。见 `docs/api/agent-batches.md`。
+- 后端生成限制为单进程3路并发，同原型请求串行复查知识库，A/B/C阶段结果持久化24小时，B/C失败及落库失败可复用已完成阶段；模型/词典/prompt变化与强制重新生成不会误用旧结果。批量任务重启自动恢复；业务创建与学习变更有事务去重凭据。旧同步API/CLI保留。全量备份恢复拒绝未完成任务，并清除引用旧ID的运行数据。
+
 - ≤600px词库列表采用用户确认的紧凑卡片：内距14px、词头18px、简介13px/1.5、状态10px、学习信息11px、详情12px；上下内容间隔10px、卡片间隔12px。保留背景层级、状态右上独立列、标题/简介两行省略及现有操作。移动网格为minmax(0,1fr)，修复320px内容区小于原300px最小列宽的溢出。>600px原卡片密度保留。见 `docs/iterations/2026-10-13-mobile-library-cards.md`。
 - 文章阅读卡片为固定标题栏 + 独立正文滚动区 + 44px固定底栏。PC顶栏恢复标题上方目录路径，移动路径隐藏、标题原字号18.4px最多两行；正文不重复标题。≤600px正文试用18px/34.2px行高，保留字重、左右边距与上下留白，PC正文原尺寸保留。底栏左侧Wörter、右下32px“数量 标记”向上展开滚动列表，移动查词入口位于底栏。见 `docs/iterations/2026-10-13-reading-typography-title.md` 与 `docs/iterations/2026-10-13-reading-fixed-footer.md`。
 - 文章快捷查词栏常态为固定居中词头、下方 IPA 与右侧搜索图标；PC 的380px常驻栏和移动弹出栏均点击后横向展开胶囊输入，暂时隐藏词头，收起保留阅读位置。移动左箭头先收起搜索、常态关闭栏；PC仅展开搜索时显示返回箭头。候选按快捷栏和visualViewport可见空间限制高度，独立滚动，延迟响应不重新展开；重新点击当前文章标记也能从手动查词切回。见 `docs/iterations/2026-10-13-reading-lookup-search-header.md`。

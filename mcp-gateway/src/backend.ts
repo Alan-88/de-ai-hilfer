@@ -1,5 +1,4 @@
 const DEFAULT_TIMEOUT_MS = 60_000;
-const INITIALIZE_TIMEOUT_MS = 10 * 60_000;
 const READ_RETRIES = 2;
 
 export type FetchImplementation = typeof fetch;
@@ -36,10 +35,6 @@ export class DeaiApi {
 
   delete(path: string): Promise<unknown> {
     return this.request(path, { method: "DELETE" });
-  }
-
-  initializeLexeme(lexemeId: number, body: unknown): Promise<unknown> {
-    return this.post(`/agent/lexemes/${lexemeId}/initialize`, body, INITIALIZE_TIMEOUT_MS);
   }
 
   async entryIdForLexeme(lexemeId: number): Promise<number> {

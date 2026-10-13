@@ -52,19 +52,20 @@ pub async fn find_progress(
     .await
 }
 
-pub async fn insert_progress(
-    pool: &DbPool,
+pub async fn insert_progress<'e>(
+    executor: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
     progress: &NewLearningProgress,
 ) -> Result<LearningProgress, sqlx::Error> {
     sqlx::query_as::<_, LearningProgress>(
         r#"
         INSERT INTO learning_progress (entry_id)
         VALUES ($1)
+        ON CONFLICT (entry_id) DO UPDATE SET entry_id = EXCLUDED.entry_id
         RETURNING entry_id, stability, difficulty, elapsed_days, scheduled_days, state, last_review_at, due_date, review_count, lapses
         "#,
     )
     .bind(progress.entry_id)
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await
 }
 

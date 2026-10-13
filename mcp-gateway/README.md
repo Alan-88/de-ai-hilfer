@@ -19,9 +19,28 @@ topics:
 - `learning_v3`
 - `learning_diagnostics`
 - `learning_corrections`
+- `batch_operations`
 
 `learning_query(action=explain)` remains available and reuses the same detailed
 V3 scheduler document as `deai_guide(topic=learning_v3)`.
+
+## Asynchronous operations (0.3)
+
+`batch_submit` submits one approved list of operations and immediately returns
+a durable task ID. Operations run in order and may combine initialization,
+learning add/remove/reset, folder creation and article import. Use `batch_query`
+for read-only progress and `batch_retry` for unfinished work on the same list.
+Initialization is bounded to three concurrent words across the backend process;
+stage checkpoints survive restarts for 24 hours. The gateway does not run workers.
+
+`lexeme_initialize` now submits an asynchronous job too. Its input remains
+compatible (with optional `idempotency_key`), but its response is a task object,
+not completed entries. Do not split a batch because generation takes a long time;
+retain the task ID and poll. Refresh the client's tool discovery after upgrading.
+Spark decides its own approval policy; batching does not grant full access.
+
+See [the operation contract](../docs/api/agent-batches.md) for payloads, result
+references, failure policy, deduplication and recovery boundaries.
 
 ## Configuration
 

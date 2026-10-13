@@ -82,18 +82,24 @@ pub async fn list_learning(pool: &DbPool) -> Result<Vec<AgentLearningRow>, sqlx:
     .await
 }
 
-pub async fn remove_learning(pool: &DbPool, entry_id: i64) -> Result<bool, sqlx::Error> {
+pub async fn remove_learning<'e>(
+    executor: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
+    entry_id: i64,
+) -> Result<bool, sqlx::Error> {
     Ok(
         sqlx::query("DELETE FROM learning_progress WHERE entry_id = $1")
             .bind(entry_id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected()
             > 0,
     )
 }
 
-pub async fn reset_learning(pool: &DbPool, entry_id: i64) -> Result<(), sqlx::Error> {
+pub async fn reset_learning<'e>(
+    executor: impl sqlx::Executor<'e, Database = sqlx::Postgres>,
+    entry_id: i64,
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         INSERT INTO learning_progress (entry_id)
@@ -111,7 +117,7 @@ pub async fn reset_learning(pool: &DbPool, entry_id: i64) -> Result<(), sqlx::Er
         "#,
     )
     .bind(entry_id)
-    .execute(pool)
+    .execute(executor)
     .await?;
     Ok(())
 }

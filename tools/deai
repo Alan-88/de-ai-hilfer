@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 
 const REQUEST_TIMEOUT_MS = 60_000;
 const READ_RETRIES = 2;
@@ -61,6 +62,8 @@ const parsed = parseArgs({
     "entry-id": { type: "string" },
     "session-id": { type: "string" },
     stdin: { type: "boolean", default: false },
+    async: { type: "boolean", default: false },
+    "idempotency-key": { type: "string" },
     yes: { type: "boolean", default: false },
     lexeme: { type: "boolean", default: false },
     provider: { type: "string" },
@@ -81,6 +84,8 @@ if (parsed.values["self-test"]) {
     folder_id: null,
   });
   assert.throws(() => parseArticleInput('{"title":"","body":"Text"}'), /title/);
+  assert.equal(parseBatchInput('{"idempotency_key":"sample","operations":[{"id":"folder","operation":{"action":"folder_create","name":"German"}}]}').operations.length, 1);
+  assert.throws(() => parseBatchInput('{"idempotency_key":"sample","operations":[]}'), /operations/);
   assert.match(LEARNING_GUIDE, /first rating for a card.*long-term decision/);
   assert.match(LEARNING_GUIDE, /no separate long silent-period rule/);
   assert.deepEqual(parseEnv('DEAI_API_URL=https://de.alan-studio.uk/api/v1\nDEAI_API_TOKEN="test-token"'), {
@@ -113,7 +118,7 @@ const token = parsed.values.token ?? process.env.DEAI_API_TOKEN ?? fileEnv.DEAI_
 if (!token) fail("Set DEAI_API_TOKEN or pass --token.");
 
 const stdinRaw = parsed.values.stdin ? readFileSync(0, "utf8") : null;
-const inputs = stdinRaw === null || (group === "article" && action === "import")
+const inputs = stdinRaw === null || (group === "article" && action === "import") || (group === "batch" && action === "submit")
   ? positionals
   : parseInput(stdinRaw);
 
@@ -136,12 +141,27 @@ try {
     const body = parsed.values.provider
       ? { model_override: { provider_name: parsed.values.provider, model_id: parsed.values.model } }
       : {};
-    output = await many(inputs, (id) =>
+    output = parsed.values.async ? await request("/agent/batches", {
+      method: "POST", body: JSON.stringify({
+        idempotency_key: parsed.values["idempotency-key"] ?? randomUUID(),
+        operations: [{id:"initialize",operation:{action:"lexeme_initialize",lexeme_ids:inputs.map(id=>integer(id,"lexeme id")),...body}}],
+      }),
+    }) : await many(inputs, (id) =>
       request(`/agent/lexemes/${integer(id, "lexeme id")}/initialize`, {
         method: "POST",
         body: JSON.stringify(body),
       }),
     );
+  } else if (group === "batch" && action === "submit") {
+    requireConfirmation();
+    if (stdinRaw === null) fail("Batch submit requires a JSON object through --stdin.");
+    output = await request("/agent/batches", {method:"POST",body:JSON.stringify(parseBatchInput(stdinRaw))});
+  } else if (group === "batch" && action === "list") {
+    output = await request(`/agent/batches?limit=${integer(parsed.values.limit ?? "20","limit")}`);
+  } else if (group === "batch" && ["get","retry"].includes(action)) {
+    if (inputs.length !== 1 || typeof inputs[0] !== "string" || !inputs[0]) fail("Provide one batch ID.");
+    if (action === "retry") requireConfirmation();
+    output = await request(`/agent/batches/${encodeURIComponent(inputs[0])}${action === "retry" ? "/retry" : ""}`, action === "retry" ? {method:"POST"} : {});
   } else if (group === "article" && action === "list") {
     output = await request("/reading");
   } else if (group === "article" && action === "get") {
@@ -298,6 +318,14 @@ function parseArticleInput(raw) {
   return { title, body: value.body, folder_id: folderId };
 }
 
+function parseBatchInput(raw) {
+  const value = JSON.parse(raw);
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("batch stdin must contain a JSON object");
+  if (typeof value.idempotency_key !== "string" || !value.idempotency_key.trim()) throw new Error("batch idempotency_key is required");
+  if (!Array.isArray(value.operations) || !value.operations.length || value.operations.length > 100) throw new Error("batch operations must contain 1–100 steps");
+  return value;
+}
+
 function apiBase(value) {
   return value.replace(/\/+$/, "");
 }
@@ -348,7 +376,11 @@ function usage(code) {
   console.log(`Usage:
   tools/deai lexeme resolve <surface...> [--limit 8]
   tools/deai lexeme inspect <lexeme-id...>
-  tools/deai entry initialize <lexeme-id...> --yes [--provider NAME --model ID]
+  tools/deai entry initialize <lexeme-id...> --yes [--async --idempotency-key KEY] [--provider NAME --model ID]
+  tools/deai batch submit --stdin --yes
+  tools/deai batch get <batch-id>
+  tools/deai batch list [--limit N]
+  tools/deai batch retry <batch-id> --yes
   tools/deai article list
   tools/deai article get <article-id...>
   tools/deai article import --stdin --yes

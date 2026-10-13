@@ -54,15 +54,26 @@ pub(crate) async fn generate_model_a(
     let resolved =
         resolve_task_model_with_override(state, AiModelTask::Analyze, model_override).await?;
     let started_at = Instant::now();
-    let result = resolved
-        .client
-        .chat_model_with_options(
-            &resolved.model,
-            &prompt,
-            &user_payload,
-            model_a_chat_options(),
-        )
-        .await;
+    let mut attempt = 0;
+    let result = loop {
+        let result = resolved
+            .client
+            .chat_model_with_options(
+                &resolved.model,
+                &prompt,
+                &user_payload,
+                model_a_chat_options(),
+            )
+            .await;
+        match result {
+            Err(error) if attempt < 2 && is_hard_failure(&error) => {
+                attempt += 1;
+                tracing::warn!("grounded model A retry: target={target_query}, attempt={attempt}, err={error:#}");
+                tokio::time::sleep(Duration::from_secs(2_u64.pow(attempt))).await;
+            }
+            result => break result,
+        }
+    };
     let elapsed_ms = started_at.elapsed().as_millis();
     let raw = match result {
         Ok(raw) => {
@@ -249,6 +260,7 @@ pub(crate) async fn stream_stage2_markdown(
     unreachable!("grounded stream stage2 retry loop should always return or error");
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct GroundedStage1 {
     pub dictionary_facts: Option<String>,
     pub output: ModelAOutput,

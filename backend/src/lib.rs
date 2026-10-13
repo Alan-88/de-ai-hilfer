@@ -1,5 +1,6 @@
 pub mod ai;
 mod ai_settings_models;
+pub mod batch_models;
 pub mod config;
 pub mod db;
 pub mod dictionary_lexeme_models;

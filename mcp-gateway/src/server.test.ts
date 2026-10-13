@@ -153,6 +153,9 @@ test("OAuth-protected MCP exposes the Skill-aligned tools and forwards a lexeme 
     [
       "article_import",
       "article_query",
+      "batch_query",
+      "batch_retry",
+      "batch_submit",
       "deai_guide",
       "learning_correction",
       "learning_membership",

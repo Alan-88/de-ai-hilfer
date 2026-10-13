@@ -95,6 +95,7 @@ async fn analyze_with_mode(
         (query.to_string(), None)
     };
 
+    let _word_lock = crate::services::analysis_execution::lock_word(&prototype).await;
     let existing_entry = match request.entry_id {
         Some(entry_id) => knowledge::find_by_id(&state.pool, entry_id).await?,
         None if request.force_refresh => {
@@ -185,6 +186,7 @@ async fn analyze_with_mode(
             quality_mode,
             generation_hint,
             request.model_override.as_ref(),
+            !request.force_refresh,
         )
         .await
         {

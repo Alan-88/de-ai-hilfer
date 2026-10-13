@@ -1,6 +1,8 @@
 pub mod agent_api;
+pub mod agent_batches;
 pub mod ai_model_resolver;
 pub mod ai_settings;
+pub mod analysis_execution;
 pub mod analysis_grounded_ab_cache;
 pub mod analysis_grounded_assembly;
 pub mod analysis_grounded_backfill;

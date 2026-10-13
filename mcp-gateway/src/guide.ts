@@ -46,9 +46,12 @@ Use this mental model: a surface occurrence in text resolves to a dictionary lex
 
 Read operations may run directly. Before initializing entries, importing articles, changing learning membership or correcting review history, inspect the current state and obtain explicit user confirmation. Never guess a lexeme when resolution is ambiguous or missing, and never bulk-add every unfamiliar word from an article.
 
+For confirmed multi-operation writes, use batch_submit once and read batch_operations guidance. lexeme_initialize also submits asynchronously: retain its task ID and poll batch_query for completion; do not split a long batch into repeated single-word writes.
+
 Call deai_guide with the relevant topic before a multi-step workflow or whenever the data model, article bookmark rules, learning scheduler, diagnostics or correction semantics are unclear.`;
 
 export const DEAI_GUIDE_TOPICS = [
+  "batch_operations",
   "overview",
   "article_learning",
   "vocabulary_workflow",
@@ -70,9 +73,34 @@ interface DeaiGuide {
   details?: string;
 }
 
-const GUIDE_VERSION = "2026-10-07";
+const GUIDE_VERSION = "2026-10-13";
 
 export const DEAI_GUIDES: Readonly<Record<DeaiGuideTopic, DeaiGuide>> = {
+  batch_operations: {
+    version: GUIDE_VERSION,
+    topic: "batch_operations",
+    summary: "A general asynchronous operation list reduces write calls and avoids long MCP initialization waits. It is not limited to article workflows.",
+    concepts: [
+      "batch_submit returns a task ID immediately; queued and running are not success. batch_query is read-only and reports durable per-step and per-word progress.",
+      "Operations run in submitted order. One lexeme_initialize operation may contain up to 100 lexemes, processed with bounded concurrency. Different batches can run concurrently.",
+      "Supported operations: lexeme_initialize, learning_membership(add/remove/reset), folder_create and article_import. This is a business-operation list, not arbitrary HTTP or executable code.",
+      "IDs may refer to an earlier result using {step,path}; path is a JSON pointer. folder_create returns /folder_id; article_import returns /article_id; initialization returns /results/0/value/entry_id etc.",
+      "A succeeded task finished every operation. completed_with_errors requires inspecting failures and skips. Explicit depends_on requires whole earlier steps to succeed; an individual successful result of a partial step can still be referenced.",
+    ],
+    workflow: [
+      "Resolve candidates and inspect existing state read-only before composing confirmed writes. Use article_query(action=list) to select existing folders.",
+      "Submit the exact approved list once with a stable idempotency_key, unique step IDs and references only to earlier steps. on_error defaults to continue; stop skips later operations after a failure.",
+      "Poll batch_query(action=get,batch_id=returned id) every 3–5 seconds; do not submit the same work again while it is running.",
+      "For confirmed transient failures, batch_retry keeps the same list and preserves completed operations/items. For changed inputs, submit a newly approved list with a new key.",
+    ],
+    safety_rules: [
+      "Every write must match the user's approved list; no new word selection, bookmark rewriting, learning removal or reset may be inferred during execution.",
+      "Identical uncertain resubmissions must reuse idempotency_key; the backend rejects reuse for a different payload. Successful committed mutations have transactional receipts.",
+      "Initialization checkpoints survive restarts for 24 hours, subject to dictionary, prompt and model-routing identity. Quality validation remains required.",
+      "The server reduces tool calls but cannot override Spark's permission policy. Ordinary correction operations are not part of this first batch operation set.",
+    ],
+    related_tools: ["batch_submit","batch_query","batch_retry","lexeme_initialize","lexeme_query","article_query"],
+  },
   overview: {
     version: GUIDE_VERSION,
     topic: "overview",
@@ -123,7 +151,7 @@ export const DEAI_GUIDES: Readonly<Record<DeaiGuideTopic, DeaiGuide>> = {
       "Use the local sentence to select the intended form-of candidate and keep ambiguous items separate.",
       "Inspect selected lexeme IDs with lexeme_query(action=inspect).",
       "Show the user the proposed headword, gloss, knowledge status and learning status for confirmation.",
-      "Initialize only confirmed missing entries, then add only confirmed entries to learning when requested.",
+      "Initialize confirmed missing entries asynchronously and poll batch_query before using results; for multiple approved writes, prefer batch_submit (see batch_operations).",
       "Insert bookmarks only at the confirmed occurrences and import the final article after explicit confirmation.",
     ],
     safety_rules: [
@@ -149,7 +177,7 @@ export const DEAI_GUIDES: Readonly<Record<DeaiGuideTopic, DeaiGuide>> = {
       "Use conversation context to choose candidates and ask the user when the result is ambiguous.",
       "Inspect selected lexemes to distinguish ready entries, missing entries and existing learning cards.",
       "Obtain explicit confirmation for the proposed headwords and actions.",
-      "Initialize confirmed missing entries, inspect the returned result, and add only confirmed ready entries to learning.",
+      "Send all confirmed missing IDs in one lexeme_initialize call; it returns a task ID immediately. Poll batch_query until terminal, inspect each per-word result, then add confirmed ready entries. Prefer batch_submit for combined writes.",
       "Re-inspect affected lexemes before reporting final state.",
     ],
     safety_rules: [

@@ -6,8 +6,7 @@ use crate::services::ai_model_resolver::{
     fallback_model_for, resolve_task_model, resolve_task_model_with_override, AiModelTask,
 };
 use crate::services::analysis_grounded_ab_cache::{
-    get_grounded_ab_cache, put_grounded_ab_cache, remove_grounded_ab_cache, GroundedAbCache,
-    GroundedAbCacheKey,
+    checkpoint_key, GenerationCheckpoint, GroundedAbCache,
 };
 use crate::services::analysis_grounded_assembly::assemble_grounded_structured_document;
 use crate::services::analysis_grounded_generation::{
@@ -40,6 +39,7 @@ fn structure_chat_options() -> AiChatOptions {
     }
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GroundedAnalysis {
     pub analysis: AnalysisDocument,
     pub model: String,
@@ -52,6 +52,7 @@ pub async fn generate_grounded_analysis(
     quality_mode: QualityMode,
     generation_hint: Option<&str>,
     model_override: Option<&AiModelOverride>,
+    reuse_checkpoint: bool,
 ) -> Result<GroundedAnalysis> {
     generate_grounded_analysis_with_stage2_fallback(
         state,
@@ -61,6 +62,7 @@ pub async fn generate_grounded_analysis(
         true,
         generation_hint,
         model_override,
+        reuse_checkpoint,
     )
     .await
 }
@@ -79,6 +81,7 @@ pub async fn generate_grounded_analysis_strict_primary(
         false,
         None,
         None,
+        true,
     )
     .await
 }
@@ -91,22 +94,49 @@ async fn generate_grounded_analysis_with_stage2_fallback(
     allow_stage2_fallback: bool,
     generation_hint: Option<&str>,
     model_override: Option<&AiModelOverride>,
+    reuse_checkpoint: bool,
 ) -> Result<GroundedAnalysis> {
     let stage2_primary =
         resolve_task_model_with_override(state, AiModelTask::Analyze, model_override).await?;
-    let cache_key = GroundedAbCacheKey::new(
+    let _slot = crate::services::analysis_execution::generation_slot().await;
+    let cache_key = checkpoint_key(
+        state,
         target_query,
+        dictionary_entry,
         quality_mode,
         generation_hint,
-        &stage2_primary.model,
         model_override,
         allow_stage2_fallback,
-    );
-    let grounded_ab = if let Some(cached) = get_grounded_ab_cache(&cache_key) {
-        tracing::info!("grounded AB cache hit: target={target_query}");
+    )
+    .await?;
+    let mut checkpoint: GenerationCheckpoint = if reuse_checkpoint {
+        crate::repositories::analysis_checkpoints::get(&state.pool, &cache_key)
+            .await?
+            .unwrap_or_default()
+    } else {
+        GenerationCheckpoint::default()
+    };
+    if let Some(complete) = checkpoint.complete {
+        return Ok(complete);
+    }
+    let grounded_ab = if let Some(cached) = checkpoint.ab.clone() {
         cached
     } else {
-        let stage1 = generate_model_a(state, target_query, quality_mode, model_override).await?;
+        let stage1 = if let Some(stage1) = checkpoint.stage1.clone() {
+            stage1
+        } else {
+            let stage1 =
+                generate_model_a(state, target_query, quality_mode, model_override).await?;
+            checkpoint.stage1 = Some(stage1.clone());
+            crate::repositories::analysis_checkpoints::put(
+                &state.pool,
+                &cache_key,
+                "A",
+                &checkpoint,
+            )
+            .await?;
+            stage1
+        };
         let fallback_model = if allow_stage2_fallback && !stage2_primary.persisted {
             fallback_model_for(state, quality_mode)
         } else {
@@ -133,7 +163,9 @@ async fn generate_grounded_analysis_with_stage2_fallback(
             stage2_markdown: stage2.markdown,
             stage2_model: stage2.model,
         };
-        put_grounded_ab_cache(cache_key.clone(), cached.clone());
+        checkpoint.ab = Some(cached.clone());
+        crate::repositories::analysis_checkpoints::put(&state.pool, &cache_key, "B", &checkpoint)
+            .await?;
         cached
     };
     let (structured, _structure_model) = structure_and_assemble(
@@ -146,9 +178,7 @@ async fn generate_grounded_analysis_with_stage2_fallback(
         None,
     )
     .await?;
-    remove_grounded_ab_cache(&cache_key);
-
-    Ok(GroundedAnalysis {
+    let complete = GroundedAnalysis {
         analysis: build_grounded_document(
             target_query,
             grounded_ab.stage2_markdown,
@@ -159,7 +189,11 @@ async fn generate_grounded_analysis_with_stage2_fallback(
             &_structure_model,
         ),
         model: grounded_ab.stage2_model,
-    })
+    };
+    checkpoint.complete = Some(complete.clone());
+    crate::repositories::analysis_checkpoints::put(&state.pool, &cache_key, "C", &checkpoint)
+        .await?;
+    Ok(complete)
 }
 
 pub async fn stream_grounded_analysis(
@@ -170,23 +204,55 @@ pub async fn stream_grounded_analysis(
     quality_mode: QualityMode,
     generation_hint: Option<&str>,
     model_override: Option<&AiModelOverride>,
+    reuse_checkpoint: bool,
 ) -> Result<GroundedAnalysis> {
     let stage2_primary =
         resolve_task_model_with_override(state, AiModelTask::Analyze, model_override).await?;
-    let cache_key = GroundedAbCacheKey::new(
+    let _slot = crate::services::analysis_execution::generation_slot().await;
+    if tx.is_closed() {
+        return Err(anyhow!("stream analyze canceled by client"));
+    }
+    let cache_key = checkpoint_key(
+        state,
         target_query,
+        dictionary_entry,
         quality_mode,
         generation_hint,
-        &stage2_primary.model,
         model_override,
         true,
-    );
-    let grounded_ab = if let Some(cached) = get_grounded_ab_cache(&cache_key) {
+    )
+    .await?;
+    let mut checkpoint: GenerationCheckpoint = if reuse_checkpoint {
+        crate::repositories::analysis_checkpoints::get(&state.pool, &cache_key)
+            .await?
+            .unwrap_or_default()
+    } else {
+        GenerationCheckpoint::default()
+    };
+    if let Some(complete) = checkpoint.complete {
+        tx.send(sse_delta(&complete.analysis.markdown)).ok();
+        return Ok(complete);
+    }
+    let grounded_ab = if let Some(cached) = checkpoint.ab.clone() {
         tracing::info!("grounded stream AB cache hit: target={target_query}");
         tx.send(sse_delta(&cached.stage2_markdown)).ok();
         cached
     } else {
-        let stage1 = generate_model_a(state, target_query, quality_mode, model_override).await?;
+        let stage1 = if let Some(stage1) = checkpoint.stage1.clone() {
+            stage1
+        } else {
+            let stage1 =
+                generate_model_a(state, target_query, quality_mode, model_override).await?;
+            checkpoint.stage1 = Some(stage1.clone());
+            crate::repositories::analysis_checkpoints::put(
+                &state.pool,
+                &cache_key,
+                "A",
+                &checkpoint,
+            )
+            .await?;
+            stage1
+        };
         if tx.is_closed() {
             return Err(anyhow!("stream analyze canceled by client"));
         }
@@ -221,11 +287,12 @@ pub async fn stream_grounded_analysis(
             stage2_markdown: stage2.markdown,
             stage2_model: stage2.model,
         };
-        put_grounded_ab_cache(cache_key.clone(), cached.clone());
+        checkpoint.ab = Some(cached.clone());
+        crate::repositories::analysis_checkpoints::put(&state.pool, &cache_key, "B", &checkpoint)
+            .await?;
         cached
     };
     if tx.is_closed() {
-        remove_grounded_ab_cache(&cache_key);
         return Err(anyhow!("stream analyze canceled by client"));
     }
 
@@ -239,9 +306,7 @@ pub async fn stream_grounded_analysis(
         None,
     )
     .await?;
-    remove_grounded_ab_cache(&cache_key);
-
-    Ok(GroundedAnalysis {
+    let complete = GroundedAnalysis {
         analysis: build_grounded_document(
             target_query,
             grounded_ab.stage2_markdown,
@@ -252,7 +317,11 @@ pub async fn stream_grounded_analysis(
             &structure_model,
         ),
         model: grounded_ab.stage2_model,
-    })
+    };
+    checkpoint.complete = Some(complete.clone());
+    crate::repositories::analysis_checkpoints::put(&state.pool, &cache_key, "C", &checkpoint)
+        .await?;
+    Ok(complete)
 }
 
 pub(crate) async fn structure_and_assemble(

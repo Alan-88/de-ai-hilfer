@@ -6,6 +6,30 @@ pub async fn replace_database_snapshot(
     backup: &DatabaseBackupPayload,
 ) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
+    let available: bool = sqlx::query_scalar(
+        "SELECT pg_try_advisory_xact_lock(hashtextextended('database-snapshot',0))",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    if !available {
+        return Err(sqlx::Error::Protocol(
+            "background batch is still active; finish it before restoring a backup".into(),
+        ));
+    }
+    let pending: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM agent_batches WHERE status IN ('queued','running'))",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    if pending {
+        return Err(sqlx::Error::Protocol(
+            "background batch is still active; finish it before restoring a backup".into(),
+        ));
+    }
+    // Operational receipts refer to the old IDs and are not part of a user-data backup.
+    sqlx::query("TRUNCATE agent_batches, agent_operation_receipts, analysis_checkpoints")
+        .execute(&mut *tx)
+        .await?;
 
     sqlx::query(
         "TRUNCATE TABLE learning_review_corrections, learning_review_logs, reading_article_bookmarks, reading_articles, reading_folders, learning_progress, follow_ups, knowledge_entries RESTART IDENTITY CASCADE",

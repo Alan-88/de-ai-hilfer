@@ -442,6 +442,46 @@ pub async fn add_learning(state: &AppState, entry_id: i64) -> Result<LearningPro
     learning::add_word(state, entry_id).await
 }
 
+pub(crate) async fn membership_once(
+    state: &AppState,
+    key: &str,
+    action: crate::batch_models::MembershipAction,
+    entry_id: i64,
+) -> Result<Value> {
+    use crate::batch_models::MembershipAction;
+    use crate::repositories::agent_batches;
+    let mut tx = state.pool.begin().await?;
+    agent_batches::lock_operation(&mut tx, key).await?;
+    if let Some(value) = agent_batches::receipt(&mut tx, key).await? {
+        return Ok(value);
+    }
+    knowledge::find_by_id(&state.pool, entry_id)
+        .await?
+        .ok_or_else(|| anyhow!("knowledge entry not found"))?;
+    let status = match action {
+        MembershipAction::Add => {
+            learning_repository::insert_progress(
+                &mut *tx,
+                &crate::models::NewLearningProgress { entry_id },
+            )
+            .await?;
+            "added"
+        }
+        MembershipAction::Remove => {
+            repository::remove_learning(&mut *tx, entry_id).await?;
+            "not_added"
+        }
+        MembershipAction::Reset => {
+            repository::reset_learning(&mut *tx, entry_id).await?;
+            "new"
+        }
+    };
+    let result = serde_json::json!({"entry_id":entry_id,"status":status});
+    agent_batches::save_receipt(&mut tx, key, &result).await?;
+    tx.commit().await?;
+    Ok(result)
+}
+
 pub async fn reset_intraday(state: &AppState, entry_id: i64) -> Result<LearningCorrectionResponse> {
     apply_intraday_correction(state, entry_id, "intraday_reset", true).await
 }

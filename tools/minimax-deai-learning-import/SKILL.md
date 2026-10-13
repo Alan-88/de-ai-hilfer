@@ -37,8 +37,11 @@ printf '%s' '[123,456]' | <skill-root>/bin/deai --env-file <skill-root>/deai.env
 8. Initialize only confirmed lexemes whose `knowledge.status` is `missing`:
 
 ```bash
-<skill-root>/bin/deai --env-file <skill-root>/deai.env entry initialize 123 --yes
+<skill-root>/bin/deai --env-file <skill-root>/deai.env entry initialize 123 456 --async --idempotency-key confirmed-words-1 --yes
 ```
+
+Poll the returned task with the same CLI/env-file prefix and `batch get TASK_ID`
+until terminal; inspect each word result before continuing.
 
 9. Add only successfully initialized or already-ready entries:
 
@@ -56,6 +59,36 @@ Only persist an article when the user explicitly asks. Bookmarks belong directly
 printf '%s' '{"title":"Reisen","body":"Ich plane meine [Reisen](Reise).","folder_id":null}' \
   | <skill-root>/bin/deai --env-file <skill-root>/deai.env article import --stdin --yes
 ```
+
+## General asynchronous operation lists
+
+Prefer `entry initialize ID... --async --idempotency-key KEY --yes` for
+multiple confirmed words. It immediately returns a task ID; query it with
+`batch get TASK_ID` every 3–5 seconds and inspect each result before reporting
+completion or adding cards. Keep the existing skill-root/env-file prefix.
+
+For a confirmed mixed list, `batch submit --stdin --yes` accepts:
+`{idempotency_key,on_error?:"continue"|"stop",operations:[{id,depends_on?,operation}]}`.
+Supported operation actions and parameters:
+
+- `lexeme_initialize`: `lexeme_ids` array, optional `model_override:{provider_name,model_id}`.
+- `learning_membership`: `mutation:add|remove|reset`, optional `target_type:entry|lexeme` (default entry), `ids` array.
+- `folder_create`: `name`, optional `parent_id`.
+- `article_import`: `title,body`, optional `folder_id`.
+
+Every ID is a positive integer or `{step,path}` pointing to an earlier
+result: folder `/folder_id`, initialization `/results/0/value/entry_id`.
+Steps run in order; a multi-word initialization is bounded concurrent.
+`depends_on` requires whole steps to succeed; an individual successful word
+of a partially failed step can be referenced separately. `on_error` defaults
+to continue; stop skips later steps after a failure. Invalid references skip
+the dependent operation. The batch is not an all-or-nothing transaction.
+
+Reuse a stable idempotency key for identical uncertain submissions. Use
+`batch retry TASK_ID --yes` for unfinished work on the same approved list,
+and `batch list` to recover task IDs. The list cannot change during retry;
+new content needs a new approved list/key. Successful writes are preserved.
+Never guess new words or silently rewrite failed article bookmarks.
 
 ## Safety
 

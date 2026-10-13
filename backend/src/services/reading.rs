@@ -129,15 +129,42 @@ pub async fn create_article(
     body: &str,
     folder_id: Option<i64>,
 ) -> Result<ReadingArticleDetail, ReadingError> {
+    let id = create_article_once(state, title, body, folder_id, None).await?;
+    article_detail(state, id).await
+}
+
+pub async fn create_article_once(
+    state: &AppState,
+    title: &str,
+    body: &str,
+    folder_id: Option<i64>,
+    operation_key: Option<&str>,
+) -> Result<i64, ReadingError> {
+    let mut tx = state.pool.begin().await?;
+    if let Some(key) = operation_key {
+        crate::repositories::agent_batches::lock_operation(&mut tx, key).await?;
+        if let Some(receipt) = crate::repositories::agent_batches::receipt(&mut tx, key).await? {
+            return receipt["article_id"]
+                .as_i64()
+                .ok_or_else(|| ReadingError::Conflict("invalid stored article receipt".into()));
+        }
+    }
     let (title, body) = validate_article_input(title, body)?;
     validate_folder_target(state, folder_id).await?;
     let parsed = parse_reading_content(body).map_err(ReadingError::BookmarkValidation)?;
     let bookmarks = resolve_bookmarks(state, &parsed).await?;
-    let mut tx = state.pool.begin().await?;
     let article = reading::insert_article(&mut tx, title, body, folder_id).await?;
     reading::replace_bookmarks(&mut tx, article.id, &bookmarks).await?;
+    if let Some(key) = operation_key {
+        crate::repositories::agent_batches::save_receipt(
+            &mut tx,
+            key,
+            &serde_json::json!({"article_id": article.id}),
+        )
+        .await?;
+    }
     tx.commit().await?;
-    article_detail(state, article.id).await
+    Ok(article.id)
 }
 
 pub async fn save_article(
@@ -165,10 +192,33 @@ pub async fn create_folder(
     name: &str,
     parent_id: Option<i64>,
 ) -> Result<ReadingFolder, ReadingError> {
+    create_folder_once(state, name, parent_id, None).await
+}
+
+pub async fn create_folder_once(
+    state: &AppState,
+    name: &str,
+    parent_id: Option<i64>,
+    operation_key: Option<&str>,
+) -> Result<ReadingFolder, ReadingError> {
+    let mut tx = state.pool.begin().await?;
+    if let Some(key) = operation_key {
+        crate::repositories::agent_batches::lock_operation(&mut tx, key).await?;
+        if let Some(receipt) = crate::repositories::agent_batches::receipt(&mut tx, key).await? {
+            return serde_json::from_value(receipt)
+                .map_err(|_| ReadingError::Conflict("invalid stored folder receipt".into()));
+        }
+    }
     let name = validate_title(name, "文件夹名称")?;
     validate_folder_target(state, parent_id).await?;
     ensure_unique_folder_name(state, parent_id, name, None).await?;
-    Ok(reading::insert_folder(&state.pool, name, parent_id).await?)
+    let folder = reading::insert_folder(&mut tx, name, parent_id).await?;
+    if let Some(key) = operation_key {
+        crate::repositories::agent_batches::save_receipt(&mut tx, key, &serde_json::json!(&folder))
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(folder)
 }
 
 pub async fn update_folder(

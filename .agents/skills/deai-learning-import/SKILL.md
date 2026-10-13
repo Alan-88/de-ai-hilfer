@@ -35,8 +35,13 @@ printf '%s' '[123,456]' | ./tools/deai lexeme inspect --stdin
 8. Initialize only confirmed `knowledge.status == missing` lexemes:
 
 ```bash
-./tools/deai entry initialize 123 --yes
+./tools/deai entry initialize 123 456 --async --idempotency-key confirmed-words-1 --yes
 ```
+
+The response is a queued task, not completed entries. Retain its `id`, poll
+`./tools/deai batch get TASK_ID` every 3–5 seconds until terminal and inspect
+every per-word result. Do not split long generation into repeated single-word
+writes. Reuse the same key for uncertain resubmissions.
 
 9. Add only successfully initialized or already-ready entries:
 
@@ -69,6 +74,23 @@ Do not guess or silently rewrite a failing bookmark. Report the backend validati
 - `learning reset` returns the card to New state and keeps historical review logs.
 - Batch commands continue after per-item failures. Inspect every returned item and surface failures; do not treat a partially successful batch as complete.
 - When candidate matching is unexpectedly noisy, misses an obvious target, or ranks the contextually correct target poorly, append a compact case to `docs/iterations/agent-learning-import-anomalies.md`. Record only the surface form, candidate behavior, and chosen headword; never persist the source sentence. Do not add matching heuristics from a single case.
+
+## General asynchronous operation lists
+
+For an approved list of combined operations, use `./tools/deai batch submit
+--stdin --yes` with one JSON object containing `idempotency_key`, optional
+`on_error: continue|stop` and `operations: [{id,depends_on?,operation}]`.
+Operations run in order and are not restricted to articles. Supported actions
+are `lexeme_initialize`, `learning_membership` (add/remove/reset),
+`folder_create` and `article_import`. Follow `docs/api/agent-batches.md` for the
+exact schema. IDs can reference earlier results via `{step,path}` JSON pointers.
+
+Read progress with `batch get TASK_ID` or `batch list`. `batch retry TASK_ID
+--yes` retries only unfinished work on the original list; successful writes
+have transactional receipts and must not be repeated in a new task. A changed
+list requires a new key and must remain within the user's confirmed actions.
+`queued/running` are not completion; `completed_with_errors` requires inspecting
+failed/skipped steps. Do not invent candidates or rewrite failed bookmarks.
 
 ## Other commands
 

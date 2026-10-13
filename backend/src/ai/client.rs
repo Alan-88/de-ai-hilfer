@@ -43,6 +43,10 @@ pub struct AiClient {
 }
 
 impl AiClient {
+    pub(crate) fn routing_identity(&self) -> &str {
+        &self.base_url
+    }
+
     pub fn new(api_key: String, base_url: String) -> Self {
         Self {
             client: Client::builder()

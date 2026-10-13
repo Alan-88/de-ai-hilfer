@@ -214,7 +214,7 @@ pub async fn folder_has_content(pool: &DbPool, folder_id: i64) -> Result<bool, s
 }
 
 pub async fn insert_folder(
-    pool: &DbPool,
+    connection: &mut PgConnection,
     name: &str,
     parent_id: Option<i64>,
 ) -> Result<ReadingFolder, sqlx::Error> {
@@ -227,7 +227,7 @@ pub async fn insert_folder(
     )
     .bind(name)
     .bind(parent_id)
-    .fetch_one(pool)
+    .fetch_one(connection)
     .await
 }
 

@@ -27,3 +27,10 @@ request still fails, the CLI reports the underlying DNS, TLS, socket, or
 timeout cause. Use the internal URL when this command runtime shares the
 private route; otherwise use the public URL. A browser reaching the site does
 not prove that a background command has the same network namespace or proxy.
+
+For long vocabulary generation, prefer `entry initialize ID... --async
+--idempotency-key KEY --yes`, which returns a task ID immediately. `batch
+submit --stdin --yes` submits a general ordered operation list including
+initialization, learning membership, folder creation and article import.
+Poll `batch get TASK_ID`; use `batch retry TASK_ID --yes` for unfinished work.
+Keep the same key when an identical submission's response was lost.

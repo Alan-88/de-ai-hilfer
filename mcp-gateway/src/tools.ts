@@ -1,5 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
+import { randomUUID } from "node:crypto";
+import { batchSubmission } from "./batch.js";
 
 import { DeaiApi, errorMessage, runMany } from "./backend.js";
 import { DEAI_GUIDES, DEAI_GUIDE_TOPICS, LEARNING_GUIDE, SERVER_INSTRUCTIONS } from "./guide.js";
@@ -26,7 +28,7 @@ const destructiveWrite = {
 
 export function buildMcpServer(api: DeaiApi): McpServer {
   const server = new McpServer(
-    { name: "de-ai-hilfer", version: "0.2.0" },
+    { name: "de-ai-hilfer", version: "0.3.0" },
     { instructions: SERVER_INSTRUCTIONS },
   );
 
@@ -79,25 +81,30 @@ export function buildMcpServer(api: DeaiApi): McpServer {
     {
       title: "Initialize vocabulary entries",
       description:
-        "Initialize user-confirmed missing lexemes through the existing AI analysis pipeline. " +
-        "This writes knowledge entries and can take several minutes. Do not call it until the user has explicitly confirmed the selected headwords. " +
+        "Submit all user-confirmed missing lexemes as one asynchronous initialization job. Returns a task ID immediately, not finished entries. " +
+        "Poll batch_query(action=get,batch_id=returned id) for per-word results; do not split into one call per word or resubmit while it is running. " +
+        "Supply the same idempotency_key when repeating an uncertain submission. Do not call until the user has confirmed the selected headwords. " +
         "provider_name and model_id must be supplied together or both omitted.",
       inputSchema: z.object({
         lexeme_ids: positiveIds,
         provider_name: z.string().trim().min(1).optional(),
         model_id: z.string().trim().min(1).optional(),
+        idempotency_key: z.string().min(1).max(128).optional(),
       }),
       annotations: writesData,
     },
-    async ({ lexeme_ids: lexemeIds, provider_name: providerName, model_id: modelId }) =>
+    async ({ lexeme_ids: lexemeIds, provider_name: providerName, model_id: modelId, idempotency_key: key }) =>
       handle(async () => {
         if (Boolean(providerName) !== Boolean(modelId)) {
           throw new Error("provider_name and model_id must be supplied together");
         }
-        const body = providerName
-          ? { model_override: { provider_name: providerName, model_id: modelId } }
-          : {};
-        return runMany(lexemeIds, async (lexemeId) => compactInitialization(await api.initializeLexeme(lexemeId, body)));
+        return api.post("/agent/batches", {
+          idempotency_key: key ?? randomUUID(),
+          operations: [{ id: "initialize", operation: {
+            action: "lexeme_initialize", lexeme_ids: lexemeIds,
+            ...(providerName ? { model_override: { provider_name: providerName, model_id: modelId } } : {}),
+          } }],
+        });
       }),
   );
 
@@ -238,9 +245,41 @@ export function buildMcpServer(api: DeaiApi): McpServer {
       handle(() => api.post("/reading/articles", { title, body, folder_id: folderId ?? null })),
   );
 
+  server.registerTool("batch_submit", {
+    title: "Submit an asynchronous batch of operations",
+    description: "Submit one user-approved list of business operations, executed in order in the background. Returns a task ID immediately. " +
+      "Supports vocabulary initialization, learning add/remove/reset, folder creation and article import in any combination. " +
+      "Use numeric IDs or {step,path} JSON-pointer references to earlier results, e.g. {step:'folder',path:'/folder_id'} or {step:'words',path:'/results/0/value/entry_id'}. " +
+      "depends_on requires earlier steps to succeed; successful items in a partially failed step can still be referenced individually. " +
+      "on_error defaults to continue; stop skips later steps after a failure. Reuse idempotency_key for identical resubmissions. " +
+      "Every mutation must match the approved list; do not choose new candidates or rewrite failed article bookmarks during execution.",
+    inputSchema: batchSubmission,
+    annotations: destructiveWrite,
+  }, async (request) => handle(() => api.post("/agent/batches", request)));
+
+  server.registerTool("batch_query", {
+    title: "Read background batch progress",
+    description: "Read-only task progress. action=get requires batch_id; action=list returns recent tasks. " +
+      "queued/running are unfinished; succeeded/completed_with_errors are terminal. Inspect every step and item result. Poll every 3–5 seconds, not in a tight loop. " +
+      "Use the returned task ID instead of submitting the same work again.",
+    inputSchema: z.object({action:z.enum(["get","list"]),batch_id:z.string().min(1).optional(),limit:z.number().int().min(1).max(100).optional()}),
+    annotations: readOnly,
+  }, async ({action,batch_id: id,limit}) => handle(() => {
+    if (action === "list") return api.get(`/agent/batches?limit=${limit ?? 20}`);
+    if (!id) throw new Error("batch_id is required for get");
+    return api.get(`/agent/batches/${encodeURIComponent(id)}`);
+  }));
+
+  server.registerTool("batch_retry", {
+    title: "Retry unfinished batch operations",
+    description: "Retry failed/skipped operations of the same approved task; successful operations and committed mutations are preserved. " +
+      "The operation list cannot be changed. Active jobs cannot be retried. Fix permanent validation errors in a separately approved new task instead.",
+    inputSchema: z.object({batch_id:z.string().min(1)}),
+    annotations: destructiveWrite,
+  }, async ({batch_id:id}) => handle(() => api.post(`/agent/batches/${encodeURIComponent(id)}/retry`)));
+
   return server;
 }
-
 function requireValues<T>(values: readonly T[] | undefined, name: string): asserts values is readonly T[] {
   if (!values?.length) throw new Error(`${name} is required for this action`);
 }
@@ -257,16 +296,4 @@ async function handle(operation: () => Promise<unknown> | unknown) {
       content: [{ type: "text" as const, text: errorMessage(error) }],
     };
   }
-}
-
-function compactInitialization(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  const response = value as Record<string, unknown>;
-  return {
-    entry_id: response.entry_id,
-    query_text: response.query_text,
-    source: response.source,
-    model: response.model,
-    status: "initialized",
-  };
 }

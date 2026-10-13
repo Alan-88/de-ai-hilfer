@@ -1,5 +1,6 @@
 mod ai;
 mod ai_settings_models;
+mod batch_models;
 mod config;
 mod db;
 mod dictionary_lexeme_models;
@@ -85,6 +86,15 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let agent_routes = Router::new()
+        .route(
+            "/batches",
+            post(handlers::agent_batches::submit).get(handlers::agent_batches::list),
+        )
+        .route("/batches/:batch_id", get(handlers::agent_batches::get))
+        .route(
+            "/batches/:batch_id/retry",
+            post(handlers::agent_batches::retry),
+        )
         .route("/lexemes/resolve", get(handlers::agent_api::resolve_lexeme))
         .route(
             "/lexemes/:lexeme_id",
@@ -127,6 +137,8 @@ async fn main() -> anyhow::Result<()> {
             app_state.clone(),
             handlers::agent_api::authorize,
         ));
+
+    services::agent_batches::start_worker(app_state.clone());
 
     // 构建路由
     let app = Router::new()
