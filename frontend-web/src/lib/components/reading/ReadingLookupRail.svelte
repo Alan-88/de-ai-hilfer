@@ -201,6 +201,7 @@
 
 <aside class="lookup-rail" class:mobile-open={open} aria-label="查词栏">
   <header class="lookup-head">
+    <button class="mobile-close" onclick={onClose} aria-label="关闭查词栏"><i class="ph ph-arrow-left"></i></button>
     <div class="lookup-search" onfocusout={handleSearchFocusOut}>
       <form onsubmit={(event) => { event.preventDefault(); void submitSearch(); }}>
         <i class="ph ph-magnifying-glass"></i>
@@ -235,8 +236,14 @@
         </div>
       {/if}
     </div>
-    <button class="mobile-close" onclick={onClose} aria-label="关闭查词栏"><i class="ph ph-x"></i></button>
   </header>
+
+  {#if !loading && !error && entry && analysis}
+    <section class="word-head" aria-label="当前单词">
+      <h2>{analysis.headword || entry.query_text}</h2>
+      {#if analysis.phonetic}<span class="word-phonetic">{analysis.phonetic}</span>{/if}
+    </section>
+  {/if}
 
   <div class="lookup-scroll">
     {#if loading}
@@ -244,18 +251,12 @@
     {:else if error}
       <div class="empty-result"><i class="ph ph-warning-circle"></i><span>{error}</span></div>
     {:else if entry && analysis}
-      <section class="word-head">
-        <div class="word-title-row">
-          <h2>{analysis.headword || entry.query_text}</h2>
-          <span class="entry-spacer"></span>
-        </div>
-        <div class="word-meta-row">
-          {#if analysis.phonetic}<span class="word-phonetic">{analysis.phonetic}</span>{/if}
-          <button class:added={learningAdded} class="learning-action" disabled={learningAdded} onclick={() => void addLearning()}><i class={learningAdded ? "ph ph-check" : "ph ph-target"}></i> {learningAdded ? "已加入" : "加入复习"}</button>
-        </div>
-      </section>
+      <div class="word-actions">
+        <button class:added={learningAdded} class="learning-action" disabled={learningAdded} onclick={() => void addLearning()}><i class={learningAdded ? "ph ph-check" : "ph ph-target"}></i> {learningAdded ? "已加入" : "加入复习"}</button>
+      </div>
 
       <LearningAnalysisContent
+        interleavedMeanings
         {analysis}
         attachedPhraseModules={entry.attached_phrase_modules}
         onGrammarOpen={openGrammar}
@@ -277,14 +278,16 @@
 {/if}
 
 <style>
-  .lookup-rail { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; border-left: 1px solid var(--border-color); background: color-mix(in srgb, var(--card-bg) 78%, var(--bg-color)); }
-  .lookup-head { position: relative; z-index: 5; display: flex; align-items: center; gap: 0.55rem; padding: 1rem; border-bottom: 1px solid var(--border-color); }
+  .lookup-rail { container: word-detail / inline-size; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; border-left: 1px solid var(--border-color); background: color-mix(in srgb, var(--card-bg) 78%, var(--bg-color)); }
+  .lookup-head { position: relative; z-index: 5; display: flex; flex: 0 0 auto; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border-color); }
   .lookup-search { position: relative; min-width: 0; flex: 1; }
-  form { display: flex; width: 100%; align-items: center; gap: 0.5rem; min-width: 0; height: 42px; padding: 0 0.45rem 0 0.8rem; border: 1px solid var(--border-color); border-radius: var(--radius-full); background: var(--card-bg); box-shadow: var(--shadow-sm); }
+  form { display: flex; width: 100%; align-items: center; gap: 0.5rem; min-width: 0; height: 44px; padding: 0 5px 0 12px; border: 1px solid var(--border-color); border-radius: var(--radius-full); background: var(--card-bg); box-shadow: var(--shadow-sm); }
   form > i { color: var(--text-muted); }
   input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--text-main); font: inherit; font-weight: 700; }
-  form button, .mobile-close { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: var(--accent-main); color: white; }
-  .mobile-close { display: none; flex: 0 0 auto; background: var(--btn-secondary); color: var(--text-main); }
+  form button { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--accent-main); color: white; }
+  .mobile-close { display: none; width: 44px; height: 44px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: transparent; color: var(--text-main); font-size: 22px; }
+  .mobile-close:hover, .mobile-close:active { background: var(--btn-secondary); }
+  .mobile-close:focus-visible, form button:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 2px; }
   .lookup-suggestions { position: absolute; top: calc(100% + 0.45rem); right: 0; left: 0; display: grid; max-height: min(330px, 48vh); overflow-y: auto; padding: 0.38rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--card-bg); box-shadow: var(--shadow-hover); }
   .lookup-suggestions > button { display: grid; min-height: 54px; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 0.55rem; padding: 0.55rem 0.6rem; border-radius: 9px; background: transparent; color: var(--text-main); text-align: left; }
   .lookup-suggestions > button:hover, .lookup-suggestions > button:focus-visible { background: var(--btn-secondary); outline: none; }
@@ -294,12 +297,12 @@
   .lookup-suggestions strong { font-size: 0.84rem; }
   .lookup-suggestions small { color: var(--text-muted); font-size: 0.7rem; }
   .lookup-suggestions em { padding: 0.22rem 0.4rem; border-radius: var(--radius-full); background: color-mix(in srgb, var(--accent-main) 10%, transparent); color: var(--accent-main); font-size: 0.6rem; font-style: normal; font-weight: 850; }
-  .lookup-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 1.35rem; overscroll-behavior: contain; }
-  .word-head { display: grid; gap: 0.65rem; padding: 0.35rem 0 1.2rem; }
-  .word-title-row, .word-meta-row { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 0.8rem; }
-  .word-head h2 { margin: 0; color: var(--text-main); font-size: 2.15rem; line-height: 1.12; letter-spacing: -0.035em; }
-  .word-phonetic { min-width: 0; color: var(--text-muted); font-family: "Arial Unicode MS", "Lucida Sans Unicode", sans-serif; font-size: 0.86rem; line-height: 1.6; }
-  .learning-action { display: flex; min-width: 112px; min-height: 36px; flex: 0 0 auto; align-items: center; justify-content: center; gap: 0.4rem; padding: 0 0.9rem; border-radius: var(--radius-full); background: var(--accent-main); color: white; font-weight: 800; }
+  .lookup-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 10px; overscroll-behavior: contain; }
+  .word-head { display: grid; flex: 0 0 auto; gap: 4px; padding: 8px 12px 12px; border-bottom: 1px solid var(--border-color); text-align: center; }
+  .word-head h2 { margin: 0; min-width: 0; color: var(--text-main); font-size: 26px; line-height: 1.15; letter-spacing: -0.025em; overflow-wrap: anywhere; }
+  .word-phonetic { min-width: 0; color: var(--text-muted); font-family: "Arial Unicode MS", "Lucida Sans Unicode", sans-serif; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+  .word-actions { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+  .learning-action { display: flex; min-height: 32px; flex: 0 0 auto; align-items: center; justify-content: center; gap: 4px; padding: 0 12px; border-radius: var(--radius-full); background: var(--accent-main); color: white; font-size: 11px; font-weight: 800; white-space: nowrap; }
   .learning-action.added { background: color-mix(in srgb, var(--accent-main) 72%, #4f8665); }
   .learning-action:disabled { cursor: default; }
   .empty-result { display: flex; align-items: center; gap: 0.65rem; padding: 1rem; border: 1px dashed var(--border-color); border-radius: var(--radius-md); color: var(--text-muted); }
@@ -308,22 +311,6 @@
   .loading-result span:nth-child(2) { animation-delay: 150ms; }
   .loading-result span:nth-child(3) { animation-delay: 300ms; }
   @keyframes pulse { to { opacity: 0.25; transform: translateY(-3px); } }
-
-  :global(.lookup-rail .learning-content) { gap: 0.8rem; padding-bottom: 1.25rem; }
-  :global(.lookup-rail .learning-content .section-card) { padding: 0.9rem; border-radius: var(--radius-md); }
-  :global(.lookup-rail .learning-content .meaning-summary) { gap: 0.6rem; padding: 0.8rem; }
-  :global(.lookup-rail .learning-content .meaning-summary strong) { font-size: 0.94rem; }
-  :global(.lookup-rail .learning-content .usage-item) { padding: 0.1rem 0 0.8rem; border-radius: 0; background: transparent; }
-  :global(.lookup-rail .learning-content .usage-item + .usage-item) { padding-top: 0.85rem; border-top: 1px solid var(--border-color); }
-  :global(.lookup-rail .learning-content .usage-item > strong) { font-size: 0.94rem; line-height: 1.45; }
-  :global(.lookup-rail .learning-content .usage-copy) { margin-top: 0.35rem; font-size: 0.86rem; line-height: 1.6; }
-  :global(.lookup-rail .learning-content .example-box) { margin-top: 0.7rem; padding: 0.8rem 0.9rem; border-left-width: 3px; border-left-color: var(--accent-main); background: var(--card-bg); }
-  :global(.lookup-rail .learning-content .de-line) { font-size: 0.94rem; line-height: 1.45; }
-  :global(.lookup-rail .learning-content .zh-line) { font-size: 0.82rem; line-height: 1.5; }
-  :global(.lookup-rail .learning-content .insight-block) { padding: 0.1rem 0 0.8rem; border-radius: 0; background: transparent; }
-  :global(.lookup-rail .learning-content .insight-block + .insight-block) { padding-top: 0.85rem; border-top: 1px solid var(--border-color); }
-  :global(.lookup-rail .learning-content .insight-copy) { font-size: 0.86rem; line-height: 1.65; }
-  :global(.lookup-rail .learning-content .network-grid article) { max-width: 100%; }
 
   @media (max-width: 900px) {
     .lookup-rail { position: absolute; inset: 0 0 0 auto; z-index: 30; width: min(390px, 88%); border: 1px solid var(--border-color); border-right: 0; border-radius: var(--radius-md) 0 0 var(--radius-md); transform: translateX(102%); pointer-events: none; transition: transform 180ms ease; }

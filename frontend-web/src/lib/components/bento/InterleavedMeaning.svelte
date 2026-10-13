@@ -101,4 +101,19 @@
     .chinese { font-size: 13px; line-height: 20px; }
     .english { font-size: 11px; line-height: 14px; }
   }
+
+  @container word-detail (max-width: 400px) {
+    .pos-label { padding-inline: 5px; font-size: 11px; line-height: 22px; }
+    .pos-label.bilingual { top: 8px; }
+    .line-pair + .line-pair { margin-top: 3px; }
+    .chinese { font-size: 14px; line-height: 22px; }
+    .english { font-size: 11.5px; line-height: 15px; }
+  }
+
+  @container word-detail (max-width: 340px) {
+    .pos-label { line-height: 20px; }
+    .pos-label.bilingual { top: 7.5px; }
+    .chinese { font-size: 13px; line-height: 20px; }
+    .english { font-size: 11px; line-height: 14px; }
+  }
 </style>

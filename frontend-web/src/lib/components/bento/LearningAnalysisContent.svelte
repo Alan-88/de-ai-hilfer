@@ -214,4 +214,21 @@
     .interleaved .usage-item.example-box { margin-top: 0; }
     .interleaved .zh-line { font-size: 11.5px; line-height: 1.5; margin-top: 4px; }
   }
+
+  @container word-detail (max-width: 400px) {
+    .interleaved { gap: 10px; padding-bottom: 16px; }
+    .interleaved .section-card { padding: 10px; border-radius: 16px; }
+    .interleaved .section-title { margin-bottom: 8px; font-size: 12px; }
+    .interleaved .meaning-summary { padding: 10px; border-radius: 10px; }
+    .interleaved .meaning-summary.interactive { padding-right: 10px; }
+    .interleaved .meaning-summary > i { display: none; }
+    .interleaved .usage-list, .interleaved .insights-stack { gap: 10px; }
+    .interleaved .usage-item, .interleaved .insight-block { padding: 6px; border-radius: 10px; font-size: 13px; line-height: 1.5; }
+    .interleaved .usage-copy, .interleaved .insight-copy { margin-top: 5px; line-height: 1.5; }
+    .interleaved .example-box { margin-top: 6px; padding: 8px; }
+    .interleaved .usage-item.example-box { margin-top: 0; }
+    .interleaved .zh-line { font-size: 11.5px; line-height: 1.5; margin-top: 4px; }
+    .network-grid article { min-width: 0; max-width: 100%; }
+    .network-grid article strong { flex-wrap: wrap; overflow-wrap: anywhere; }
+  }
 </style>
