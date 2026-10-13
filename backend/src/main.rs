@@ -161,7 +161,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .route(
             "/api/v1/follow-ups",
-            post(handlers::follow_up::create_follow_up),
+            get(handlers::follow_up::list).post(handlers::follow_up::create_follow_up),
         )
         .route(
             "/api/v1/follow-ups/stream",

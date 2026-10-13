@@ -255,16 +255,7 @@ async fn build_response(
     state: &AppState,
     entry: crate::models::KnowledgeEntry,
 ) -> Result<AnalyzeResponse> {
-    let follow_ups = follow_up::list_by_entry_id(&state.pool, entry.id)
-        .await?
-        .into_iter()
-        .map(|item| crate::models::FollowUpItem {
-            id: item.id,
-            question: item.question,
-            answer: item.answer,
-            created_at: item.created_at,
-        })
-        .collect();
+    let follow_ups = follow_up::list_items_by_entry_id(&state.pool, entry.id).await?;
 
     Ok(AnalyzeResponse {
         entry_id: entry.id,

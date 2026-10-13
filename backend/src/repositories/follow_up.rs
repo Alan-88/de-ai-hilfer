@@ -62,6 +62,22 @@ pub async fn insert(
     .await
 }
 
+pub async fn list_items_by_entry_id(
+    pool: &DbPool,
+    entry_id: i64,
+) -> Result<Vec<crate::models::FollowUpItem>, sqlx::Error> {
+    Ok(list_by_entry_id(pool, entry_id)
+        .await?
+        .into_iter()
+        .map(|item| crate::models::FollowUpItem {
+            id: item.id,
+            question: item.question,
+            answer: item.answer,
+            created_at: item.created_at,
+        })
+        .collect())
+}
+
 pub async fn list_all(pool: &DbPool) -> Result<Vec<FollowUp>, sqlx::Error> {
     sqlx::query_as::<_, FollowUp>(
         r#"

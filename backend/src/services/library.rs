@@ -1,4 +1,4 @@
-use crate::models::{EntryDeleteResponse, EntryDetailResponse, FollowUpItem};
+use crate::models::{EntryDeleteResponse, EntryDetailResponse};
 use crate::repositories::{follow_up, knowledge};
 use crate::services::analysis_preview::{analysis_markdown, structured_analysis};
 use crate::state::AppState;
@@ -9,16 +9,7 @@ pub async fn get_entry_detail(state: &AppState, entry_id: i64) -> Result<EntryDe
     let entry = knowledge::find_by_id(&state.pool, entry_id)
         .await?
         .ok_or_else(|| anyhow!("knowledge entry not found"))?;
-    let follow_ups = follow_up::list_by_entry_id(&state.pool, entry_id)
-        .await?
-        .into_iter()
-        .map(|item| FollowUpItem {
-            id: item.id,
-            question: item.question,
-            answer: item.answer,
-            created_at: item.created_at,
-        })
-        .collect::<Vec<_>>();
+    let follow_ups = follow_up::list_items_by_entry_id(&state.pool, entry_id).await?;
 
     Ok(EntryDetailResponse {
         entry_id: entry.id,

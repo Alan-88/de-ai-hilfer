@@ -3,7 +3,9 @@
   import { resolveStructuredAnalysis } from "$lib/analysis/structuredAnalysis";
   import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
   import LearningAnalysisContent from "$lib/components/bento/LearningAnalysisContent.svelte";
-  import type { GrammarBranch, LearningRecallRating, LearningSessionWord } from "$lib/types";
+  import FollowUpHistory from "$lib/components/bento/FollowUpHistory.svelte";
+  import { getFollowUps } from "$lib/followUpApi";
+  import type { FollowUpItem, GrammarBranch, LearningRecallRating, LearningSessionWord } from "$lib/types";
 
   let { wordData, isSubmitting = false, onRate } = $props<{
     wordData: LearningSessionWord;
@@ -16,6 +18,9 @@
   let usageElement = $state<HTMLElement | null>(null);
   let activeGrammarBranch = $state<GrammarBranch | null>(null);
   let popoverTriggerRect = $state<DOMRect | null>(null);
+  let followUps = $state<FollowUpItem[]>([]);
+  let followUpLoading = $state(false);
+  let followUpError = $state("");
 
   const structured = $derived(resolveStructuredAnalysis(
     wordData.analysis_markdown,
@@ -38,6 +43,19 @@
     showingAnswer = false;
     activeGrammarBranch = null;
     usageElement = null;
+  });
+
+  $effect(() => {
+    const entryId = wordData.entry_id;
+    followUps = []; followUpError = ""; followUpLoading = false;
+    if (!showingAnswer || entryId <= 0) return;
+    const controller = new AbortController();
+    followUpLoading = true;
+    void getFollowUps(entryId, controller.signal)
+      .then(response => { if (!controller.signal.aborted) followUps = response.follow_ups; })
+      .catch(cause => { if (!controller.signal.aborted) followUpError = cause instanceof Error ? cause.message : "历史追问加载失败"; })
+      .finally(() => { if (!controller.signal.aborted) followUpLoading = false; });
+    return () => controller.abort();
   });
 
   function learningStateLabel() {
@@ -97,6 +115,14 @@
             bind:usageElement
             interleavedMeanings
           />
+          {#if followUps.length || followUpLoading || followUpError}
+            <section class="bento-card follow-up-section">
+              <div class="card-title"><i class="ph-fill ph-chat-circle-dots"></i> 追问与联想</div>
+              {#if followUpLoading}<p class="small-copy" role="status">正在加载历史追问…</p>{/if}
+              {#if followUpError}<p class="message-surface error" role="alert">{followUpError}</p>{/if}
+              <FollowUpHistory entryId={wordData.entry_id} history={followUps} readOnly />
+            </section>
+          {/if}
         </div>
       </div>
     {/if}
@@ -127,6 +153,8 @@
 {/if}
 
 <style>
+  .follow-up-section { padding: 1.2rem; margin-bottom: 2rem; }
+  .follow-up-section:hover { transform: none; box-shadow: var(--shadow-sm); }
   .flashcard-shell { width: 100%; min-height: 0; }
   .flashcard { height: clamp(540px, calc(100vh - 230px), 680px); overflow: hidden; padding: 0; }
   .recall-surface { width: 100%; height: 100%; padding: clamp(1.5rem, 3vw, 2.5rem); border-radius: inherit; background: transparent; color: var(--text-main); text-align: inherit; }
@@ -161,5 +189,7 @@
   }
   @media (max-width: 600px) {
     .answer-title { font-size: 26px; margin-bottom: 8px; }
+    .follow-up-section { padding: 10px; border-radius: 16px; }
+    .follow-up-section .card-title { font-size: 12px; margin-bottom: 8px; }
   }
 </style>

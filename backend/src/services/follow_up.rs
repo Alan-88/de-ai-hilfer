@@ -352,6 +352,69 @@ pub(crate) mod tests {
         let original = save(&state, entry, "旧问题", "旧回答...", "followup-test-save")
             .await
             .unwrap();
+        let cached_entry = knowledge::find_by_id(&state.pool, entry)
+            .await
+            .unwrap()
+            .unwrap();
+        let analyze_request = || {
+            serde_json::from_value::<crate::models::AnalyzeRequest>(
+                json!({"query_text":cached_entry.query_text}),
+            )
+            .unwrap()
+        };
+        for response in [
+            crate::services::analyze::analyze(&state, analyze_request())
+                .await
+                .unwrap(),
+            crate::services::analyze::analyze_compact(&state, analyze_request())
+                .await
+                .unwrap(),
+            crate::services::query::intelligent_search(
+                &state,
+                crate::models::IntelligentSearchRequest {
+                    term: cached_entry.query_text.clone(),
+                    hint: String::new(),
+                },
+            )
+            .await
+            .unwrap(),
+        ] {
+            assert_eq!(response.follow_ups.len(), 1);
+            assert_eq!(response.follow_ups[0].id, original.id);
+            assert_eq!(response.follow_ups[0].answer, original.answer);
+        }
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        crate::services::analyze_stream::stream_analyze(state.clone(), analyze_request(), tx)
+            .await
+            .unwrap();
+        let mut complete = None;
+        while let Some(event) = rx.recv().await {
+            if event.starts_with("event: complete") {
+                complete = Some(
+                    serde_json::from_str::<crate::models::AnalyzeResponse>(
+                        event
+                            .lines()
+                            .find_map(|line| line.strip_prefix("data: "))
+                            .unwrap(),
+                    )
+                    .unwrap(),
+                );
+            }
+        }
+        assert_eq!(complete.unwrap().follow_ups[0].id, original.id);
+        assert_eq!(
+            crate::services::library::get_entry_detail(&state, entry)
+                .await
+                .unwrap()
+                .follow_ups[0]
+                .id,
+            original.id
+        );
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "loading saved follow-ups must not call the model"
+        );
         assert_eq!(
             save(&state, entry, "旧问题", "旧回答...", "followup-test-save")
                 .await

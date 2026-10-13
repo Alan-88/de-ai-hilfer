@@ -450,7 +450,7 @@
   <div class="bento-card card-main">
     <div class="card-title"><i class="ph-fill ph-chat-circle-dots"></i> 追问与联想</div>
     {#if result.entry_id > 0}
-      <div class="follow-up-wrapper surface-card">
+      <div class="follow-up-wrapper">
         <FollowUpCard
           entryId={result.entry_id}
           history={result.follow_ups}
@@ -748,7 +748,6 @@
     .markdown-compact :global(ul), .markdown-compact :global(ol) { margin-bottom: 6px; padding-left: 18px; }
     .markdown-compact :global(li) { margin-bottom: 4px; }
     .markdown-compact :global(:last-child) { margin-bottom: 0; }
-    .follow-up-wrapper { padding: 8px; }
     .recent-mini-btn { padding: 8px; }
     .recent-mini-btn strong { font-size: 13px; }
     .mini-label { font-size: 10px; padding: 2px 5px; }

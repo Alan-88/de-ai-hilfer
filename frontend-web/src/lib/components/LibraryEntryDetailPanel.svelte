@@ -132,10 +132,9 @@
         {/if}
 
         {#if entry.follow_ups.length > 0}
-          <section class="content-section">
-            <div class="card-title"><i class="ph-fill ph-chat-circle-dots"></i> 历史追问记录</div>
-            <FollowUpHistory entryId={entry.entry_id} history={entry.follow_ups}
-              onchange={(items) => { if (entry) entry = {...entry, follow_ups: items}; }} />
+          <section class="bento-card follow-up-section">
+            <div class="card-title"><i class="ph-fill ph-chat-circle-dots"></i> 追问与联想</div>
+            <FollowUpHistory entryId={entry.entry_id} history={entry.follow_ups} readOnly />
           </section>
         {/if}
 
@@ -238,6 +237,8 @@
 
   .drawer-content { display: flex; flex-direction: column; gap: 2.5rem; }
   .content-section { display: flex; flex-direction: column; gap: 1rem; }
+  .follow-up-section { padding: 1.2rem; }
+  .follow-up-section:hover { transform: none; box-shadow: var(--shadow-sm); }
   .detail-analysis :global(.learning-content) { padding-bottom: 0; }
 
 
@@ -270,6 +271,8 @@
     .detail-close-floating { top: 6px; left: 8px; }
     .drawer-content { gap: 16px; }
     .content-section { gap: 8px; }
+    .follow-up-section { padding: 10px; border-radius: 16px; }
+    .follow-up-section .card-title { font-size: 12px; margin-bottom: 8px; }
 
   }
 

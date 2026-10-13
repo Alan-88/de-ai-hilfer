@@ -1,5 +1,5 @@
 use crate::models::{
-    AnalysisDocument, AnalyzeRequest, AnalyzeResponse, FollowUpItem, NewKnowledgeEntry, QualityMode,
+    AnalysisDocument, AnalyzeRequest, AnalyzeResponse, NewKnowledgeEntry, QualityMode,
 };
 use crate::repositories::{dictionary, dictionary_lexemes, knowledge};
 use crate::services::analysis_grounded_runtime::generate_grounded_analysis;
@@ -52,12 +52,14 @@ async fn analyze_with_mode(
                 entry.id
             );
             update_recent_searches(&state.recent_searches, &entry.query_text).await;
-            return Ok(cached_response(
+            return cached_response(
+                state,
                 entry.id,
                 &entry.query_text,
                 &entry.analysis,
                 "知识库",
-            ));
+            )
+            .await;
         }
     }
 
@@ -115,12 +117,14 @@ async fn analyze_with_mode(
                 entry.id
             );
             update_recent_searches(&state.recent_searches, &entry.query_text).await;
-            return Ok(cached_response(
+            return cached_response(
+                state,
                 entry.id,
                 &entry.query_text,
                 &entry.analysis,
                 "知识库",
-            ));
+            )
+            .await;
         }
     }
 
@@ -294,7 +298,8 @@ async fn analyze_with_mode(
         source: response_source,
         model: analysis.model,
         quality_mode: Some(quality_mode),
-        follow_ups: Vec::<FollowUpItem>::new(),
+        follow_ups: crate::repositories::follow_up::list_items_by_entry_id(&state.pool, entry.id)
+            .await?,
     })
 }
 
@@ -305,13 +310,14 @@ fn analysis_mode_name(mode: AnalysisMode) -> &'static str {
     }
 }
 
-fn cached_response(
+pub(crate) async fn cached_response(
+    state: &AppState,
     entry_id: i64,
     query_text: &str,
     analysis: &Value,
     source: &str,
-) -> AnalyzeResponse {
-    AnalyzeResponse {
+) -> Result<AnalyzeResponse> {
+    Ok(AnalyzeResponse {
         entry_id,
         query_text: query_text.to_string(),
         analysis_markdown: analysis_markdown(analysis),
@@ -325,8 +331,9 @@ fn cached_response(
         quality_mode: analysis
             .get("quality_mode")
             .and_then(|value| serde_json::from_value(value.clone()).ok()),
-        follow_ups: Vec::new(),
-    }
+        follow_ups: crate::repositories::follow_up::list_items_by_entry_id(&state.pool, entry_id)
+            .await?,
+    })
 }
 
 async fn update_recent_searches(

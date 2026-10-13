@@ -15,7 +15,6 @@ use crate::services::query_inference::{
 use crate::services::query_suggestions::{rank_candidate, sort_and_limit, RankedSuggestion};
 use crate::state::AppState;
 use anyhow::Result;
-use serde_json::Value;
 use std::collections::HashMap;
 
 pub async fn get_recent_entries(state: &AppState) -> Result<Vec<RecentItem>> {
@@ -389,29 +388,14 @@ pub async fn intelligent_search(
                 "intelligent_search knowledge hit: term={term}, entry_id={}",
                 entry.id
             );
-            return Ok(AnalyzeResponse {
-                entry_id: entry.id,
-                query_text: entry.query_text,
-                analysis_markdown: analysis_markdown(&entry.analysis),
-                structured_analysis: structured_analysis(&entry.analysis),
-                attached_phrase_modules: entry
-                    .analysis
-                    .get("attached_phrase_modules")
-                    .cloned()
-                    .and_then(|value| serde_json::from_value(value).ok())
-                    .unwrap_or_default(),
-                source: "知识库".to_string(),
-                model: entry
-                    .analysis
-                    .get("model")
-                    .and_then(Value::as_str)
-                    .map(ToString::to_string),
-                quality_mode: entry
-                    .analysis
-                    .get("quality_mode")
-                    .and_then(|value| serde_json::from_value(value.clone()).ok()),
-                follow_ups: Vec::new(),
-            });
+            return crate::services::analyze::cached_response(
+                state,
+                entry.id,
+                &entry.query_text,
+                &entry.analysis,
+                "知识库",
+            )
+            .await;
         }
     }
 

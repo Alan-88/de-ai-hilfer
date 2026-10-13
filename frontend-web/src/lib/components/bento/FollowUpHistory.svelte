@@ -5,9 +5,9 @@
   import { streamFollowUp } from "$lib/streamApi";
   import type { AiModelOverride, FollowUpItem } from "$lib/types";
 
-  let {entryId, history, disabled = false, modelOverride = null, onchange} = $props<{
+  let {entryId, history, disabled = false, readOnly = false, modelOverride = null, onchange} = $props<{
     entryId: number; history: FollowUpItem[]; disabled?: boolean;
-    modelOverride?: AiModelOverride | null; onchange: (items: FollowUpItem[]) => void;
+    readOnly?: boolean; modelOverride?: AiModelOverride | null; onchange?: (items: FollowUpItem[]) => void;
   }>();
   let busyId = $state<number | null>(null);
   let editingId = $state<number | null>(null);
@@ -28,7 +28,7 @@
   }
 
   async function operate(item: FollowUpItem, action: "save" | "delete" | "retry") {
-    if (busyId !== null || disabled) return;
+    if (busyId !== null || disabled || readOnly || !onchange) return;
     busyId = item.id; error = "";
     const originalEntry = entryId;
     try {
@@ -59,7 +59,7 @@
 <div class="follow-up-history">
   {#each history as item (item.id)}
     <article class="surface-card follow-up-item">
-      {#if editingId === item.id}
+      {#if !readOnly && editingId === item.id}
         <label>问题<textarea bind:value={question} rows="2" maxlength="4000" disabled={disabled || busyId !== null}></textarea></label>
         <label>回答（Markdown）<textarea class="answer-editor" bind:value={answer} rows="8" maxlength="100000" disabled={disabled || busyId !== null}></textarea></label>
         <div class="follow-up-actions">
@@ -69,13 +69,13 @@
       {:else}
         <p class="follow-up-question"><strong>你问：</strong>{item.question}</p>
         <div class="markdown-compact follow-up-answer">{@html renderFollowUpHtml(item.answer)}</div>
-        <div class="follow-up-actions">
+        {#if !readOnly}<div class="follow-up-actions">
           <button class="btn-secondary" onclick={() => startEdit(item)} disabled={disabled || busyId !== null}>编辑</button>
           <button class="btn-secondary" onclick={() => operate(item, "retry")} disabled={disabled || busyId !== null}>{busyId === item.id ? "处理中…" : "重试"}</button>
           <button class="btn-secondary danger-text" onclick={() => confirmDeleteId = item.id} disabled={disabled || busyId !== null}>删除</button>
-        </div>
+        </div>{/if}
       {/if}
-      {#if confirmDeleteId === item.id}
+      {#if !readOnly && confirmDeleteId === item.id}
         <div class="delete-confirm" role="group" aria-label="确认删除追问">
           <span>删除这条追问？</span>
           <button class="btn-secondary danger-text" onclick={() => operate(item, "delete")} disabled={busyId !== null}>确认删除</button>

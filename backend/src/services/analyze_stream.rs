@@ -1,17 +1,13 @@
 use crate::models::{
-    AnalyzeRequest, AnalyzeResponse, FollowUpItem, NewKnowledgeEntry, QualityMode,
-    StreamMetaPayload,
+    AnalyzeRequest, AnalyzeResponse, NewKnowledgeEntry, QualityMode, StreamMetaPayload,
 };
 use crate::repositories::{dictionary, dictionary_lexemes, knowledge};
 use crate::services::ai_model_resolver::{resolve_task_model_with_override, AiModelTask};
 use crate::services::analysis_grounded_runtime::stream_grounded_analysis;
-use crate::services::analysis_preview::analysis_markdown;
 use crate::services::dictionary_facts::dictionary_pos;
 use crate::services::dictionary_tags::build_tags;
 use crate::services::query_inference::is_form_reference_entry;
-use crate::services::query_resolution::{
-    attached_phrase_modules_from_analysis, build_no_candidate_analysis,
-};
+use crate::services::query_resolution::build_no_candidate_analysis;
 use crate::services::stream_response::{sse_complete, sse_meta};
 use crate::state::AppState;
 use anyhow::Result;
@@ -46,28 +42,16 @@ pub async fn stream_analyze(
                 "知识库",
                 false,
             );
-            tx.send(sse_complete(&AnalyzeResponse {
-                entry_id: entry.id,
-                query_text: entry.query_text.clone(),
-                analysis_markdown: analysis_markdown(&entry.analysis),
-                structured_analysis: crate::services::analysis_preview::structured_analysis(
-                    &entry.analysis,
-                ),
-                attached_phrase_modules: attached_phrase_modules_from_analysis(&entry.analysis),
-                source: "知识库".to_string(),
-                model: entry
-                    .analysis
-                    .get("model")
-                    .and_then(Value::as_str)
-                    .map(ToString::to_string),
-                quality_mode: entry
-                    .analysis
-                    .get("quality_mode")
-                    .and_then(|value| serde_json::from_value(value.clone()).ok())
-                    .or(Some(quality_mode)),
-                follow_ups: Vec::new(),
-            }))
-            .ok();
+            let mut response = crate::services::analyze::cached_response(
+                &state,
+                entry.id,
+                &entry.query_text,
+                &entry.analysis,
+                "知识库",
+            )
+            .await?;
+            response.quality_mode = response.quality_mode.or(Some(quality_mode));
+            tx.send(sse_complete(&response)).ok();
             return Ok(());
         }
     }
@@ -129,28 +113,16 @@ pub async fn stream_analyze(
                 "知识库",
                 false,
             );
-            tx.send(sse_complete(&AnalyzeResponse {
-                entry_id: entry.id,
-                query_text: entry.query_text.clone(),
-                analysis_markdown: analysis_markdown(&entry.analysis),
-                structured_analysis: crate::services::analysis_preview::structured_analysis(
-                    &entry.analysis,
-                ),
-                attached_phrase_modules: attached_phrase_modules_from_analysis(&entry.analysis),
-                source: "知识库".to_string(),
-                model: entry
-                    .analysis
-                    .get("model")
-                    .and_then(Value::as_str)
-                    .map(ToString::to_string),
-                quality_mode: entry
-                    .analysis
-                    .get("quality_mode")
-                    .and_then(|value| serde_json::from_value(value.clone()).ok())
-                    .or(Some(quality_mode)),
-                follow_ups: Vec::new(),
-            }))
-            .ok();
+            let mut response = crate::services::analyze::cached_response(
+                &state,
+                entry.id,
+                &entry.query_text,
+                &entry.analysis,
+                "知识库",
+            )
+            .await?;
+            response.quality_mode = response.quality_mode.or(Some(quality_mode));
+            tx.send(sse_complete(&response)).ok();
             return Ok(());
         }
     }
@@ -291,7 +263,11 @@ pub async fn stream_analyze(
             source,
             model,
             quality_mode: Some(quality_mode),
-            follow_ups: Vec::<FollowUpItem>::new(),
+            follow_ups: crate::repositories::follow_up::list_items_by_entry_id(
+                &state.pool,
+                entry.id,
+            )
+            .await?,
         }
     };
 

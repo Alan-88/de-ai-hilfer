@@ -26,7 +26,9 @@
 
 问题最多4000字符、回答最多100000字符，均非空；不允许编辑时移动到另一词条。创建必须使用1–128字节幂等键，相同键/内容返回原结果，换内容409；删除后重复旧创建键也不会复活记录。
 
-Web 使用 `/api/v1/follow-ups/:id` 的读取/编辑/删除接口。新生成沿用 `POST /api/v1/follow-ups` 与 `/stream`，参数 `{entry_id,question,quality_mode?,model_override?,retry_id?}`。retry_id必须属于entry_id；成功原位替换，生成期间有其他编辑或删除则拒绝覆盖。历史兜底记录不自动改写或清理。
+Web 使用 `GET /api/v1/follow-ups?entry_id=ID` 读取该词条的全部记录，响应 `{follow_ups:[...]}`；`/api/v1/follow-ups/:id` 提供读取/编辑/删除。新生成沿用 `POST /api/v1/follow-ups` 与 `/stream`，参数 `{entry_id,question,quality_mode?,model_override?,retry_id?}`。retry_id必须属于entry_id；成功原位替换，生成期间有其他编辑或删除则拒绝覆盖。历史兜底记录不自动改写或清理。
+
+追问持久保存，普通/紧凑/智能分析与流式complete的最终词条结果均返回保存的 `follow_ups`，刷新后重新查询可恢复。候选预览不加载历史。网页查词结果保留追问入口和记录管理；词库单词详情与学习答案仅展示，均无输入、编辑、重试或删除追问的按钮。学习在揭示答案后独立读取记录，换词、隐藏答案或卸载时取消请求，不改变学习会话/评分契约。三处使用“追问与联想”外层卡片，按保存顺序逐条显示内部问答卡片，不合并或截断答案。
 
 ## 异步生成、CLI与MCP
 
