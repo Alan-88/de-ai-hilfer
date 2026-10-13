@@ -36,6 +36,14 @@ pub enum TargetType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum BatchOperation {
+    FollowUpGenerate {
+        entry_id: BatchId,
+        question: String,
+        #[serde(default)]
+        retry_id: Option<BatchId>,
+        #[serde(default)]
+        model_override: Option<AiModelOverride>,
+    },
     LexemeInitialize {
         lexeme_ids: Vec<i64>,
         #[serde(default)]

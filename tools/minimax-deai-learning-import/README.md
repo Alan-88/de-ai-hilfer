@@ -34,3 +34,9 @@ submit --stdin --yes` submits a general ordered operation list including
 initialization, learning membership, folder creation and article import.
 Poll `batch get TASK_ID`; use `batch retry TASK_ID --yes` for unfinished work.
 Keep the same key when an identical submission's response was lost.
+
+`follow-up list/get` reads saved questions and answers. `follow-up create/edit`
+accepts Markdown JSON through stdin; edits require previously read
+expected_question/expected_answer. `follow-up delete ID --yes` permanently
+removes one record. Internal `follow-up generate/retry` returns an async task;
+poll `batch get` and preserve the idempotency key for uncertain resubmissions.

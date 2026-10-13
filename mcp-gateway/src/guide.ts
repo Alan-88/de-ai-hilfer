@@ -51,6 +51,7 @@ For confirmed multi-operation writes, use batch_submit once and read batch_opera
 Call deai_guide with the relevant topic before a multi-step workflow or whenever the data model, article bookmark rules, learning scheduler, diagnostics or correction semantics are unclear.`;
 
 export const DEAI_GUIDE_TOPICS = [
+  "follow_ups",
   "batch_operations",
   "overview",
   "article_learning",
@@ -76,6 +77,14 @@ interface DeaiGuide {
 const GUIDE_VERSION = "2026-10-13";
 
 export const DEAI_GUIDES: Readonly<Record<DeaiGuideTopic, DeaiGuide>> = {
+  follow_ups: {
+    version:GUIDE_VERSION,topic:"follow_ups",
+    summary:"Manage saved follow-ups or run the internal read-only vocabulary agent asynchronously.",
+    concepts:["A follow_up_id identifies a question/answer record under entry_id; neither is a lexeme_id.","External answers are saved as Markdown without running the internal model. Raw HTML and unsafe links are escaped in the UI.","Internal generation can resolve and inspect related vocabulary; it cannot initialize entries or mutate learning data. Failed or incomplete answers are not saved."],
+    workflow:["Read follow_up_query before editing, deleting or retrying a saved record.","For external generation, use lexeme_query to inspect vocabulary, then follow_up_write(action=create) with entry_id, question, answer and a stable idempotency_key.","Edits require expected_question and expected_answer from the prior read; stale edits are rejected instead of overwriting another change.","follow_up_generate returns a batch ID immediately. Poll batch_query; retry preserves the original record until a complete new answer succeeds."],
+    safety_rules:["Only perform the user's authorized writes. Delete permanently removes one record; there is no undo history.","Reuse idempotency_key for an uncertain identical create or generation submission; changed payloads require a new key.","Internal generation requires a model supporting function tools. Errors remain explicit; do not replace them with fabricated answers or initialize a missing related word."],
+    related_tools:["follow_up_query","follow_up_write","follow_up_generate","lexeme_query","batch_query"],
+  },
   batch_operations: {
     version: GUIDE_VERSION,
     topic: "batch_operations",
@@ -83,7 +92,7 @@ export const DEAI_GUIDES: Readonly<Record<DeaiGuideTopic, DeaiGuide>> = {
     concepts: [
       "batch_submit returns a task ID immediately; queued and running are not success. batch_query is read-only and reports durable per-step and per-word progress.",
       "Operations run in submitted order. One lexeme_initialize operation may contain up to 100 lexemes, processed with bounded concurrency. Different batches can run concurrently.",
-      "Supported operations: lexeme_initialize, learning_membership(add/remove/reset), folder_create and article_import. This is a business-operation list, not arbitrary HTTP or executable code.",
+      "Supported operations: lexeme_initialize, learning_membership(add/remove/reset), folder_create, article_import and follow_up_generate. This is a business-operation list, not arbitrary HTTP or executable code.",
       "IDs may refer to an earlier result using {step,path}; path is a JSON pointer. folder_create returns /folder_id; article_import returns /article_id; initialization returns /results/0/value/entry_id etc.",
       "A succeeded task finished every operation. completed_with_errors requires inspecting failures and skips. Explicit depends_on requires whole earlier steps to succeed; an individual successful result of a partial step can still be referenced.",
     ],

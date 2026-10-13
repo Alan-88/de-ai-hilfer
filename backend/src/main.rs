@@ -95,6 +95,16 @@ async fn main() -> anyhow::Result<()> {
             "/batches/:batch_id/retry",
             post(handlers::agent_batches::retry),
         )
+        .route(
+            "/follow-ups",
+            get(handlers::follow_up::list).post(handlers::follow_up::save),
+        )
+        .route(
+            "/follow-ups/:id",
+            get(handlers::follow_up::get)
+                .put(handlers::follow_up::edit)
+                .delete(handlers::follow_up::delete),
+        )
         .route("/lexemes/resolve", get(handlers::agent_api::resolve_lexeme))
         .route(
             "/lexemes/:lexeme_id",
@@ -156,6 +166,12 @@ async fn main() -> anyhow::Result<()> {
         .route(
             "/api/v1/follow-ups/stream",
             post(handlers::follow_up::stream_follow_up),
+        )
+        .route(
+            "/api/v1/follow-ups/:id",
+            get(handlers::follow_up::get)
+                .put(handlers::follow_up::edit)
+                .delete(handlers::follow_up::delete),
         )
         .route(
             "/api/v1/entries/recent",

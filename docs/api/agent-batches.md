@@ -23,6 +23,7 @@
 | `learning_membership` | `mutation: add/remove/reset`，`target_type: entry/lexeme`（默认entry），`ids: ID[]` | 逐项`results`，成功项含`entry_id/status`；add保留已有进度，remove保留知识与历史日志，reset重置长期卡到New |
 | `folder_create` | `name`，可选`parent_id: ID/null` | `folder_id/name/parent_id`；已有同名目录不会自动被当作本次创建成功 |
 | `article_import` | `title/body`，可选`folder_id: ID/null` | `article_id/title/folder_id`；复用原子书签验证，失败不写文章 |
+| `follow_up_generate` | `entry_id: ID`、`question`，可选`retry_id: ID`、`model_override` | `{answer,follow_up,model,quality_mode}`；只读关联查询后生成，成功才创建或原位替换；详见 `follow-ups.md` |
 
 `ID`为正整数或`{step:"earlier-operation-id",path:"/json/pointer"}`。引用成功结果中的正整数；不能前向引用。部分失败的初始化操作中，成功项的`/results/0/value/entry_id`仍可引用；失败项引用缺失会跳过当前操作。显式`depends_on`则要求整项成功。`on_error`默认`continue`（独立后续项继续），`stop`会在失败后跳过全部后续项。整批不是全有全无的事务，不回滚已成功操作。
 

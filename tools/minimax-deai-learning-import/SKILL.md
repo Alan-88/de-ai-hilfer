@@ -1,9 +1,23 @@
 ---
 name: deai-learning-import
-description: Resolve German surface forms from reading material, inspect De-AI-Hilfer vocabulary and learning state, and initialize or import user-confirmed words through the bundled remote CLI.
+description: Resolve German surface forms, inspect De-AI-Hilfer vocabulary and learning state, initialize or import confirmed words, and manage saved follow-up answers through the bundled remote CLI.
 ---
 
 # De-AI-Hilfer learning import
+
+## Follow-up records
+
+Use the configured bundled CLI's `follow-up list ENTRY_ID` / `get ID` to read
+saved questions and Markdown answers. For user-authorized external answers,
+`follow-up create --stdin --idempotency-key KEY --yes` accepts
+`{entry_id,question,answer}`. `edit ID --stdin --yes` requires
+`{question,answer,expected_question,expected_answer}` from a prior read;
+stale edits are rejected. `delete ID --yes` permanently deletes one record.
+For internal generation, `generate --stdin --idempotency-key KEY --yes`
+accepts `{entry_id,question}`; `retry ID --idempotency-key KEY --yes` reuses
+the saved question. Both return a task ID; poll `batch get` and inspect the
+result. Failed retries keep the old answer. Reuse keys for identical uncertain
+submissions and never treat queued work as success. Record IDs are not lexemes.
 
 This skill uses the bundled CLI at `<skill-root>/bin/deai`. Its remote API configuration is kept in `<skill-root>/deai.env` and must never be printed, embedded in prompts, or uploaded. Use `https://de.int.alan-studio.uk/api/v1` when the MiniMax command runtime can reach the private network; otherwise use the public fallback `https://de.alan-studio.uk/api/v1`. Browser reachability does not prove that the command runtime shares the same route.
 

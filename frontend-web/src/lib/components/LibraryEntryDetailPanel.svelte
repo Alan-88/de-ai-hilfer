@@ -2,11 +2,11 @@
   import { edgeSwipe } from "$lib/actions/edgeSwipe";
   import { fade, slide } from "svelte/transition";
   import {
-    renderMarkdownHtml,
     resolveStructuredAnalysis,
   } from "$lib/analysis/structuredAnalysis";
   import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
   import LearningAnalysisContent from "$lib/components/bento/LearningAnalysisContent.svelte";
+  import FollowUpHistory from "$lib/components/bento/FollowUpHistory.svelte";
   import type { EntryDetailResponse, GrammarBranch, LearningProgressView } from "$lib/types";
 
   let {
@@ -134,16 +134,8 @@
         {#if entry.follow_ups.length > 0}
           <section class="content-section">
             <div class="card-title"><i class="ph-fill ph-chat-circle-dots"></i> 历史追问记录</div>
-            <div class="follow-up-history-list">
-              {#each entry.follow_ups as followUp}
-                <article class="surface-card fu-item">
-                  <div class="fu-q">Q: {followUp.question}</div>
-                  <div class="markdown-compact fu-a">
-                    {@html renderMarkdownHtml(followUp.answer)}
-                  </div>
-                </article>
-              {/each}
-            </div>
+            <FollowUpHistory entryId={entry.entry_id} history={entry.follow_ups}
+              onchange={(items) => { if (entry) entry = {...entry, follow_ups: items}; }} />
           </section>
         {/if}
 
@@ -248,10 +240,6 @@
   .content-section { display: flex; flex-direction: column; gap: 1rem; }
   .detail-analysis :global(.learning-content) { padding-bottom: 0; }
 
-  .fu-q { margin-bottom: 0.75rem; color: var(--accent-main); font-size: 1.05rem; font-weight: 700; }
-  .fu-a { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color); }
-  .follow-up-history-list { display: flex; flex-direction: column; gap: 1rem; }
-  .fu-item { padding: 1.25rem; }
 
   .debug-section { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
   .debug-section summary { padding: 0.5rem 0; color: var(--text-muted); cursor: pointer; font-size: 0.85rem; }

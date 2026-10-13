@@ -38,7 +38,7 @@
     onSelectRecent,
     onDeleteAttachedPhrase,
     onAddPhraseModule,
-    onnewFollowUp
+    onhistoryChange
   }: {
     result: AnalyzeResponse;
     structured: StructuredAnalysis;
@@ -57,7 +57,7 @@
     onSelectRecent: (query: string) => void;
     onDeleteAttachedPhrase?: (item: AttachedPhraseModule) => void;
     onAddPhraseModule?: (phrase: string) => Promise<void> | void;
-    onnewFollowUp?: (item: FollowUpItem) => void;
+    onhistoryChange: (items: FollowUpItem[]) => void;
   } = $props();
 
   let showCustomRegenerate = $state(false);
@@ -206,9 +206,6 @@
     if (nextKey) onActionModelChange?.(nextKey);
   }
 
-  function emitFollowUp(item: FollowUpItem) {
-    if (onnewFollowUp) onnewFollowUp(item);
-  }
 
 </script>
 
@@ -459,7 +456,7 @@
           history={result.follow_ups}
           disabled={isStreaming}
           modelOverride={selectedActionModelOverride}
-          onnewFollowUp={emitFollowUp}
+          {onhistoryChange}
         />
       </div>
     {:else}

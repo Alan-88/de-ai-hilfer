@@ -43,6 +43,40 @@ pub struct AiClient {
 }
 
 impl AiClient {
+    pub async fn chat_with_tools(
+        &self,
+        model: &str,
+        messages: &[serde_json::Value],
+        tools: &serde_json::Value,
+    ) -> Result<ToolTurn> {
+        let mut body = serde_json::json!({"model":model,"messages":messages,"tools":tools,"tool_choice":"auto","temperature":0.1});
+        if let Some(tokens) = self.chat_max_tokens(
+            model,
+            AiChatOptions {
+                max_tokens: Some(2048),
+                ..Default::default()
+            },
+        ) {
+            body["max_tokens"] = tokens.into();
+        }
+        let response = self
+            .client
+            .post(format!("{}/chat/completions", self.base_url))
+            .bearer_auth(&self.api_key)
+            .timeout(Duration::from_secs(90))
+            .json(&body)
+            .send()
+            .await
+            .context("failed to call follow-up AI endpoint")?
+            .error_for_status()
+            .context("follow-up AI endpoint returned error")?;
+        parse_tool_turn(
+            &response
+                .text()
+                .await
+                .context("failed to read follow-up AI response")?,
+        )
+    }
     pub(crate) fn routing_identity(&self) -> &str {
         &self.base_url
     }
@@ -240,6 +274,87 @@ impl AiClient {
         } else {
             options.max_tokens
         }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ToolTurn {
+    pub content: Option<String>,
+    #[serde(default)]
+    pub tool_calls: Vec<ToolCall>,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ToolCall {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub function: ToolFunction,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ToolFunction {
+    pub name: String,
+    pub arguments: String,
+}
+
+fn parse_tool_turn(body: &str) -> Result<ToolTurn> {
+    let response: serde_json::Value =
+        serde_json::from_str(body).context("invalid follow-up AI response")?;
+    let choice = response["choices"]
+        .as_array()
+        .and_then(|items| items.first())
+        .ok_or_else(|| anyhow!("follow-up AI returned no choice"))?;
+    match choice["finish_reason"].as_str() {
+        Some("stop" | "tool_calls") => {}
+        Some("length") => return Err(anyhow!("追问输出达到长度上限，未保存不完整回答，请重试")),
+        _ => return Err(anyhow!("追问未正常完成，未保存回答，请重试")),
+    }
+    let turn: ToolTurn = serde_json::from_value(choice["message"].clone())
+        .context("invalid follow-up assistant message")?;
+    anyhow::ensure!(
+        turn.content
+            .as_ref()
+            .is_some_and(|text| !text.trim().is_empty())
+            || !turn.tool_calls.is_empty(),
+        "追问返回空回答，请重试"
+    );
+    Ok(turn)
+}
+
+#[cfg(test)]
+mod tool_tests {
+    use super::*;
+    #[test]
+    fn rejects_incomplete_answers_and_preserves_markdown() {
+        assert!(parse_tool_turn(
+            r#"{"choices":[{"finish_reason":"length","message":{"content":"半句"}}]}"#
+        )
+        .is_err());
+        assert!(parse_tool_turn(r#"{"choices":[{"message":{"content":"半句"}}]}"#).is_err());
+        assert!(parse_tool_turn(
+            r#"{"choices":[{"finish_reason":"stop","message":{"content":" "}}]}"#
+        )
+        .is_err());
+        let answer = parse_tool_turn(
+            r#"{"choices":[{"finish_reason":"stop","message":{"content":"**结论**\n\n- 例句"}}]}"#,
+        )
+        .unwrap();
+        assert_eq!(answer.content.unwrap(), "**结论**\n\n- 例句");
+    }
+
+    #[test]
+    fn preserves_provider_metadata_for_tool_continuation() {
+        let body = serde_json::json!({"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"reasoning_content":"provider continuation","tool_calls":[{"id":"call-1","type":"function","function":{"name":"lexeme_query","arguments":"{}"},"extra_content":{"google":{"thought_signature":"opaque-signature"}}}]}}]});
+        let turn = parse_tool_turn(&body.to_string()).unwrap();
+        assert_eq!(
+            serde_json::to_value(turn).unwrap(),
+            body["choices"][0]["message"]
+        );
     }
 }
 

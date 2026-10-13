@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { renderMarkdownHtml } from "$lib/analysis/structuredAnalysis";
+  import { onDestroy } from "svelte";
+  import { renderFollowUpHtml } from "$lib/analysis/followUpMarkdown";
+  import FollowUpHistory from "$lib/components/bento/FollowUpHistory.svelte";
   import { streamFollowUp } from "$lib/streamApi";
   import type { AiModelOverride, FollowUpItem, QualityMode } from "$lib/types";
 
@@ -8,13 +10,13 @@
     disabled = false, 
     history = [], 
     modelOverride = null,
-    onnewFollowUp 
+    onhistoryChange
   } = $props<{
     entryId: number;
     disabled?: boolean;
     history?: FollowUpItem[];
     modelOverride?: AiModelOverride | null;
-    onnewFollowUp?: (item: FollowUpItem) => void;
+    onhistoryChange: (items: FollowUpItem[]) => void;
   }>();
 
   let question = $state("");
@@ -24,6 +26,12 @@
   let isLoading = $state(false);
   let error = $state("");
   let textareaRef = $state<HTMLTextAreaElement | null>(null);
+  let controller: AbortController | null = null;
+  onDestroy(() => controller?.abort());
+  $effect(() => {
+    entryId;
+    return () => { controller?.abort(); question = ""; pendingAnswer = ""; pendingModel = ""; error = ""; };
+  });
 
   // 自动调整高度逻辑
   $effect(() => {
@@ -41,12 +49,16 @@
     pendingAnswer = "";
     pendingModel = "";
     activeQualityMode = qualityMode;
+    const originalEntry = entryId;
+    const requestController = new AbortController();
+    controller = requestController;
 
     try {
       const response = await new Promise<{ follow_up: FollowUpItem }>((resolve, reject) => {
         void streamFollowUp(
           { entry_id: entryId, question, quality_mode: qualityMode, model_override: modelOverride },
           {
+            signal: requestController.signal,
             onMeta: (payload) => {
               pendingModel = payload.model;
             },
@@ -59,18 +71,18 @@
         ).catch(reject);
       });
 
-      if (onnewFollowUp) onnewFollowUp(response.follow_up);
-      question = "";
-      pendingAnswer = "";
-      pendingModel = "";
+      if (entryId === originalEntry) onhistoryChange([...history, response.follow_up]);
+      if (entryId === originalEntry) {
+        question = ""; pendingAnswer = ""; pendingModel = "";
+      }
     } catch (submitError) {
-      error = submitError instanceof Error ? submitError.message : "追问失败";
+      if (entryId === originalEntry) error = submitError instanceof Error ? submitError.message : "追问失败";
     } finally {
       isLoading = false;
     }
   }
 
-  const pendingHtml = $derived(pendingAnswer ? renderMarkdownHtml(pendingAnswer) : "");
+  const pendingHtml = $derived(pendingAnswer ? renderFollowUpHtml(pendingAnswer) : "");
 </script>
 
 <div class="card-title"><i class="ph-fill ph-chat-circle-dots"></i> 继续追问</div>
@@ -88,6 +100,8 @@
   {#if error}
     <div class="message-surface error">{error}</div>
   {/if}
+
+  {#if isLoading}<p class="small-copy" role="status">正在查询关联词并生成回答…</p>{/if}
 
   {#if pendingAnswer}
     <div class="surface-card">
@@ -123,16 +137,7 @@
   </div>
 
   {#if history.length > 0}
-    <div class="follow-up-history">
-      {#each history as item (item.id)}
-        <article class="surface-card">
-          <p><strong>你问：</strong>{item.question}</p>
-          <div class="markdown-compact">
-            {@html renderMarkdownHtml(item.answer)}
-          </div>
-        </article>
-      {/each}
-    </div>
+    <FollowUpHistory {entryId} {history} disabled={disabled || isLoading} {modelOverride} onchange={onhistoryChange} />
   {/if}
 </div>
 
@@ -160,9 +165,6 @@
     background: var(--card-bg);
   }
 
-  .follow-up-history { margin-top: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
-  .follow-up-history article { padding: 1.25rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-color); }
-  .follow-up-history p { margin-bottom: 0.5rem; color: var(--accent-main); font-weight: 700; font-size: 1rem; }
   .inline-actions { display: flex; gap: 0.75rem; }
   @media (max-width: 600px) {
     .card-title { font-size: 12px; margin-bottom: 8px; }
@@ -170,9 +172,6 @@
     .auto-expand-input { padding: 10px; }
     .inline-actions { gap: 8px; flex-wrap: wrap; }
     .inline-actions button { flex: 0 0 auto; white-space: nowrap; font-size: 12px; padding: 8px 20px; min-height: 38px; }
-    .follow-up-history { margin-top: 8px; gap: 10px; }
-    .follow-up-history article { padding: 8px; font-size: 13px; line-height: 1.5; }
-    .follow-up-history p { font-size: 13px; }
     .markdown-compact { line-height: 1.5; }
     .markdown-compact :global(p), .markdown-compact :global(ul), .markdown-compact :global(ol) { margin-bottom: 6px; }
     .markdown-compact :global(li) { margin-bottom: 4px; }

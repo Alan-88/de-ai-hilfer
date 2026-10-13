@@ -92,13 +92,6 @@ pub struct FollowUp {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NewFollowUp {
-    pub entry_id: i64,
-    pub question: String,
-    pub answer: String,
-}
-
 // ==========================================
 // 4. Learning Progress (FSRS 学习进度)
 // ==========================================
@@ -349,6 +342,24 @@ pub struct FollowUpRequest {
     pub quality_mode: QualityMode,
     #[serde(default)]
     pub model_override: Option<AiModelOverride>,
+    #[serde(default)]
+    pub retry_id: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FollowUpWriteRequest {
+    pub entry_id: i64,
+    pub question: String,
+    pub answer: String,
+    pub idempotency_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FollowUpEditRequest {
+    pub question: String,
+    pub answer: String,
+    pub expected_question: String,
+    pub expected_answer: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

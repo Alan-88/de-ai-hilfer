@@ -62,6 +62,24 @@ pub fn validate(request: &BatchRequest) -> Result<()> {
             Ok(())
         };
         match &step.operation {
+            BatchOperation::FollowUpGenerate {
+                entry_id,
+                question,
+                retry_id,
+                model_override,
+            } => {
+                check_id(entry_id)?;
+                if let Some(id) = retry_id {
+                    check_id(id)?;
+                }
+                crate::services::follow_up::validate_text(question, None)?;
+                if let Some(model) = model_override {
+                    ensure!(
+                        !model.provider_name.trim().is_empty() && !model.model_id.trim().is_empty(),
+                        "model override requires provider_name and model_id"
+                    );
+                }
+            }
             BatchOperation::LexemeInitialize {
                 lexeme_ids,
                 model_override,
@@ -252,6 +270,9 @@ async fn execute_job(state: &AppState, id: &str) -> Result<()> {
             .iter()
             .any(|dependency| prior[dependency].status != "succeeded");
         let references = match &step.operation {
+            BatchOperation::FollowUpGenerate {
+                entry_id, retry_id, ..
+            } => std::iter::once(entry_id).chain(retry_id.iter()).collect(),
             BatchOperation::LearningMembership { ids, .. } => ids.iter().collect::<Vec<_>>(),
             BatchOperation::FolderCreate { parent_id, .. } => parent_id.iter().collect(),
             BatchOperation::ArticleImport { folder_id, .. } => folder_id.iter().collect(),
@@ -351,6 +372,27 @@ async fn execute_operation(
     progress: (&str, usize),
 ) -> Result<Value> {
     match operation {
+        BatchOperation::FollowUpGenerate {
+            entry_id,
+            question,
+            retry_id,
+            model_override,
+        } => {
+            let request = crate::models::FollowUpRequest {
+                entry_id: resolve_id(entry_id, prior)?,
+                question: question.clone(),
+                retry_id: retry_id
+                    .as_ref()
+                    .map(|id| resolve_id(id, prior))
+                    .transpose()?,
+                model_override: model_override.clone(),
+                quality_mode: Default::default(),
+            };
+            Ok(serde_json::to_value(
+                crate::services::follow_up::create_with_progress(state, request, None, Some(key))
+                    .await?,
+            )?)
+        }
         BatchOperation::LexemeInitialize {
             lexeme_ids,
             model_override,
@@ -791,6 +833,7 @@ mod tests {
             entry_count, 1,
             "concurrent identical words persist only one entry"
         );
+        crate::services::follow_up::tests::verify_agent_and_mutations(&state, entry, lexeme).await;
         let mixed: BatchRequest = serde_json::from_value(json!({"idempotency_key":"mixed-words","operations":[
             {"id":"words","operation":{"action":"lexeme_initialize","lexeme_ids":[lexeme,999999]}},
             {"id":"learn","operation":{"action":"learning_membership","mutation":"add","ids":[{"step":"words","path":"/results/0/value/entry_id"}]}},

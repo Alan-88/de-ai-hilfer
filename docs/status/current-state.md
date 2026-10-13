@@ -4,6 +4,10 @@
 
 ## 阶段判断
 
+- 追问改为有界只读Agent，实际支持关联词resolve/inspect及已有解析读取；模型失败、长度截断或超时不再保存词典兜底摘要。保留Markdown换行，网页补编辑、删除和原位重试，冲突编辑拒绝覆盖。CLI/MCP支持读取、保存外部回答、编辑、删除及异步内部生成；MCP0.4新增follow_up_query/write/generate，通用队列新增follow_up_generate，项目/便携CLI与Skill同步。旧Quittung兜底记录保留供用户处理。见 `docs/api/follow-ups.md`。
+- 前后端与MCP已部署；真实模型异步追问返回完整回答，公网OAuth/PKCE、14工具发现及追问读取通过，移动/PC亮暗主题截图存于 `output/playwright/quittung-follow-up-*`。完整验证及边界见 `docs/iterations/2026-10-13-follow-up-agent-management.md`。
+- 追问默认按“深度解析与避坑”单条风格快问快答：1–2个短段落，侧重使用原因、判断模型与辨析边界，必要时加短例句；不用多级报告或表格，不以硬截断实现短回答。
+
 - 通用异步批量Agent API支持有序操作清单、前序结果ID引用、逐项进度、失败继续/停止及未成功项重试；MCP新增batch_submit/query/retry，lexeme_initialize改为立即返回任务ID，CLI新增batch命令与initialize --async，Skill/指南同步。当前操作覆盖初始化、学习add/remove/reset、创建文件夹、导入文章，可自由组合，不限定文章场景。见 `docs/api/agent-batches.md`。
 - 后端生成限制为单进程3路并发，同原型请求串行复查知识库，A/B/C阶段结果持久化24小时，B/C失败及落库失败可复用已完成阶段；模型/词典/prompt变化与强制重新生成不会误用旧结果。批量任务重启自动恢复；业务创建与学习变更有事务去重凭据。旧同步API/CLI保留。全量备份恢复拒绝未完成任务，并清除引用旧ID的运行数据。
 

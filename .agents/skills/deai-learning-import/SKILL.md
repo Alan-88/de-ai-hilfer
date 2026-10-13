@@ -1,9 +1,21 @@
 ---
 name: deai-learning-import
-description: Resolve German surface forms from articles, inspect De-AI-Hilfer vocabulary and learning state, and initialize or import user-confirmed words through the repository CLI. Use when Codex needs to process German reading material, check whether vocabulary already exists or is being learned, prepare a vocabulary import, or manage confirmed learning-plan entries without direct database access.
+description: Resolve German surface forms, inspect De-AI-Hilfer vocabulary and learning state, import confirmed words, and manage saved follow-up answers through the repository CLI. Use for German reading imports, learning-plan operations, or reading, editing, saving and retrying vocabulary follow-ups without direct database access.
 ---
 
 # De-AI-Hilfer learning import
+
+## Follow-up records
+
+For user-requested follow-up management, read `docs/api/follow-ups.md` and use
+`follow-up list ENTRY_ID` / `get FOLLOW_UP_ID` before writes. External answers
+can be saved with `follow-up create --stdin --idempotency-key KEY --yes` or
+edited with `follow-up edit ID --stdin --yes`; edits include the previously
+read expected_question/expected_answer. `delete ID --yes` deletes that record
+permanently. `generate --stdin --idempotency-key KEY --yes` and
+`retry ID --idempotency-key KEY --yes` return async tasks; poll `batch get`.
+Do not treat a failed generation as a valid answer or silently overwrite an
+existing answer. IDs identify records under knowledge entry_id, not lexemes.
 
 Run the repository CLI from the repository root:
 

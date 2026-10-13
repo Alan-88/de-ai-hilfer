@@ -118,7 +118,7 @@ const token = parsed.values.token ?? process.env.DEAI_API_TOKEN ?? fileEnv.DEAI_
 if (!token) fail("Set DEAI_API_TOKEN or pass --token.");
 
 const stdinRaw = parsed.values.stdin ? readFileSync(0, "utf8") : null;
-const inputs = stdinRaw === null || (group === "article" && action === "import") || (group === "batch" && action === "submit")
+const inputs = stdinRaw === null || group === "follow-up" || (group === "article" && action === "import") || (group === "batch" && action === "submit")
   ? positionals
   : parseInput(stdinRaw);
 
@@ -152,6 +152,35 @@ try {
         body: JSON.stringify(body),
       }),
     );
+  } else if (group === "follow-up") {
+    const readId = () => {if (inputs.length !== 1) throw new Error("Provide exactly one record or entry ID."); return integer(inputs[0],action === "list" ? "entry id" : "follow-up id");};
+    if (action === "list") output = await request(`/agent/follow-ups?entry_id=${readId()}`);
+    else if (action === "get") output = await request(`/agent/follow-ups/${readId()}`);
+    else {
+      requireConfirmation();
+      if (action === "delete") output = await request(`/agent/follow-ups/${readId()}`,{method:"DELETE"});
+      else if (action === "create" || action === "edit") {
+        if (stdinRaw === null) fail("Create/edit requires a JSON object through --stdin.");
+        const payload = parseFollowUpInput(stdinRaw);
+        if (action === "create") output = await request("/agent/follow-ups",{method:"POST",body:JSON.stringify({entry_id:integer(payload.entry_id,"entry id"),question:payload.question,answer:payload.answer,idempotency_key:parsed.values["idempotency-key"] ?? payload.idempotency_key ?? randomUUID()})});
+        else {
+          const id = readId();
+          if (typeof payload.expected_question !== "string" || typeof payload.expected_answer !== "string") fail("Edit requires expected_question and expected_answer from a prior read.");
+          output = await request(`/agent/follow-ups/${id}`,{method:"PUT",body:JSON.stringify(payload)});
+        }
+      } else if (action === "generate" || action === "retry") {
+        if (Boolean(parsed.values.provider) !== Boolean(parsed.values.model)) fail("--provider and --model must be used together.");
+        let entryId, question, retryId;
+        if (action === "retry") {retryId = readId(); const saved = await request(`/agent/follow-ups/${retryId}`); entryId = saved.entry_id; question = saved.question;}
+        else {
+          if (stdinRaw === null) fail("Generate requires {entry_id,question} through --stdin.");
+          const payload = JSON.parse(stdinRaw);
+          entryId = integer(payload.entry_id,"entry id"); question = payload.question;
+          if (typeof question !== "string" || !question.trim()) fail("question is required");
+        }
+        output = await request("/agent/batches",{method:"POST",body:JSON.stringify({idempotency_key:parsed.values["idempotency-key"] ?? randomUUID(),operations:[{id:"followup",operation:{action:"follow_up_generate",entry_id:entryId,question,...(retryId ? {retry_id:retryId} : {}),...(parsed.values.provider ? {model_override:{provider_name:parsed.values.provider,model_id:parsed.values.model}} : {})}}]})});
+      } else usage(2);
+    }
   } else if (group === "batch" && action === "submit") {
     requireConfirmation();
     if (stdinRaw === null) fail("Batch submit requires a JSON object through --stdin.");
@@ -326,6 +355,14 @@ function parseBatchInput(raw) {
   return value;
 }
 
+function parseFollowUpInput(raw) {
+  const value = JSON.parse(raw);
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("follow-up stdin must contain a JSON object");
+  if (typeof value.question !== "string" || !value.question.trim() || value.question.length > 4000) throw new Error("question must contain 1–4000 characters");
+  if (typeof value.answer !== "string" || !value.answer.trim() || value.answer.length > 100000) throw new Error("answer must contain 1–100000 characters");
+  return value;
+}
+
 function apiBase(value) {
   return value.replace(/\/+$/, "");
 }
@@ -381,6 +418,13 @@ function usage(code) {
   tools/deai batch get <batch-id>
   tools/deai batch list [--limit N]
   tools/deai batch retry <batch-id> --yes
+  tools/deai follow-up list <entry-id>
+  tools/deai follow-up get <follow-up-id>
+  tools/deai follow-up create --stdin --yes
+  tools/deai follow-up edit <follow-up-id> --stdin --yes
+  tools/deai follow-up delete <follow-up-id> --yes
+  tools/deai follow-up generate --stdin --yes [--idempotency-key KEY]
+  tools/deai follow-up retry <follow-up-id> --yes [--idempotency-key KEY]
   tools/deai article list
   tools/deai article get <article-id...>
   tools/deai article import --stdin --yes

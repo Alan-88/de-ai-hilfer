@@ -20,6 +20,7 @@ topics:
 - `learning_diagnostics`
 - `learning_corrections`
 - `batch_operations`
+- `follow_ups`
 
 `learning_query(action=explain)` remains available and reuses the same detailed
 V3 scheduler document as `deai_guide(topic=learning_v3)`.
@@ -43,6 +44,12 @@ See [the operation contract](../docs/api/agent-batches.md) for payloads, result
 references, failure policy, deduplication and recovery boundaries.
 
 ## Configuration
+
+MCP 0.4 also exposes `follow_up_query`, `follow_up_write` (create/edit/delete
+externally generated Markdown), and `follow_up_generate` (asynchronous internal
+generation or retry). Generation uses a bounded read-only vocabulary agent;
+failures never replace an existing answer. See
+[the follow-up contract](../docs/api/follow-ups.md) and refresh tool discovery.
 
 Copy `.env.example` to `.env` and fill every secret. Gemini Spark uses
 `MCP_OAUTH_CLIENT_ID` and `MCP_OAUTH_CLIENT_SECRET` through its advanced MCP

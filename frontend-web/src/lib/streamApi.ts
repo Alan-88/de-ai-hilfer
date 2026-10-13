@@ -36,6 +36,7 @@ interface FollowUpStreamRequest {
   question: string;
   quality_mode?: QualityMode;
   model_override?: AiModelOverride | null;
+  retry_id?: number;
 }
 
 export function streamAnalyze(
@@ -75,6 +76,7 @@ async function streamJsonEvents<TComplete>(
 
   const decoder = new TextDecoder();
   let buffer = "";
+  let terminal = false;
 
   while (true) {
     const { value, done } = await reader.read();
@@ -87,6 +89,7 @@ async function streamJsonEvents<TComplete>(
       const rawEvent = buffer.slice(0, separatorIndex);
       buffer = buffer.slice(separatorIndex + 2);
       handleEvent(rawEvent, handlers);
+      if (/^event: (complete|error)$/m.test(rawEvent)) terminal = true;
       separatorIndex = buffer.indexOf("\n\n");
     }
   }
@@ -94,7 +97,9 @@ async function streamJsonEvents<TComplete>(
   const trailing = buffer.trim();
   if (trailing) {
     handleEvent(trailing, handlers);
+    if (/^event: (complete|error)$/m.test(trailing)) terminal = true;
   }
+  if (!terminal) throw new Error("响应中断，未收到完成结果，请重试");
 }
 
 function handleEvent<TComplete>(rawEvent: string, handlers: StreamHandlers<TComplete>) {

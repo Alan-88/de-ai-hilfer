@@ -361,14 +361,14 @@
     return currentSuggestions[0]?.query_text?.trim() || query;
   }
 
-  function handleNewFollowUp(item: FollowUpItem) {
+  function handleFollowUpHistory(items: FollowUpItem[]) {
     s.update(state => {
       if (!state.result) return state;
       return {
         ...state,
         result: {
           ...state.result,
-          follow_ups: [...state.result.follow_ups, item]
+          follow_ups: items
         }
       };
     });
@@ -706,7 +706,7 @@
         onSelectRecent={(q) => handleSearch(q, "default", false, "", false)}
         onDeleteAttachedPhrase={handleDeleteAttachedPhrase}
         onAddPhraseModule={handleAddPhraseModule}
-        onnewFollowUp={handleNewFollowUp}
+        onhistoryChange={handleFollowUpHistory}
       />
     {/if}
   </div>
