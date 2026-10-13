@@ -51,6 +51,7 @@
   const bookmarks = $derived(
     article?.segments.filter((segment): segment is Extract<ReadingContentSegment, { kind: "bookmark" }> => segment.kind === "bookmark") ?? [],
   );
+  const folderPath = $derived(article ? buildFolderPath(article.folder_id, folders) : "");
 
   $effect(() => { void loadArticle(articleId); });
 
@@ -341,6 +342,7 @@
           <div class="title-group">
             <a class="back-button" href="/learn/articles" aria-label="返回文章目录"><i class="ph ph-arrow-left"></i></a>
             <div class="title-copy">
+              <span class="folder-path" title={folderPath}>{folderPath}</span>
               <div class="title-line">
                 <h1 title={article.title}>{article.title}</h1>
                 <button class="edit-article" aria-label="编辑文章" title="编辑文章" onclick={() => editOpen = true}><i class="ph ph-pencil-simple"></i></button>
@@ -436,9 +438,10 @@
   .reading-view { position: relative; display: grid; height: calc(100dvh - 4rem - 70px); grid-template-rows: minmax(0, 1fr); color: var(--text-main); }
   .article-state { display: flex; min-height: calc(100dvh - 8rem); align-items: center; justify-content: center; gap: 0.65rem; color: var(--text-muted); }
   .article-state a { color: var(--accent-main); text-decoration: none; }
-  .page-head { z-index: 5; display: flex; flex: 0 0 auto; min-height: 66px; align-items: center; padding: 0.65rem 1.35rem; border-bottom: 1px solid var(--border-color); background: var(--card-bg); }
+  .page-head { z-index: 5; display: flex; flex: 0 0 auto; min-height: 75px; align-items: center; padding: 0.65rem 1.35rem; border-bottom: 1px solid var(--border-color); background: var(--card-bg); }
   .title-group { display: flex; width: 100%; align-items: center; gap: 0.9rem; min-width: 0; }
   .title-copy { min-width: 0; flex: 1; }
+  .folder-path { display: block; overflow: hidden; color: var(--text-muted); font-size: 0.72rem; font-weight: 750; letter-spacing: 0.04em; text-overflow: ellipsis; white-space: nowrap; }
   .title-line { display: flex; min-width: 0; align-items: center; gap: 0.35rem; }
   .back-button { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid var(--border-color); border-radius: 50%; background: var(--control-bg); color: var(--text-main); text-decoration: none; box-shadow: var(--shadow-sm); }
   h1 { margin: 0; min-width: 0; overflow: hidden; font-size: 1.45rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
@@ -481,6 +484,8 @@
     :global(.page-container:has(.reading-view)) { max-width: 100%; }
     .reading-shell { display: block; height: 100%; }
     .article-pane { height: 100%; }
+    .page-head { min-height: 66px; }
+    .folder-path { display: none; }
     .article-copy { width: min(680px, calc(100% - 2.5rem)); padding: 3.5rem 0; }
     .mobile-lookup { display: flex; }
     .rail-dismiss { position: absolute; inset: 0; z-index: 20; display: block; width: 100%; height: 100%; border-radius: inherit; background: color-mix(in srgb, var(--text-main) 8%, transparent); cursor: default; }
@@ -494,9 +499,9 @@
     .page-head { min-height: 56px; padding: 0.55rem 0.65rem; }
     .title-group { gap: 0.6rem; }
     .back-button { width: 34px; height: 34px; }
-    h1 { font-size: 1.15rem; }
+    h1 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; font-size: 1.15rem; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
     .mobile-lookup { width: 32px; padding: 0; }
     .reading-shell { border-radius: var(--radius-md); }
-    .article-copy { width: calc(100% - 2rem); font-size: 1.2rem; line-height: 1.95; }
+    .article-copy { width: calc(100% - 2rem); font-size: 1.125rem; line-height: 1.9; }
   }
 </style>

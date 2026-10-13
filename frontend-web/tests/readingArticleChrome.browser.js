@@ -16,15 +16,26 @@ async page => {
     const demo = await context.newPage();
     await demo.goto(origin + '/learn/articles/' + summary.id);
     await demo.locator('.article-copy').waitFor();
+    await demo.evaluate(() => document.fonts.ready);
+    await demo.waitForTimeout(350);
     const trigger = demo.locator('.bookmark-menu > button');
     if (height === 900 && width !== 320) {
-      await demo.screenshot({path: `output/playwright/reading-chrome-${phase}-${width}-${theme}.png`});
+      await demo.screenshot({path: `output/playwright/reading-typography-${phase}-${width}-${theme}.png`});
       await trigger.click();
       await demo.locator('.bookmark-popover').waitFor();
-      await demo.screenshot({path: `output/playwright/reading-chrome-menu-${phase}-${width}-${theme}.png`});
+      await demo.screenshot({path: `output/playwright/reading-typography-menu-${phase}-${width}-${theme}.png`});
       await trigger.click();
     }
     if (phase === 'after') {
+      const typography = await demo.evaluate(() => {
+        const body = getComputedStyle(document.querySelector('.article-copy'));
+        const title = getComputedStyle(document.querySelector('.title-line h1'));
+        const path = document.querySelector('.folder-path');
+        return {bodySize: parseFloat(body.fontSize), bodyLine: parseFloat(body.lineHeight), titleSize: parseFloat(title.fontSize), pathVisible: getComputedStyle(path).display !== 'none', path: path.textContent};
+      });
+      if (width <= 600 && (typography.bodySize !== 18 || Math.abs(typography.bodyLine - 34.2) > 0.1 || Math.abs(typography.titleSize - 18.4) > 0.1)) throw Error('Mobile reading typography is incorrect');
+      if (width > 900 && (!typography.pathVisible || !typography.path.trim() || typography.bodySize < 20)) throw Error('Desktop path or reading typography is incorrect');
+      if (width <= 900 && typography.pathVisible) throw Error('Folder path crowds mobile title');
       if (!await trigger.evaluate(item => Boolean(item.closest('.article-foot')))) throw Error('Bookmark trigger is not in the footer');
       if (await demo.locator('.page-head .bookmark-menu, .page-head .mobile-lookup').count()) throw Error('Actions still crowd the title');
       if (await demo.locator('.article-foot').evaluate(item => item.getBoundingClientRect().height) !== 44) throw Error('Footer is not compact');
@@ -33,6 +44,7 @@ async page => {
       await demo.reload();
       await demo.locator('.article-copy').waitFor();
       await demo.evaluate(() => document.fonts.ready);
+      if (width <= 600 && await demo.locator('.title-line h1').evaluate(item => item.getBoundingClientRect().height > parseFloat(getComputedStyle(item).lineHeight) * 2 + 1)) throw Error('Mobile title exceeds two lines');
       const measure = () => demo.evaluate(() => {
         const pane = document.querySelector('.article-pane');
         const paneTop = pane.getBoundingClientRect().top;
@@ -75,7 +87,7 @@ async page => {
       await trigger.click();
       await demo.locator('.article-foot > span').click();
       if (await demo.locator('.bookmark-popover').count()) throw Error('Outside click does not close bookmarks');
-      results.push({width, height, theme, barsFixed: true, bookmarkScroll: true});
+      results.push({width, height, theme, ...typography, barsFixed: true, bookmarkScroll: true});
       if (width === 320 && theme === 'canvas') {
         await demo.unroute(articleUrl);
         await demo.route(articleUrl, route => route.fulfill({json: {...article, segments: [{kind: 'text', text: 'Ein kurzer Text.'}], bookmark_count: 0}}));
