@@ -28,7 +28,6 @@
 
   let article = $state<ReadingArticleDetail | null>(null);
   let folders = $state<ReadingFolder[]>([]);
-  let folderPath = $state("");
   let selectedKey = $state("");
   let selectedEntryId = $state<number | null>(null);
   let selectionVersion = $state(0);
@@ -62,7 +61,6 @@
       const [next, index] = await Promise.all([getReadingArticle(id), getReadingIndex()]);
       article = next;
       folders = index.folders;
-      folderPath = buildFolderPath(next.folder_id, index.folders);
       const first = next.segments.find((segment) => segment.kind === "bookmark");
       if (first?.kind === "bookmark") selectWord(first, false);
       void markReadingArticleOpened(id).catch(() => {});
@@ -122,7 +120,6 @@
 
   function applyEditedArticle(next: ReadingArticleDetail) {
     article = next;
-    folderPath = buildFolderPath(next.folder_id, folders);
     editOpen = false;
     const selected = next.segments.find(
       (segment) => segment.kind === "bookmark"
@@ -344,20 +341,43 @@
           <div class="title-group">
             <a class="back-button" href="/learn/articles" aria-label="返回文章目录"><i class="ph ph-arrow-left"></i></a>
             <div class="title-copy">
-              <span>{folderPath}</span>
               <div class="title-line">
-                <h1>{article.title}</h1>
+                <h1 title={article.title}>{article.title}</h1>
                 <button class="edit-article" aria-label="编辑文章" title="编辑文章" onclick={() => editOpen = true}><i class="ph ph-pencil-simple"></i></button>
               </div>
             </div>
           </div>
-          <div class="head-actions">
+        </header>
+
+        <div class="article-scroll">
+          <article class="article-copy" oncontextmenu={handleArticleContextMenu}>
+            {#each article.segments as segment, segmentIndex}
+              {#if segment.kind === "text"}
+                <span data-reading-segment={segmentIndex}>{segment.text}</span>
+              {:else}
+                <button
+                  id={`mark-${segment.occurrence_index}`}
+                  class:current={selectedOccurrence === segment.occurrence_index}
+                  class:unavailable={!segment.entry_id}
+                  class="marked"
+                  title={segment.entry_id ? segment.form_of : `${segment.form_of} 的词条已不可用`}
+                  onclick={() => selectWord(segment)}
+                >{segment.surface}</button>
+              {/if}
+            {/each}
+          </article>
+        </div>
+
+        <footer class="article-foot">
+          <span>{wordCount()} Wörter</span>
+          <div class="foot-actions">
+            <button class="mobile-lookup" aria-label="快捷查词" title="快捷查词" onclick={() => railOpen = true}><i class="ph ph-magnifying-glass"></i></button>
             <div class="bookmark-menu">
-              <button class:active={showBookmarks} disabled={bookmarks.length === 0} onclick={() => showBookmarks = !showBookmarks}>
-                <i class="ph ph-bookmarks"></i><span class="bookmark-label">标记词</span><span class="bookmark-count">{bookmarks.length}</span>
+              <button class:active={showBookmarks} aria-label="标记词" aria-expanded={showBookmarks} aria-controls="article-bookmarks" disabled={bookmarks.length === 0} onclick={() => showBookmarks = !showBookmarks}>
+                <i class="ph ph-bookmarks"></i><span>{bookmarks.length} 标记</span>
               </button>
               {#if showBookmarks}
-                <div class="bookmark-popover">
+                <div id="article-bookmarks" class="bookmark-popover">
                   {#each bookmarks as bookmark}
                     <div class="bookmark-row">
                       <button class="bookmark-jump" onclick={() => jumpToBookmark(bookmark)}>
@@ -376,29 +396,7 @@
                 </div>
               {/if}
             </div>
-            <button class="mobile-lookup" onclick={() => railOpen = true}><i class="ph ph-magnifying-glass"></i> 查词</button>
           </div>
-        </header>
-
-        <article class="article-copy" oncontextmenu={handleArticleContextMenu}>
-          {#each article.segments as segment, segmentIndex}
-            {#if segment.kind === "text"}
-              <span data-reading-segment={segmentIndex}>{segment.text}</span>
-            {:else}
-              <button
-                id={`mark-${segment.occurrence_index}`}
-                class:current={selectedOccurrence === segment.occurrence_index}
-                class:unavailable={!segment.entry_id}
-                class="marked"
-                title={segment.entry_id ? segment.form_of : `${segment.form_of} 的词条已不可用`}
-                onclick={() => selectWord(segment)}
-              >{segment.surface}</button>
-            {/if}
-          {/each}
-        </article>
-
-        <footer class="article-foot">
-          <span>{wordCount()} Wörter</span><span>{bookmarks.length} 标记</span>
         </footer>
       </main>
 
@@ -438,22 +436,22 @@
   .reading-view { position: relative; display: grid; height: calc(100dvh - 4rem - 70px); grid-template-rows: minmax(0, 1fr); color: var(--text-main); }
   .article-state { display: flex; min-height: calc(100dvh - 8rem); align-items: center; justify-content: center; gap: 0.65rem; color: var(--text-muted); }
   .article-state a { color: var(--accent-main); text-decoration: none; }
-  .page-head { position: sticky; top: 0; z-index: 5; display: flex; min-height: 75px; align-items: center; justify-content: space-between; gap: 1.5rem; padding: 0.65rem 1.35rem; border-bottom: 1px solid var(--border-color); background: var(--card-bg); }
-  .title-group { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
-  .title-copy { min-width: 0; }
+  .page-head { z-index: 5; display: flex; flex: 0 0 auto; min-height: 66px; align-items: center; padding: 0.65rem 1.35rem; border-bottom: 1px solid var(--border-color); background: var(--card-bg); }
+  .title-group { display: flex; width: 100%; align-items: center; gap: 0.9rem; min-width: 0; }
+  .title-copy { min-width: 0; flex: 1; }
   .title-line { display: flex; min-width: 0; align-items: center; gap: 0.35rem; }
   .back-button { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid var(--border-color); border-radius: 50%; background: var(--control-bg); color: var(--text-main); text-decoration: none; box-shadow: var(--shadow-sm); }
-  .title-group span { color: var(--text-muted); font-size: 0.72rem; font-weight: 750; letter-spacing: 0.04em; }
-  h1 { margin: 0.15rem 0 0; overflow: hidden; font-size: 1.45rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+  h1 { margin: 0; min-width: 0; overflow: hidden; font-size: 1.45rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
   .edit-article { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; margin-top: 0.12rem; border-radius: 50%; background: transparent; color: var(--text-muted); }
   .edit-article:hover, .edit-article:focus-visible { background: var(--btn-secondary); color: var(--text-main); outline: none; }
-  .head-actions { display: flex; align-items: center; gap: 0.55rem; }
-  .bookmark-menu { position: relative; }
-  .bookmark-menu > button, .mobile-lookup { display: flex; align-items: center; gap: 0.5rem; min-height: 40px; padding: 0 0.85rem; border: 1px solid var(--border-color); border-radius: var(--radius-full); background: var(--card-bg); color: var(--text-main); font-weight: 750; box-shadow: var(--shadow-sm); }
+  .foot-actions { display: flex; align-items: center; gap: 6px; }
+  .bookmark-menu > button, .mobile-lookup { display: flex; height: 32px; align-items: center; justify-content: center; gap: 5px; padding: 0 9px; border: 1px solid var(--border-color); border-radius: var(--radius-full); background: var(--control-bg); color: var(--text-muted); font-size: 11px; font-weight: 750; white-space: nowrap; }
+  .bookmark-menu > button i, .mobile-lookup i { font-size: 14px; }
+  .bookmark-menu > button:hover, .mobile-lookup:hover { background: var(--btn-secondary); color: var(--text-main); }
+  .bookmark-menu > button:focus-visible, .mobile-lookup:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 2px; }
   .bookmark-menu > button.active { border-color: color-mix(in srgb, var(--accent-main) 55%, var(--border-color)); }
   .bookmark-menu > button:disabled { cursor: default; opacity: 0.55; }
-  .bookmark-menu > button .bookmark-count { display: grid; min-width: 21px; height: 21px; place-items: center; border-radius: 50%; background: var(--surface-passive); color: var(--text-muted); font-size: 0.7rem; }
-  .bookmark-popover { position: absolute; top: calc(100% + 0.6rem); right: 0; z-index: 230; width: 245px; padding: 0.45rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--card-bg); box-shadow: var(--shadow-hover); }
+  .bookmark-popover { position: absolute; bottom: 52px; right: 12px; z-index: 230; width: min(280px, calc(100% - 24px)); max-height: min(380px, calc(100% - 130px)); overflow-y: auto; overscroll-behavior: contain; padding: 0.45rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--card-bg); box-shadow: var(--shadow-hover); }
   .bookmark-row { display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: center; gap: 0.2rem; border-radius: 9px; }
   .bookmark-row:hover { background: var(--btn-secondary); }
   .bookmark-jump { display: flex; width: 100%; min-width: 0; align-items: center; justify-content: space-between; gap: 0.8rem; padding: 0.7rem 0.55rem 0.7rem 0.75rem; background: transparent; color: var(--text-main); text-align: left; }
@@ -465,11 +463,10 @@
   .bookmark-error { margin: 0.35rem 0.45rem 0.15rem; color: var(--danger-text, #b8453f); font-size: 0.7rem; line-height: 1.45; }
   .mobile-lookup { display: none; }
 
-  .bookmark-menu > button { min-height: 36px; padding: 0 0.7rem; background: var(--control-bg); }
-
   .reading-shell { position: relative; display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--card-bg); box-shadow: var(--shadow-sm); }
-  .article-pane { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; }
-  .article-copy { width: min(720px, calc(100% - 5rem)); margin: auto; padding: clamp(4rem, 10vh, 7rem) 0; white-space: pre-wrap; font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif; font-size: clamp(1.3rem, 1.65vw, 1.6rem); font-weight: 540; line-height: 2; letter-spacing: 0.005em; }
+  .article-pane { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
+  .article-scroll { display: flex; min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+  .article-copy { width: min(720px, calc(100% - 5rem)); flex: 0 0 auto; margin: auto; padding: clamp(4rem, 10vh, 7rem) 0; white-space: pre-wrap; font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif; font-size: clamp(1.3rem, 1.65vw, 1.6rem); font-weight: 540; line-height: 2; letter-spacing: 0.005em; }
   .marked { position: relative; display: inline; padding: 0 0.04em 0.04em; border-radius: 0; background: transparent; color: inherit; font: inherit; font-weight: 690; transition: background 120ms ease, text-decoration-color 120ms ease; }
   .marked { box-shadow: inset 0 -2px color-mix(in srgb, var(--accent-main) 58%, transparent); }
   .marked::after { content: ""; position: absolute; left: calc(100% + 3px); bottom: -1px; width: 5px; height: 5px; border-radius: 50%; background: color-mix(in srgb, var(--accent-main) 72%, transparent); transition: background 120ms ease, transform 120ms ease; }
@@ -477,7 +474,7 @@
   .marked:hover::after, .marked.current::after { background: var(--accent-main); transform: scale(1.16); }
   .marked.unavailable { color: var(--text-muted); box-shadow: inset 0 -2px color-mix(in srgb, var(--text-muted) 42%, transparent); }
   .marked.unavailable::after { background: color-mix(in srgb, var(--text-muted) 62%, transparent); }
-  .article-foot { display: flex; justify-content: space-between; margin: 0 2rem; padding: 1rem 0; border-top: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.72rem; font-weight: 750; }
+  .article-foot { display: flex; height: 44px; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; border-top: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-muted); font-size: 11px; font-weight: 750; }
   .rail-dismiss { display: none; }
 
   @media (max-width: 900px) {
@@ -494,17 +491,12 @@
   }
 
   @media (max-width: 600px) {
-    .page-head { min-height: 66px; align-items: center; gap: 0.5rem; padding: 0.55rem 0.65rem; }
+    .page-head { min-height: 56px; padding: 0.55rem 0.65rem; }
     .title-group { gap: 0.6rem; }
     .back-button { width: 34px; height: 34px; }
-    .title-group span { font-size: 0.64rem; }
     h1 { font-size: 1.15rem; }
-    .bookmark-menu > button { padding: 0 0.55rem; font-size: 0.78rem; }
-    .bookmark-label { display: none; }
-    .mobile-lookup { width: 40px; padding: 0; justify-content: center; gap: 0; color: transparent; font-size: 0; }
-    .mobile-lookup i { color: var(--text-main); font-size: 1rem; }
+    .mobile-lookup { width: 32px; padding: 0; }
     .reading-shell { border-radius: var(--radius-md); }
     .article-copy { width: calc(100% - 2rem); font-size: 1.2rem; line-height: 1.95; }
-    .article-foot { margin: 0 1rem; }
   }
 </style>

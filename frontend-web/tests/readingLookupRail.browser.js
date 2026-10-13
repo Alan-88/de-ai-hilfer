@@ -43,7 +43,7 @@ async page => {
       if (getComputedStyle(button).whiteSpace !== 'nowrap' || button.scrollWidth > button.clientWidth) throw Error('Learning button label wraps');
       if (head.closest('.lookup-scroll')) throw Error('Word header is inside the scrolling content');
       if (Math.abs((bounds.left + bounds.right - r.left - r.right) / 2) > 1) throw Error('Word header not centered');
-      return {railWidth: r.width, fontSizes: expected, headTop: bounds.top, articleScroll: document.querySelector('.article-pane').scrollTop};
+      return {railWidth: r.width, fontSizes: expected, headTop: bounds.top, articleScroll: document.querySelector('.article-scroll').scrollTop};
     });
     const initial = await inspect();
     if ([390, 1280].includes(width)) await demo.screenshot({path: `output/playwright/reading-rail-search-after-${width}-${theme}.png`});
