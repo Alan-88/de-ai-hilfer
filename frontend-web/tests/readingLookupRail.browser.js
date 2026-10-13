@@ -13,6 +13,7 @@ async page => {
     await demo.goto(origin + '/learn/articles/' + article.id);
     await demo.locator('.article-copy').waitFor();
     if (width <= 900) await demo.locator('.mobile-lookup').click();
+    await demo.getByRole('button', {name: '展开搜索'}).click();
     const input = demo.getByRole('textbox', {name: '查询单词'});
     await input.fill('abnehmen');
     await demo.locator('.lookup-suggestions strong').filter({hasText: /^abnehmen$/}).waitFor();
@@ -45,11 +46,91 @@ async page => {
       return {railWidth: r.width, fontSizes: expected, headTop: bounds.top, articleScroll: document.querySelector('.article-pane').scrollTop};
     });
     const initial = await inspect();
-    if ([390, 1280].includes(width)) await demo.screenshot({path: `output/playwright/reading-rail-after-${width}-${theme}.png`});
+    if ([390, 1280].includes(width)) await demo.screenshot({path: `output/playwright/reading-rail-search-after-${width}-${theme}.png`});
     await demo.locator('.lookup-scroll').evaluate(item => item.scrollTop = 400);
     const scrolled = await inspect();
     if (scrolled.headTop !== initial.headTop || scrolled.articleScroll !== initial.articleScroll) throw Error('Lookup scrolling moved word or article');
-    if ([390, 1280].includes(width)) await demo.screenshot({path: `output/playwright/reading-rail-scrolled-${width}-${theme}.png`});
+    if ([390, 1280].includes(width)) await demo.screenshot({path: `output/playwright/reading-rail-search-scrolled-${width}-${theme}.png`});
+    const headerHeight = await demo.locator('.lookup-head').evaluate(item => item.getBoundingClientRect().height);
+    await demo.getByRole('button', {name: '展开搜索'}).click();
+    await demo.waitForTimeout(300);
+    if (!await input.evaluate(item => item === document.activeElement)) throw Error('Search does not focus input');
+    if (await demo.locator('.lookup-head').evaluate(item => item.getBoundingClientRect().height) !== headerHeight) throw Error('Search changes header height');
+    if (await demo.locator('.lookup-scroll').evaluate(item => item.scrollTop) !== 400) throw Error('Search opening changes reading position');
+    if (await demo.locator('.word-head').getAttribute('aria-hidden') !== 'true') throw Error('Search does not hide word');
+    await input.fill('ab');
+    await demo.locator('.lookup-suggestions strong').filter({hasText: /^ab$/}).waitFor();
+    if ([390, 1280].includes(width)) await demo.screenshot({path: `output/playwright/reading-rail-search-expanded-${width}-${theme}.png`});
+    await demo.evaluate(() => {
+      Object.defineProperty(visualViewport, 'height', {configurable: true, value: 340});
+      visualViewport.dispatchEvent(new Event('resize'));
+    });
+    const candidates = await demo.locator('.lookup-suggestions').evaluate(item => ({bottom: item.getBoundingClientRect().bottom, scrollable: item.scrollHeight > item.clientHeight}));
+    if (candidates.bottom > 340 || !candidates.scrollable) throw Error('Candidates do not fit keyboard viewport');
+    await demo.evaluate(() => { delete visualViewport.height; visualViewport.dispatchEvent(new Event('resize')); });
+    await input.press('Escape');
+    await demo.waitForTimeout(300);
+    if (await demo.locator('.lookup-scroll').evaluate(item => item.scrollTop) !== 400) throw Error('Closing search changes reading position');
+    if (await demo.locator('.word-head').getAttribute('aria-hidden') !== 'false') throw Error('Word not restored after search');
+    for (let i = 0; i < 4; i++) {
+      await demo.getByRole('button', {name: '展开搜索'}).click();
+      await demo.getByRole('button', {name: '收起搜索'}).click();
+      if (await demo.locator('.lookup-head').evaluate(item => item.getBoundingClientRect().height) !== headerHeight) throw Error('Rapid search toggle changes height');
+      if (width <= 900 && !await demo.locator('.lookup-rail').evaluate(item => item.classList.contains('mobile-open'))) throw Error('Search back arrow closes mobile rail');
+    }
+    await demo.emulateMedia({reducedMotion: 'reduce'});
+    await demo.getByRole('button', {name: '展开搜索'}).click();
+    if (await demo.locator('.lookup-search form').evaluate(item => item.getAnimations().length)) throw Error('Reduced motion still animates search');
+    await demo.getByRole('button', {name: '收起搜索'}).click();
+    await demo.emulateMedia({reducedMotion: 'no-preference'});
+    if ([390, 1280].includes(width) && theme === 'canvas') {
+      await demo.getByRole('button', {name: '展开搜索'}).click();
+      await demo.locator('.lookup-scroll').click({position: {x: 4, y: 4}});
+      if (await demo.locator('.lookup-head').evaluate(item => item.classList.contains('search-open'))) throw Error('Click outside search does not collapse it');
+      if (await demo.locator('.lookup-scroll').evaluate(item => item.scrollTop) !== 400) throw Error('Blur changes reading position');
+
+      let release, signalStarted, signalFinished;
+      const held = new Promise(resolve => release = resolve);
+      const started = new Promise(resolve => signalStarted = resolve);
+      const finished = new Promise(resolve => signalFinished = resolve);
+      const delayed = async route => {
+        const response = await route.fetch();
+        signalStarted();
+        await held;
+        await route.fulfill({response});
+        signalFinished();
+      };
+      await demo.route('**/suggestions?q=ab', delayed);
+      await demo.getByRole('button', {name: '展开搜索'}).click();
+      await input.fill('ab');
+      await started;
+      await demo.getByRole('button', {name: '收起搜索'}).click();
+      release();
+      await finished;
+      await demo.waitForTimeout(100);
+      if (await demo.locator('.lookup-suggestions').count()) throw Error('Late candidates reopen closed search');
+      await demo.unroute('**/suggestions?q=ab', delayed);
+
+      await demo.route('**/suggestions?q=zz-no-candidate', route => route.fulfill({json: {suggestions: []}}));
+      await demo.getByRole('button', {name: '展开搜索'}).click();
+      await input.fill('zz-no-candidate');
+      await input.press('Enter');
+      await demo.getByText('未找到可靠候选', {exact: true}).waitFor();
+      if (!await demo.locator('.lookup-head').evaluate(item => item.classList.contains('search-open'))) throw Error('Failed lookup closes search');
+      await input.fill('abnehmen');
+      await demo.locator('.lookup-suggestions button').filter({has: demo.locator('strong').filter({hasText: /^abnehmen$/})}).click();
+      await demo.locator('.word-head h2').filter({hasText: /^abnehmen$/}).waitFor();
+      await demo.locator('.lookup-head.search-open').waitFor({state: 'hidden'});
+
+      if (width === 1280) {
+        const marked = demo.locator('.article-copy .marked:not(.unavailable)').first();
+        const expectedWord = await marked.getAttribute('title');
+        await demo.getByRole('button', {name: '展开搜索'}).click();
+        await marked.click();
+        await demo.locator('.lookup-head.search-open').waitFor({state: 'hidden'});
+        await demo.locator('.word-head h2').filter({hasText: expectedWord}).waitFor();
+      }
+    }
     await demo.locator('.lookup-scroll').evaluate(item => item.scrollTop = 0);
     const grammar = demo.locator('.lookup-rail .meaning-summary.interactive').first();
     if (await grammar.count()) {
@@ -58,8 +139,19 @@ async page => {
       await demo.keyboard.press('Escape');
       await demo.locator('.popover-card').waitFor({state: 'hidden'});
     }
+    if ([320, 1280].includes(width) && theme === 'canvas') {
+      const title = demo.locator('.word-head h2');
+      const original = await title.textContent();
+      await title.evaluate(item => item.textContent = 'Donaudampfschifffahrtsgesellschaftskapitän');
+      const longHead = await demo.locator('.lookup-head').evaluate(item => item.getBoundingClientRect().height);
+      if (await demo.locator('.lookup-rail').evaluate(item => item.scrollWidth > item.clientWidth)) throw Error('Long word overflows rail');
+      await demo.getByRole('button', {name: '展开搜索'}).click();
+      if (await demo.locator('.lookup-head').evaluate(item => item.getBoundingClientRect().height) !== longHead) throw Error('Search changes long-word header height');
+      await demo.getByRole('button', {name: '收起搜索'}).click();
+      await title.evaluate((item, text) => item.textContent = text, original);
+    }
     if (width <= 900) {
-      await demo.locator('.mobile-close').click();
+      await demo.getByRole('button', {name: '关闭查词栏', exact: true}).filter({has: demo.locator('i')}).click();
       if (await demo.locator('.lookup-rail').getAttribute('class').then(value => value.includes('mobile-open'))) throw Error('Back arrow does not close rail');
       await demo.locator('.mobile-lookup').click();
       await demo.locator('.rail-dismiss').click({position: {x: 3, y: 200}});

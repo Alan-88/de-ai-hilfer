@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick, untrack } from "svelte";
   import { markdownToPlainText, resolveStructuredAnalysis, type StructuredAnalysis } from "$lib/analysis/structuredAnalysis";
   import GrammarBranchPopover from "$lib/components/bento/GrammarBranchPopover.svelte";
   import LearningAnalysisContent from "$lib/components/bento/LearningAnalysisContent.svelte";
@@ -6,9 +7,10 @@
   import { analyzeWord, getEntryDetail, getSuggestions } from "$lib/queryApi";
   import type { AnalyzeResponse, DBSuggestion, EntryDetailResponse, GrammarBranch } from "$lib/types";
 
-  let { selectedKey, selectedEntryId, open = false, onClose } = $props<{
+  let { selectedKey, selectedEntryId, selectionVersion, open = false, onClose } = $props<{
     selectedKey: string;
     selectedEntryId: number | null;
+    selectionVersion: number;
     open?: boolean;
     onClose: () => void;
   }>();
@@ -29,12 +31,58 @@
   let suggestionsQuery = $state("");
   let showSuggestions = $state(false);
   let suggestionRequestId = 0;
+  let searchOpen = $state(false);
+  let searchInput = $state<HTMLInputElement>();
+  let suggestionsElement = $state<HTMLElement>();
 
   $effect(() => {
+    selectionVersion;
+    untrack(closeSearch);
     if (selectedEntryId) void showEntry(selectedEntryId, selectedKey);
     else if (selectedKey) showUnavailable(selectedKey);
     else clearEntry();
   });
+
+  $effect(() => {
+    if (!open) untrack(closeSearch);
+  });
+
+  $effect(() => {
+    if (!suggestionsElement) return;
+    const panel = suggestionsElement;
+    const rail = panel.closest('.lookup-rail');
+    const viewport = window.visualViewport;
+    const measure = () => {
+      const bottom = Math.min((viewport?.height ?? window.innerHeight) + (viewport?.offsetTop ?? 0) - 12, (rail?.getBoundingClientRect().bottom ?? window.innerHeight) - 10);
+      panel.style.maxHeight = `${Math.max(0, Math.min(330, bottom - panel.getBoundingClientRect().top))}px`;
+    };
+    const observer = new ResizeObserver(measure);
+    if (rail) observer.observe(rail);
+    window.addEventListener('resize', measure);
+    viewport?.addEventListener('resize', measure);
+    viewport?.addEventListener('scroll', measure);
+    measure();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+      viewport?.removeEventListener('resize', measure);
+      viewport?.removeEventListener('scroll', measure);
+    };
+  });
+
+  async function openSearch() {
+    searchOpen = true;
+    await tick();
+    if (searchOpen) searchInput?.focus();
+  }
+
+  function closeSearch() {
+    if (!searchOpen) return;
+    searchOpen = false;
+    clearSuggestions();
+    if (entry) query = entry.query_text;
+    if (searchInput === document.activeElement) searchInput?.blur();
+  }
 
   function clearEntry() {
     requestId += 1;
@@ -111,7 +159,7 @@
 
     try {
       const response = await getSuggestions(term);
-      if (currentRequest !== suggestionRequestId || query.trim() !== term) return;
+      if (currentRequest !== suggestionRequestId || query.trim() !== term || !searchOpen) return;
       suggestions = response.suggestions;
       suggestionsQuery = term;
       showSuggestions = suggestions.length > 0;
@@ -165,6 +213,7 @@
       const learningIds = await getLearningEntryIds();
       if (currentRequest !== requestId) return;
       learningAdded = learningIds.has(resolvedEntry.entry_id);
+      closeSearch();
     } catch (cause) {
       if (currentRequest !== requestId) return;
       entry = null;
@@ -194,18 +243,27 @@
   function handleSearchFocusOut(event: FocusEvent) {
     const next = event.relatedTarget;
     if (!(next instanceof Node) || !(event.currentTarget instanceof HTMLElement) || !event.currentTarget.contains(next)) {
-      showSuggestions = false;
+      closeSearch();
     }
   }
 </script>
 
 <aside class="lookup-rail" class:mobile-open={open} aria-label="查词栏">
-  <header class="lookup-head">
-    <button class="mobile-close" onclick={onClose} aria-label="关闭查词栏"><i class="ph ph-arrow-left"></i></button>
-    <div class="lookup-search" onfocusout={handleSearchFocusOut}>
+  <header class="lookup-head" class:search-open={searchOpen} onfocusout={handleSearchFocusOut}>
+    <button class="rail-back" class:search-expanded={searchOpen} onclick={() => searchOpen ? closeSearch() : onClose()} aria-label={searchOpen ? "收起搜索" : "关闭查词栏"}><i class="ph ph-arrow-left"></i></button>
+    <section class="word-head" aria-label="当前单词" aria-hidden={searchOpen}>
+      {#if !loading && !error && entry && analysis}
+        <h2>{analysis.headword || entry.query_text}</h2>
+        {#if analysis.phonetic}<span class="word-phonetic">{analysis.phonetic}</span>{/if}
+      {:else}
+        <span class="lookup-title">{loading ? "查询中" : "快捷查词"}</span>
+      {/if}
+    </section>
+    <button class="search-open-btn" onclick={() => void openSearch()} aria-label="展开搜索" aria-expanded={searchOpen}><i class="ph ph-magnifying-glass"></i></button>
+    <div class="lookup-search" inert={!searchOpen} aria-hidden={!searchOpen}>
       <form onsubmit={(event) => { event.preventDefault(); void submitSearch(); }}>
-        <i class="ph ph-magnifying-glass"></i>
         <input
+          bind:this={searchInput}
           bind:value={query}
           aria-label="查询单词"
           aria-expanded={showSuggestions}
@@ -216,13 +274,13 @@
             if (suggestionsQuery === query.trim() && suggestions.length > 0) showSuggestions = true;
             else void fetchLookupSuggestions();
           }}
-          onkeydown={(event) => { if (event.key === "Escape") showSuggestions = false; }}
+          onkeydown={(event) => { if (event.key === "Escape") closeSearch(); }}
         />
-        <button type="submit" aria-label="查询"><i class="ph ph-arrow-right"></i></button>
+        <button type="submit" aria-label="查询" disabled={loading}><i class={loading ? "ph ph-spinner-gap spin" : "ph ph-magnifying-glass"}></i></button>
       </form>
 
       {#if showSuggestions && suggestions.length > 0}
-        <div id="reading-lookup-suggestions" class="lookup-suggestions">
+        <div id="reading-lookup-suggestions" class="lookup-suggestions" bind:this={suggestionsElement}>
           {#each suggestions as suggestion}
             <button type="button" onclick={() => void submitSearch(suggestion)}>
               <i class="ph ph-magnifying-glass"></i>
@@ -237,13 +295,6 @@
       {/if}
     </div>
   </header>
-
-  {#if !loading && !error && entry && analysis}
-    <section class="word-head" aria-label="当前单词">
-      <h2>{analysis.headword || entry.query_text}</h2>
-      {#if analysis.phonetic}<span class="word-phonetic">{analysis.phonetic}</span>{/if}
-    </section>
-  {/if}
 
   <div class="lookup-scroll">
     {#if loading}
@@ -279,15 +330,18 @@
 
 <style>
   .lookup-rail { container: word-detail / inline-size; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; border-left: 1px solid var(--border-color); background: color-mix(in srgb, var(--card-bg) 78%, var(--bg-color)); }
-  .lookup-head { position: relative; z-index: 5; display: flex; flex: 0 0 auto; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border-color); }
-  .lookup-search { position: relative; min-width: 0; flex: 1; }
+  .lookup-head { position: relative; z-index: 5; display: grid; flex: 0 0 auto; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: start; column-gap: 6px; min-height: 76px; padding: 12px 10px; border-bottom: 1px solid var(--border-color); }
+  .lookup-search { position: absolute; top: 16px; left: 60px; right: 10px; min-width: 0; visibility: hidden; opacity: 0; pointer-events: none; transition: opacity 180ms ease, visibility 0s linear 260ms; }
+  .lookup-search form { clip-path: inset(0 0 0 100%); transition: clip-path 260ms ease; }
+  .search-open .lookup-search { visibility: visible; opacity: 1; pointer-events: auto; transition-delay: 0s; }
+  .search-open .lookup-search form { clip-path: inset(0); }
+  .search-open .word-head, .search-open .search-open-btn { visibility: hidden; opacity: 0; pointer-events: none; }
   form { display: flex; width: 100%; align-items: center; gap: 0.5rem; min-width: 0; height: 44px; padding: 0 5px 0 12px; border: 1px solid var(--border-color); border-radius: var(--radius-full); background: var(--card-bg); box-shadow: var(--shadow-sm); }
-  form > i { color: var(--text-muted); }
   input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--text-main); font: inherit; font-weight: 700; }
   form button { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--accent-main); color: white; }
-  .mobile-close { display: none; width: 44px; height: 44px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: transparent; color: var(--text-main); font-size: 22px; }
-  .mobile-close:hover, .mobile-close:active { background: var(--btn-secondary); }
-  .mobile-close:focus-visible, form button:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 2px; }
+  .rail-back, .search-open-btn { display: grid; width: 44px; height: 44px; margin-top: 4px; place-items: center; border-radius: 50%; background: transparent; color: var(--text-main); font-size: 22px; }
+  .rail-back:hover, .rail-back:active, .search-open-btn:hover, .search-open-btn:active { background: var(--btn-secondary); }
+  .rail-back:focus-visible, .search-open-btn:focus-visible, form button:focus-visible { outline: 2px solid var(--accent-main); outline-offset: 2px; }
   .lookup-suggestions { position: absolute; top: calc(100% + 0.45rem); right: 0; left: 0; display: grid; max-height: min(330px, 48vh); overflow-y: auto; padding: 0.38rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--card-bg); box-shadow: var(--shadow-hover); }
   .lookup-suggestions > button { display: grid; min-height: 54px; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 0.55rem; padding: 0.55rem 0.6rem; border-radius: 9px; background: transparent; color: var(--text-main); text-align: left; }
   .lookup-suggestions > button:hover, .lookup-suggestions > button:focus-visible { background: var(--btn-secondary); outline: none; }
@@ -298,7 +352,8 @@
   .lookup-suggestions small { color: var(--text-muted); font-size: 0.7rem; }
   .lookup-suggestions em { padding: 0.22rem 0.4rem; border-radius: var(--radius-full); background: color-mix(in srgb, var(--accent-main) 10%, transparent); color: var(--accent-main); font-size: 0.6rem; font-style: normal; font-weight: 850; }
   .lookup-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 10px; overscroll-behavior: contain; }
-  .word-head { display: grid; flex: 0 0 auto; gap: 4px; padding: 8px 12px 12px; border-bottom: 1px solid var(--border-color); text-align: center; }
+  .word-head { display: grid; min-width: 0; gap: 4px; text-align: center; transition: opacity 180ms ease; }
+  .lookup-title { align-self: center; color: var(--text-muted); font-size: 14px; line-height: 44px; }
   .word-head h2 { margin: 0; min-width: 0; color: var(--text-main); font-size: 26px; line-height: 1.15; letter-spacing: -0.025em; overflow-wrap: anywhere; }
   .word-phonetic { min-width: 0; color: var(--text-muted); font-family: "Arial Unicode MS", "Lucida Sans Unicode", sans-serif; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
   .word-actions { display: flex; justify-content: flex-end; margin-bottom: 8px; }
@@ -315,6 +370,13 @@
   @media (max-width: 900px) {
     .lookup-rail { position: absolute; inset: 0 0 0 auto; z-index: 30; width: min(390px, 88%); border: 1px solid var(--border-color); border-right: 0; border-radius: var(--radius-md) 0 0 var(--radius-md); transform: translateX(102%); pointer-events: none; transition: transform 180ms ease; }
     .lookup-rail.mobile-open { transform: translateX(0); box-shadow: -18px 0 50px rgba(20, 18, 31, 0.2); pointer-events: auto; }
-    .mobile-close { display: grid; }
+  }
+
+  @media (min-width: 901px) {
+    .rail-back:not(.search-expanded) { visibility: hidden; pointer-events: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lookup-search, .lookup-search form, .word-head { transition: none; }
   }
 </style>

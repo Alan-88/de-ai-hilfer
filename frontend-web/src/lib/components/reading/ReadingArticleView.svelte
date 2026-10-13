@@ -31,6 +31,7 @@
   let folderPath = $state("");
   let selectedKey = $state("");
   let selectedEntryId = $state<number | null>(null);
+  let selectionVersion = $state(0);
   let selectedOccurrence = $state<number | null>(null);
   let showBookmarks = $state(false);
   let railOpen = $state(false);
@@ -74,6 +75,8 @@
   }
 
   function selectWord(bookmark: Extract<ReadingContentSegment, { kind: "bookmark" }>, revealRail = true) {
+    // Re-selecting the same bookmark must restore it after a manual lookup.
+    selectionVersion += 1;
     selectedKey = bookmark.form_of;
     selectedEntryId = bookmark.entry_id;
     selectedOccurrence = bookmark.occurrence_index;
@@ -402,7 +405,7 @@
       {#if railOpen}
         <button class="rail-dismiss" aria-label="关闭查词栏" onclick={() => railOpen = false}></button>
       {/if}
-      <ReadingLookupRail {selectedKey} {selectedEntryId} open={railOpen} onClose={() => railOpen = false} />
+      <ReadingLookupRail {selectedKey} {selectedEntryId} {selectionVersion} open={railOpen} onClose={() => railOpen = false} />
     </div>
 
     {#if markTarget}
