@@ -1,6 +1,6 @@
 use crate::models::{
     EntryDeleteResponse, EntryDetailResponse, IntelligentSearchRequest, LibraryEntriesPageResponse,
-    LibraryQueryTab, StatusResponse, SuggestionResponse,
+    LibraryQueryTab, StatusResponse, SuggestionMode, SuggestionResponse,
 };
 use crate::services::{library, query};
 use crate::state::AppState;
@@ -14,6 +14,8 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 pub struct SuggestionsQuery {
     pub q: String,
+    pub mode: Option<SuggestionMode>,
+    pub limit: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -82,10 +84,21 @@ pub async fn get_suggestions(
     State(state): State<AppState>,
     Query(params): Query<SuggestionsQuery>,
 ) -> Result<Json<SuggestionResponse>, (StatusCode, String)> {
-    query::get_suggestions(&state, &params.q)
-        .await
-        .map(Json)
-        .map_err(internal_error)
+    if params.q.chars().count() > 500 || params.limit.is_some_and(|n| !(1..=100).contains(&n)) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "invalid suggestion query or limit".into(),
+        ));
+    }
+    query::get_suggestions(
+        &state,
+        &params.q,
+        params.mode.unwrap_or_default(),
+        params.limit.unwrap_or(10),
+    )
+    .await
+    .map(Json)
+    .map_err(internal_error)
 }
 
 pub async fn intelligent_search(

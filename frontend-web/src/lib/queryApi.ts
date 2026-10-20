@@ -63,8 +63,11 @@ export function deleteEntry(entryId: number) {
   });
 }
 
-export function getSuggestions(query: string) {
-  return apiFetch<SuggestionResponse>(`${API_BASE}/suggestions?q=${encodeURIComponent(query)}`);
+export function getSuggestions(query: string, options: { mode?: "lexical" | "semantic"; limit?: number; signal?: AbortSignal } = {}) {
+  const params = new URLSearchParams({ q: query });
+  if (options.mode) params.set("mode", options.mode);
+  if (options.limit) params.set("limit", String(options.limit));
+  return apiFetch<SuggestionResponse>(`${API_BASE}/suggestions?${params}`, { signal: options.signal });
 }
 
 export function getServerStatus() {

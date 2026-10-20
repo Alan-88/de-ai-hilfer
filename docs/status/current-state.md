@@ -1,9 +1,10 @@
 # Current State
 
-最后更新：2026-10-14
+最后更新：2026-10-20
 
 ## 阶段判断
 
+- 主搜索中文反查与候选扩容已实现并部署：含汉字时用现有embedding实时检索已初始化词汇，中德候选首显20、按20展开至100；PC/移动面板限高且内部滚动，更多不重复请求。保留Tab联想，旧API调用方默认lexical/10。双主题、5种尺寸、输入法与竞态回归见 `docs/iterations/2026-10-20-chinese-search-candidates.md`，真实手机键盘仍待用户体验验证。
 - 已修复刷新/重新查词后追问历史不显示：普通、紧凑、智能与流式分析返回保存记录，重新生成已有词条也保留历史。查词、词库详情、学习答案统一使用“追问与联想”大卡片，逐条问答为内部小卡片；词库与学习只读，学习揭示答案后加载、换词取消旧请求。Quittung两条原记录完整保留，前后端已部署，验证及截图见 `docs/iterations/2026-10-14-follow-up-history-reload.md`。
 - 追问改为有界只读Agent，实际支持关联词resolve/inspect及已有解析读取；模型失败、长度截断或超时不再保存词典兜底摘要。保留Markdown换行，网页补编辑、删除和原位重试，冲突编辑拒绝覆盖。CLI/MCP支持读取、保存外部回答、编辑、删除及异步内部生成；MCP0.4新增follow_up_query/write/generate，通用队列新增follow_up_generate，项目/便携CLI与Skill同步。旧Quittung兜底记录保留供用户处理。见 `docs/api/follow-ups.md`。
 - 前后端与MCP已部署；真实模型异步追问返回完整回答，公网OAuth/PKCE、14工具发现及追问读取通过，移动/PC亮暗主题截图存于 `output/playwright/quittung-follow-up-*`。完整验证及边界见 `docs/iterations/2026-10-13-follow-up-agent-management.md`。

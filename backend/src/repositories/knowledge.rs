@@ -30,6 +30,32 @@ pub struct KnowledgeListPage {
 const NORMALIZED_QUERY_TEXT_SQL: &str =
     "replace(translate(lower(ke.query_text), 'äöü', 'aou'), 'ß', 'ss')";
 
+pub async fn find_by_embedding(
+    pool: &DbPool,
+    model: &str,
+    embedding: &[f32],
+    limit: i64,
+) -> Result<Vec<KnowledgeEntry>, sqlx::Error> {
+    sqlx::query_as::<_, KnowledgeEntry>(
+        r#"
+        SELECT ke.* FROM dictionary_lexeme_embeddings e
+        JOIN LATERAL (
+            SELECT k.* FROM knowledge_entries k WHERE k.lexeme_id = e.lexeme_id
+            ORDER BY k.created_at, k.id LIMIT 1
+        ) ke ON true
+        WHERE e.model_id = $1 AND e.dimensions = $3
+        ORDER BY e.embedding <=> $2::vector, e.frequency_rank NULLS LAST, ke.query_text, ke.id
+        LIMIT $4
+    "#,
+    )
+    .bind(model)
+    .bind(pgvector::Vector::from(embedding.to_vec()))
+    .bind(embedding.len() as i32)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+}
+
 pub async fn find_by_query(
     pool: &DbPool,
     query: &str,

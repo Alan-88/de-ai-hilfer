@@ -290,6 +290,14 @@ pub struct SuggestionResponse {
     pub suggestions: Vec<DBSuggestion>,
 }
 
+#[derive(Clone, Copy, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SuggestionMode {
+    #[default]
+    Lexical,
+    Semantic,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IntelligentSearchRequest {
     pub term: String,

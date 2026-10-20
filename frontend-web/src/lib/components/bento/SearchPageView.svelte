@@ -53,6 +53,18 @@
   let isUpdatingPhraseAttachment = $state(false);
   let isAddingPhraseModule = $state(false);
   let suggestionsQuery = $state("");
+  let suggestionsLoading = $state(false);
+  let suggestionsError = $state("");
+  let visibleSuggestionCount = $state(20);
+  let suggestionList = $state<HTMLDivElement | null>(null);
+  let suggestionPanel = $state<HTMLDivElement | null>(null);
+  let suggestionPanelHeight = $state(460);
+  let composing = false;
+  let compositionEndedAt = 0;
+  let suggestionVersion = 0;
+  let suggestionTimer: ReturnType<typeof setTimeout> | undefined;
+  let suggestionController: AbortController | null = null;
+  let suggestionRequest: { query: string; promise: Promise<DBSuggestion[]> } | null = null;
   let currentSearchController: AbortController | null = null;
   let hasMounted = $state(false);
   let mainInputRef = $state<HTMLInputElement | null>(null);
@@ -131,6 +143,7 @@
   }
 
   function dismissSearchFocus() {
+    cancelSuggestions();
     void setSearchFocus(false);
     showSuggestions = false;
     mainInputRef?.blur();
@@ -147,11 +160,11 @@
   ) {
     const rawQuery = term.trim();
     if (!rawQuery) return;
-    dismissSearchFocus();
     const query = await resolveSearchTarget(rawQuery, {
       enabled: useSuggestionDefault && !forceRefresh && !generationHint.trim(),
     });
     if (!query) return;
+    dismissSearchFocus();
 
     const failedRequest: FailedAnalysisRequest = {
       query,
@@ -321,44 +334,84 @@
     }
   }
 
-  async function fetchSuggestions() {
+  function isSemanticQuery(query: string) {
+    return /\p{Script=Han}/u.test(query);
+  }
+
+  function cancelSuggestions() {
+    clearTimeout(suggestionTimer);
+    suggestionController?.abort();
+    suggestionController = null;
+    suggestionRequest = null;
+    suggestionVersion++;
+    suggestionsLoading = false;
+  }
+
+  function fetchSuggestions() {
     const query = $s.query.trim();
-    if (query.length < 2) {
+    if (composing) return;
+    if (suggestionRequest?.query === query) return;
+    cancelSuggestions();
+    if (suggestionsQuery === query && !suggestionsError) return;
+    suggestionsError = "";
+    if (!query || (!isSemanticQuery(query) && query.length < 2)) {
       suggestions = [];
       suggestionsQuery = "";
-      showSuggestions = false;
       return;
     }
-    try {
-      const resp = await getSuggestions(query);
-      if ($s.query.trim() !== query) return;
-      suggestions = resp.suggestions;
-      suggestionsQuery = query;
-      showSuggestions = searchFocused && document.activeElement === mainInputRef && suggestions.length > 0;
-    } catch {
-      suggestions = [];
-      suggestionsQuery = query;
-    }
+    suggestionsLoading = true;
+    showSuggestions = searchFocused;
+    suggestionTimer = setTimeout(() => { void requestSuggestions(query).catch(() => {}); }, isSemanticQuery(query) ? 200 : 0);
+  }
+
+  function requestSuggestions(query: string): Promise<DBSuggestion[]> {
+    clearTimeout(suggestionTimer);
+    if (suggestionRequest?.query === query) return suggestionRequest.promise;
+    cancelSuggestions();
+    const version = suggestionVersion;
+    const controller = new AbortController();
+    suggestionController = controller;
+    suggestionsLoading = true;
+    suggestionsError = "";
+    const promise = (async () => {
+      try {
+        const resp = await getSuggestions(query, { mode: isSemanticQuery(query) ? "semantic" : "lexical", limit: 100, signal: controller.signal });
+        if (version !== suggestionVersion || $s.query.trim() !== query) throw new DOMException("Stale suggestions", "AbortError");
+        suggestions = resp.suggestions;
+        suggestionsQuery = query;
+        visibleSuggestionCount = 20;
+        if (suggestionList) suggestionList.scrollTop = 0;
+        return resp.suggestions;
+      } catch (error) {
+        if (version === suggestionVersion && $s.query.trim() === query && !controller.signal.aborted) {
+          suggestionsError = "候选查询失败，请重试";
+          suggestions = [];
+          suggestionsQuery = "";
+        }
+        throw error;
+      } finally {
+        if (version === suggestionVersion) {
+          suggestionsLoading = false;
+          suggestionRequest = null;
+        }
+      }
+    })();
+    suggestionRequest = { query, promise };
+    return promise;
   }
 
   async function resolveSearchTarget(query: string, options: { enabled: boolean }) {
     if (!query || !options.enabled || showAdvanced) return query;
-
-    let currentSuggestions = suggestionsQuery === query ? suggestions : [];
-    if (query.length >= 2 && currentSuggestions.length === 0) {
-      try {
-        const resp = await getSuggestions(query);
-        if ($s.query.trim() === query) {
-          suggestions = resp.suggestions;
-          suggestionsQuery = query;
-        }
-        currentSuggestions = resp.suggestions;
-      } catch {
-        currentSuggestions = [];
-      }
+    if (!isSemanticQuery(query) && query.length < 2) return query;
+    try {
+      const items = suggestionsQuery === query && !suggestionsError ? suggestions : await requestSuggestions(query);
+      if ($s.query.trim() !== query) return "";
+      if (isSemanticQuery(query) && !items.length) return "";
+      return items[0]?.query_text?.trim() || query;
+    } catch (error) {
+      if (isSemanticQuery(query) || $s.query.trim() !== query || (error instanceof DOMException && error.name === "AbortError")) return "";
+      return query;
     }
-
-    return currentSuggestions[0]?.query_text?.trim() || query;
   }
 
   function handleFollowUpHistory(items: FollowUpItem[]) {
@@ -476,6 +529,10 @@
 
   // 键盘交互优化
   function handleKeyDown(e: KeyboardEvent) {
+    if (composing || e.isComposing || e.keyCode === 229 || (e.key === "Enter" && performance.now() - compositionEndedAt < 80)) {
+      if (e.key === "Enter") e.preventDefault();
+      return;
+    }
     if (e.key === "Tab") {
       e.preventDefault();
       void toggleAdvanced();
@@ -509,6 +566,7 @@
     viewport?.addEventListener("scroll", updateViewport);
     window.addEventListener("resize", updateViewport);
     return () => {
+      cancelSuggestions();
       searchMoveAnimation?.cancel();
       viewport?.removeEventListener("resize", updateViewport);
       viewport?.removeEventListener("scroll", updateViewport);
@@ -529,7 +587,34 @@
   });
   const isCurrentWordInLearning = $derived(Boolean($s.result && learningEntryIds.has($s.result.entry_id)));
   // 派生：是否处于专注搜索状态（唤起建议面板时）
-  const isSearchFocusing = $derived(showSuggestions && (suggestions.length > 0 || (!$s.query.trim() && recentItems.length > 0)));
+  const isSearchFocusing = $derived(showSuggestions && (suggestionsLoading || suggestionsError || suggestionsQuery === $s.query.trim() || suggestions.length > 0 || (!$s.query.trim() && recentItems.length > 0)));
+  $effect(() => {
+    if (!suggestionPanel || !searchFocused) return;
+    const panel = suggestionPanel;
+    const measure = () => {
+      const viewport = window.visualViewport;
+      const bottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight);
+      const nav = document.querySelector<HTMLElement>(".bottom-nav");
+      const navTop = nav && getComputedStyle(nav).display !== "none" && getComputedStyle(nav).visibility !== "hidden" ? nav.getBoundingClientRect().top : undefined;
+      const panelTop = panel.getBoundingClientRect().top;
+      const visibleBottom = navTop !== undefined && navTop > panelTop ? Math.min(bottom, navTop) : bottom;
+      suggestionPanelHeight = Math.max(0, visibleBottom - panelTop - 12);
+    };
+    measure();
+    const frame = requestAnimationFrame(measure);
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel.parentElement!);
+    window.visualViewport?.addEventListener("resize", measure);
+    window.visualViewport?.addEventListener("scroll", measure);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.visualViewport?.removeEventListener("resize", measure);
+      window.visualViewport?.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
+    };
+  });
   const actionModelOptions = $derived(buildActionModelOptions(aiSettings));
   const selectedActionModelOverride = $derived(
     actionModelOverrideForKey(actionModelOptions, selectedActionModelKey)
@@ -548,6 +633,7 @@
     onfocusout={(event) => {
       if (!switchingInput && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
         void setSearchFocus(false);
+        cancelSuggestions();
         showSuggestions = false;
       }
     }}>
@@ -573,21 +659,28 @@
     {/if}
 
     <div class="search-panel-group" class:has-suggestions={isSearchFocusing}>
-      <form class="search-form" onsubmit={(e) => { e.preventDefault(); (showAdvanced && advancedHint.trim()) ? handleAdvancedSearch() : handleSearch(); }}>
+      <form class="search-form" onsubmit={(e) => { e.preventDefault(); if (composing || performance.now() - compositionEndedAt < 80) return; (showAdvanced && advancedHint.trim()) ? handleAdvancedSearch() : handleSearch(); }}>
         <div class="input-row main-row" class:is-generating-box={$s.isStreaming}>
           <input
             bind:this={mainInputRef}
             bind:value={$s.query}
-            placeholder="输入德语单词或近似拼写..."
-            aria-label="查询德语单词"
-            oninput={fetchSuggestions}
+            placeholder="输入德语单词或中文含义..."
+            aria-label="查询德语单词或中文含义"
+            oninput={(event) => {
+              s.setQuery(event.currentTarget.value);
+              visibleSuggestionCount = 20;
+              if (suggestionList) suggestionList.scrollTop = 0;
+              fetchSuggestions();
+            }}
+            oncompositionstart={() => { composing = true; cancelSuggestions(); }}
+            oncompositionend={() => { composing = false; compositionEndedAt = performance.now(); fetchSuggestions(); }}
             onkeydown={handleKeyDown}
-            onfocus={() => { void setSearchFocus(true); showSuggestions = true; }}
+            onfocus={() => { void setSearchFocus(true); showSuggestions = true; fetchSuggestions(); }}
             autocomplete="off"
           />
           <div class="actions">
             {#if $s.query}
-              <button type="button" class="icon-btn" onclick={() => { s.setQuery(""); focusSoon(() => mainInputRef); }} title="清空">
+              <button type="button" class="icon-btn" onclick={() => { s.setQuery(""); fetchSuggestions(); focusSoon(() => mainInputRef); }} title="清空">
                 <i class="ph ph-x"></i>
               </button>
             {/if}
@@ -627,11 +720,12 @@
       </form>
 
       {#if isSearchFocusing}
-        <div class="integrated-suggestions" in:fade={{ duration: 150 }} out:fade={{ duration: 100 }}>
+        <div class="integrated-suggestions" bind:this={suggestionPanel} style:--suggestion-available-height={`${suggestionPanelHeight}px`} in:fade={{ duration: 150 }} out:fade={{ duration: 100 }}>
           <div class="panel-header">
-            { !$s.query.trim() ? "最近查询记录" : "联想建议" }
+            { !$s.query.trim() ? "最近查询记录" : isSemanticQuery($s.query) ? "中文找词" : "词汇建议" }
+            {#if suggestionsLoading}<span role="status"> · 查询中…</span>{/if}
           </div>
-          <div class="suggestion-list">
+          <div class="suggestion-list" bind:this={suggestionList} aria-busy={suggestionsLoading}>
             {#if !$s.query.trim()}
               {#each recentItems as item}
                 <button class="suggestion-item" onclick={() => handleSearch(item.query_text, "default", false, "", false)}>
@@ -643,8 +737,13 @@
                 </button>
               {/each}
             {:else}
-              {#each suggestions as sg}
-                <button class="suggestion-item" onclick={() => handleSearch(sg.query_text, "default", false, "", false)}>
+              {#if suggestionsError}
+                <button class="suggestion-item" onclick={() => { mainInputRef?.focus({ preventScroll: true }); fetchSuggestions(); }}>{suggestionsError}</button>
+              {:else if !suggestionsLoading && suggestionsQuery === $s.query.trim() && !suggestions.length}
+                <p class="candidate-status">暂无候选，请换个说法</p>
+              {/if}
+              {#each suggestions.slice(0, visibleSuggestionCount) as sg}
+                <button class="suggestion-item" disabled={suggestionsQuery !== $s.query.trim()} onclick={() => handleSearch(sg.query_text, "default", false, "", false)}>
                   <i class="ph ph-magnifying-glass"></i>
                   <div class="text-content">
                     <span class="q">{sg.query_text}</span>
@@ -652,6 +751,9 @@
                   </div>
                 </button>
               {/each}
+              {#if suggestions.length > visibleSuggestionCount && suggestionsQuery === $s.query.trim()}
+                <button class="suggestion-item load-more" onmousedown={(e) => e.preventDefault()} onclick={() => { visibleSuggestionCount += 20; }}>加载更多（已显示 {visibleSuggestionCount} / {suggestions.length}）</button>
+              {/if}
             {/if}
           </div>
         </div>
@@ -865,7 +967,7 @@
     .result-chrome:not(.focusing) .actions .icon-btn, .result-chrome:not(.focusing) .shortcut-btn { display: none; }
     .result-chrome .integrated-suggestions, .result-chrome .sub-row { position: absolute; right: 0; width: min(420px, calc(100vw - var(--desktop-sidebar-width) - 64px - var(--theme-clearance))); }
     .result-chrome .sub-row { top: 66px; }
-    .result-chrome .integrated-suggestions { top: 66px; max-height: calc(var(--search-viewport-height) - 110px - env(safe-area-inset-bottom)); }
+    .result-chrome .integrated-suggestions { top: 66px; }
   }
 
   .search-submit-btn {
@@ -916,6 +1018,7 @@
   }
 
   .integrated-suggestions {
+    max-height: var(--suggestion-available-height, 460px);
     display: flex; flex-direction: column; min-height: 0;
     background: var(--card-bg); border: 1px solid var(--border-color);
     border-radius: 24px;
@@ -925,6 +1028,8 @@
   .panel-header { padding: 0.75rem 1.5rem; font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; background: var(--bg-color); }
 
   .suggestion-list {
+    min-height: 0;
+    overscroll-behavior: contain;
     max-height: 420px;
     overflow-y: auto;
     scrollbar-gutter: stable;
@@ -932,6 +1037,9 @@
     border-bottom-right-radius: inherit;
     background: var(--card-bg);
   }
+  .candidate-status { padding: 16px 24px; color: var(--text-muted); }
+  .load-more { justify-content: center; color: var(--text-main); }
+  .suggestion-item:disabled { opacity: 0.5; cursor: wait; }
   .suggestion-item {
     width: 100%; padding: 1.1rem 1.5rem; display: flex; align-items: flex-start;
     gap: 1.25rem; border-bottom: 1px solid var(--border-color); background: transparent; text-align: left;

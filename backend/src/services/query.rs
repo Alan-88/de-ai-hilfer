@@ -89,8 +89,16 @@ pub async fn get_library_entries_page(
     })
 }
 
-pub async fn get_suggestions(state: &AppState, query: &str) -> Result<SuggestionResponse> {
+pub async fn get_suggestions(
+    state: &AppState,
+    query: &str,
+    mode: crate::models::SuggestionMode,
+    limit: i64,
+) -> Result<SuggestionResponse> {
     let query = query.trim();
+    if matches!(mode, crate::models::SuggestionMode::Semantic) && !query.is_empty() {
+        return semantic_suggestions(state, query, limit).await;
+    }
     if query.len() < 2 {
         return Ok(SuggestionResponse {
             suggestions: Vec::new(),
@@ -105,23 +113,23 @@ pub async fn get_suggestions(state: &AppState, query: &str) -> Result<Suggestion
         query_fuzzy_matches,
         dictionary_lexeme_matches,
     ) = tokio::try_join!(
-        knowledge::find_alias_prefix_matches(&state.pool, query, 10),
-        knowledge::find_prefix_matches(&state.pool, query, 10),
+        knowledge::find_alias_prefix_matches(&state.pool, query, limit),
+        knowledge::find_prefix_matches(&state.pool, query, limit),
         async {
             if fuzzy_enabled {
-                knowledge::list_alias_fuzzy_matches(&state.pool, query, 20).await
+                knowledge::list_alias_fuzzy_matches(&state.pool, query, limit.max(20)).await
             } else {
                 Ok(Vec::new())
             }
         },
         async {
             if fuzzy_enabled {
-                knowledge::list_fuzzy_matches(&state.pool, query, 20).await
+                knowledge::list_fuzzy_matches(&state.pool, query, limit.max(20)).await
             } else {
                 Ok(Vec::new())
             }
         },
-        dictionary_lexemes::find_lexeme_candidates_by_surface(&state.pool, query, 20)
+        dictionary_lexemes::find_lexeme_candidates_by_surface(&state.pool, query, limit.max(20))
     )?;
 
     let mut ranked = Vec::new();
@@ -201,8 +209,59 @@ pub async fn get_suggestions(state: &AppState, query: &str) -> Result<Suggestion
                 }),
         );
     }
-    let suggestions = sort_and_limit(ranked, 10);
+    let mut suggestions = sort_and_limit(ranked, limit as usize);
+    // Expanded lists only need previews; retain the legacy payload for default callers.
+    if limit > 10 {
+        for suggestion in &mut suggestions {
+            suggestion.analysis_markdown.clear();
+            suggestion.structured_analysis = None;
+        }
+    }
 
+    Ok(SuggestionResponse { suggestions })
+}
+
+async fn semantic_suggestions(
+    state: &AppState,
+    query: &str,
+    limit: i64,
+) -> Result<SuggestionResponse> {
+    use crate::ai::AiEmbeddingOptions;
+    use crate::services::ai_model_resolver::{resolve_task_model, AiModelTask};
+    let resolved = resolve_task_model(state, AiModelTask::Embedding).await?;
+    let embedding = resolved
+        .client
+        .embed_model_with_options(
+            &resolved.model,
+            &[query.to_string()],
+            AiEmbeddingOptions {
+                timeout: std::time::Duration::from_secs(12),
+                dimensions: None,
+            },
+        )
+        .await?
+        .into_iter()
+        .next()
+        .unwrap_or_default();
+    anyhow::ensure!(
+        !embedding.is_empty() && embedding.iter().all(|v| v.is_finite()),
+        "invalid query embedding"
+    );
+    let entries =
+        knowledge::find_by_embedding(&state.pool, &resolved.model, &embedding, limit).await?;
+    anyhow::ensure!(
+        !entries.is_empty(),
+        "当前模型没有可用的已初始化词汇向量，请检查模型与索引维度"
+    );
+    let suggestions = entries
+        .into_iter()
+        .map(|entry| {
+            let mut suggestion = build_knowledge_suggestion(entry, "knowledge_semantic");
+            suggestion.analysis_markdown.clear();
+            suggestion.structured_analysis = None;
+            suggestion
+        })
+        .collect();
     Ok(SuggestionResponse { suggestions })
 }
 
