@@ -1,3 +1,4 @@
+use super::analysis_structure_seed::{build_structure_seed, is_word_network_bucket_line};
 use crate::models::StructuredAnalysisDocument;
 
 pub fn validate_structured_capture(
@@ -5,9 +6,10 @@ pub fn validate_structured_capture(
     structured: &StructuredAnalysisDocument,
 ) -> Result<(), String> {
     let normalized = markdown.replace('\r', "");
+    let source = build_structure_seed("", &normalized);
 
-    if let Some(section) = application_section(&normalized) {
-        let module_like_blocks = count_usage_like_blocks(section);
+    {
+        let module_like_blocks = source.usage_modules.len();
         let complete_usage_modules = structured
             .usage_modules
             .iter()
@@ -27,8 +29,11 @@ pub fn validate_structured_capture(
 
     if let Some(section) = grammar_section(&normalized) {
         let markdown_rows = count_markdown_table_rows(section);
-        let covered_rows = structured.grammar_rows.len()
-            + count_collocation_style_grammar_rows(section, structured);
+        let covered_rows = structured
+            .grammar_rows
+            .iter()
+            .filter(|row| !row.key.trim().is_empty() && !row.value.trim().is_empty())
+            .count();
         if markdown_rows > 0 && covered_rows < markdown_rows {
             return Err(format!(
                 "grammar_rows incomplete: expected at least {markdown_rows}, got {covered_rows}"
@@ -73,32 +78,66 @@ pub fn validate_structured_capture(
         {
             return Err("word_network structured buckets empty despite visible items".to_string());
         }
+        for (name, expected, actual) in [
+            (
+                "family",
+                &source.word_network.family,
+                &structured.word_network.family,
+            ),
+            (
+                "synonyms",
+                &source.word_network.synonyms,
+                &structured.word_network.synonyms,
+            ),
+            (
+                "antonyms",
+                &source.word_network.antonyms,
+                &structured.word_network.antonyms,
+            ),
+        ] {
+            let expected = count_network_items(expected);
+            let captured = count_network_items(actual);
+            if captured < expected {
+                return Err(format!(
+                    "word_network.{name} incomplete: expected at least {expected}, got {captured}"
+                ));
+            }
+        }
     }
 
     if let Some(section) = deep_insight_section(&normalized) {
         let markdown_items = count_top_level_deep_insight_items(section);
-        if markdown_items > 0 && structured.deep_insights.len() < markdown_items {
+        let captured = structured
+            .deep_insights
+            .iter()
+            .filter(|item| !item.content_markdown.trim().is_empty())
+            .count();
+        if markdown_items > 0 && captured < markdown_items {
             return Err(format!(
                 "deep_insights incomplete: expected at least {markdown_items}, got {}",
-                structured.deep_insights.len()
+                captured
             ));
-        }
-
-        if has_explicit_etymology_subsection(section)
-            && !structured
-                .deep_insights
-                .iter()
-                .any(|item| item.title.contains("词源"))
-        {
-            return Err("etymology subsection missing from deep_insights".to_string());
         }
     }
 
     Ok(())
 }
 
-fn application_section(markdown: &str) -> Option<&str> {
-    section_by_headings(markdown, &["#### 应用与例句"])
+fn count_network_items(items: &[crate::models::StructuredWordNetworkItem]) -> usize {
+    items
+        .iter()
+        .filter(|item| !item.term.trim().is_empty())
+        .map(|item| {
+            (
+                item.term.trim(),
+                item.part_of_speech.trim(),
+                item.chinese.trim(),
+                item.english.trim(),
+                item.note.trim(),
+            )
+        })
+        .collect::<std::collections::HashSet<_>>()
+        .len()
 }
 
 fn grammar_section(markdown: &str) -> Option<&str> {
@@ -107,14 +146,6 @@ fn grammar_section(markdown: &str) -> Option<&str> {
 
 fn word_network_section(markdown: &str) -> Option<&str> {
     section_by_headings(markdown, &["#### 词汇网络"])
-}
-
-fn has_explicit_etymology_subsection(section: &str) -> bool {
-    section.lines().any(|line| {
-        let trimmed = line.trim();
-        (line.starts_with('*') || line.starts_with('-'))
-            && (trimmed.contains("词源") || trimmed.to_ascii_lowercase().contains("etymolog"))
-    })
 }
 
 fn deep_insight_section(markdown: &str) -> Option<&str> {
@@ -138,69 +169,18 @@ fn section_by_headings<'a>(markdown: &'a str, headings: &[&str]) -> Option<&'a s
     })
 }
 
-fn count_usage_like_blocks(section: &str) -> usize {
-    section
-        .split("\n\n")
-        .filter(|block| {
-            let lines = block
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty())
-                .collect::<Vec<_>>();
-            lines.len() >= 3
-                && !lines[0].starts_with("####")
-                && !lines[0].starts_with('|')
-                && lines[1].chars().any(|ch| ch.is_alphabetic())
-                && (lines[2].starts_with('（') || lines[2].starts_with('('))
-        })
-        .count()
-}
-
 fn count_markdown_table_rows(section: &str) -> usize {
     section
         .lines()
         .map(str::trim)
         .filter(|line| line.starts_with('|'))
-        .filter(|line| !line.contains(":---"))
-        .count()
-        .saturating_sub(1)
-}
-
-fn count_collocation_style_grammar_rows(
-    section: &str,
-    structured: &StructuredAnalysisDocument,
-) -> usize {
-    if structured.collocations.is_empty() {
-        return 0;
-    }
-
-    section
-        .lines()
-        .map(str::trim)
-        .filter(|line| line.starts_with('|'))
-        .filter(|line| !line.contains(":---"))
-        .skip(1)
-        .filter_map(parse_markdown_table_cells)
-        .filter(|cells| {
-            cells
-                .first()
-                .is_some_and(|key| key.contains("搭配") || key.contains("固定表达"))
+        .filter(|line| {
+            !line
+                .chars()
+                .all(|ch| ch.is_whitespace() || matches!(ch, '|' | ':' | '-'))
         })
         .count()
-}
-
-fn parse_markdown_table_cells(line: &str) -> Option<Vec<String>> {
-    let cells = line
-        .trim_matches('|')
-        .split('|')
-        .map(|cell| cell.trim().to_string())
-        .collect::<Vec<_>>();
-
-    if cells.is_empty() {
-        None
-    } else {
-        Some(cells)
-    }
+        .saturating_sub(1)
 }
 
 fn has_word_network_bucket(section: &str, bucket: &str) -> bool {
@@ -240,35 +220,50 @@ fn is_any_word_network_bucket_line(line: &str) -> bool {
         .any(|bucket| is_word_network_bucket_line(line, bucket))
 }
 
-fn is_word_network_bucket_line(line: &str, bucket: &str) -> bool {
-    let trimmed = line.trim();
-    if trimmed.contains(&format!("**{bucket}**")) {
-        return true;
-    }
-
-    let label = trimmed
-        .trim_start_matches(['*', '-', ' ', '\t'])
-        .trim()
-        .trim_matches('*')
-        .trim();
-
-    label.starts_with(bucket)
-}
-
 fn count_top_level_deep_insight_items(section: &str) -> usize {
-    section
-        .lines()
-        .filter(|line| {
-            line.strip_prefix(['*', '-'])
-                .is_some_and(|rest| rest.trim_start().starts_with("**"))
-        })
-        .count()
+    build_structure_seed("", section).deep_insights.len()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::{StructuredWordNetwork, StructuredWordNetworkItem};
+
+    #[test]
+    fn preserves_etymology_in_original_section_and_rejects_actual_omissions() {
+        let markdown = "#### 应用与例句\n\ngar nicht\n用法解析：加强否定\n场景例句：Das stimmt gar nicht.\n例句翻译：这完全不对。\n\n#### 深度解析与避坑\n\n* **语义演变**\n词源解释在这里，不必改名。\n\n* **辨析**\n第二段正文。";
+        let mut source = build_structure_seed("gar", markdown);
+        assert!(validate_structured_capture(markdown, &source).is_ok());
+        source.usage_modules[0].example_zh.clear();
+        assert!(validate_structured_capture(markdown, &source)
+            .unwrap_err()
+            .contains("usage_modules"));
+        source = build_structure_seed("gar", markdown);
+        source.deep_insights.pop();
+        assert!(validate_structured_capture(markdown, &source)
+            .unwrap_err()
+            .contains("deep_insights"));
+    }
+
+    #[test]
+    fn unrelated_collocation_does_not_cover_missing_grammar() {
+        let markdown = "#### 语法详情\n| 特征 | 值 |\n| --- | --- |\n| 固定搭配 | mit jemandem |";
+        let structured = StructuredAnalysisDocument {
+            collocations: vec!["unrelated".into()],
+            ..Default::default()
+        };
+        assert!(validate_structured_capture(markdown, &structured).is_err());
+    }
+
+    #[test]
+    fn rejects_partially_missing_network_bucket() {
+        let markdown = "#### 词汇网络\n\n**词族**\n* [garen] (Verb, 烹饪, cook)\n* [Garzeit] (Noun, 烹饪时间, cooking time)";
+        let mut source = build_structure_seed("gar", markdown);
+        source.word_network.family.pop();
+        assert!(validate_structured_capture(markdown, &source)
+            .unwrap_err()
+            .contains("family incomplete"));
+    }
 
     #[test]
     fn accepts_declared_empty_word_network_bucket() {

@@ -52,31 +52,6 @@ pub(crate) fn repair_json_inner_quotes(candidate: &str) -> Option<String> {
     changed.then_some(repaired)
 }
 
-pub(crate) fn repair_truncated_json(candidate: &str) -> Option<String> {
-    let trimmed = candidate.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    let boundaries = trimmed
-        .char_indices()
-        .map(|(index, _)| index)
-        .chain(std::iter::once(trimmed.len()))
-        .collect::<Vec<_>>();
-    let max_trim_steps = boundaries.len().saturating_sub(1).min(1200);
-
-    for trim_count in 0..=max_trim_steps {
-        let end = boundaries[boundaries.len() - 1 - trim_count];
-        let prefix = &trimmed[..end];
-        let repaired = close_truncated_json(prefix)?;
-        if serde_json::from_str::<serde_json::Value>(&repaired).is_ok() {
-            return Some(repaired);
-        }
-    }
-
-    None
-}
-
 fn should_escape_inner_quote(candidate: &str, next_index: usize) -> bool {
     let next_non_ws = candidate[next_index..]
         .chars()
@@ -87,86 +62,9 @@ fn should_escape_inner_quote(candidate: &str, next_index: usize) -> bool {
     )
 }
 
-fn close_truncated_json(prefix: &str) -> Option<String> {
-    let mut repaired = prefix.trim_end().to_string();
-    if repaired.is_empty() {
-        return None;
-    }
-
-    let mut in_string = false;
-    let mut escape = false;
-    let mut stack = Vec::new();
-
-    for ch in repaired.chars() {
-        if in_string {
-            if escape {
-                escape = false;
-                continue;
-            }
-            match ch {
-                '\\' => escape = true,
-                '"' => in_string = false,
-                _ => {}
-            }
-            continue;
-        }
-
-        match ch {
-            '"' => in_string = true,
-            '{' => stack.push('}'),
-            '[' => stack.push(']'),
-            '}' | ']' => {
-                if stack.last().copied() == Some(ch) {
-                    stack.pop();
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if in_string {
-        repaired.push('"');
-    }
-
-    loop {
-        while repaired.ends_with(char::is_whitespace) {
-            repaired.pop();
-        }
-
-        match repaired.chars().last() {
-            Some(',') | Some(':') => {
-                repaired.pop();
-            }
-            Some('{') => {
-                repaired.pop();
-                if stack.last().copied() == Some('}') {
-                    stack.pop();
-                }
-            }
-            Some('[') => {
-                repaired.pop();
-                if stack.last().copied() == Some(']') {
-                    stack.pop();
-                }
-            }
-            _ => break,
-        }
-    }
-
-    if repaired.is_empty() {
-        return None;
-    }
-
-    while let Some(closer) = stack.pop() {
-        repaired.push(closer);
-    }
-
-    Some(repaired)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{repair_json_inner_quotes, repair_truncated_json};
+    use super::repair_json_inner_quotes;
     use crate::services::analyze_support::extract_json;
     use serde_json::json;
 
@@ -188,7 +86,7 @@ mod tests {
     }
 
     #[test]
-    fn extract_json_repairs_unescaped_quotes_before_truncation_repair() {
+    fn rejects_truncated_output_instead_of_cutting_or_closing_it() {
         let raw = r#"{
           "usage_modules": [
             {
@@ -197,25 +95,16 @@ mod tests {
               "example_de": "Das kann man nicht pauschal sagen."
         "#;
 
-        let parsed = extract_json::<serde_json::Value>(raw).expect("json should be repaired");
-        assert_eq!(
-            parsed,
-            json!({
-              "usage_modules": [
-                {
-                  "title": "etwas nicht pauschal sagen",
-                  "explanation": "表示\"不能一概而论\"。",
-                  "example_de": "Das kann man nicht pauschal sagen."
-                }
-              ]
-            })
-        );
+        assert!(extract_json::<serde_json::Value>(raw).is_err());
+        assert!(extract_json::<serde_json::Value>(
+            r#"{"deep_insights":[{"title":"词源","content_markdown":"半截"#
+        )
+        .is_err());
     }
 
     #[test]
     fn inner_quote_repair_only_changes_when_needed() {
         let raw = r#"{"ok":"plain","nested":"already \"escaped\""}"#;
         assert!(repair_json_inner_quotes(raw).is_none());
-        assert!(repair_truncated_json(raw).is_some());
     }
 }

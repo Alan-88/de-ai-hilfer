@@ -23,7 +23,7 @@ use crate::services::analysis_structure_seed::build_structure_seed;
 use crate::services::analysis_structure_transform::{
     merge_structured_with_seed, normalize_structured_analysis,
 };
-use crate::services::analyze_support::extract_json_with_report;
+use crate::services::analyze_support::extract_json;
 use crate::services::dictionary_render::build_dictionary_excerpt;
 use crate::services::stream_response::sse_delta;
 use crate::state::AppState;
@@ -372,8 +372,8 @@ pub(crate) async fn structure_and_assemble(
         retry_policy,
     )
     .await?;
-    let extracted = extract_json_with_report::<StructuredAnalysisDocument>(&raw)?;
-    let module_document = normalize_structured_analysis(Some(extracted.value), target_query)
+    let extracted = extract_json::<StructuredAnalysisDocument>(&raw)?;
+    let module_document = normalize_structured_analysis(Some(extracted), target_query)
         .ok_or_else(|| anyhow!("structure extraction returned empty document"))?;
     let module_document = merge_structured_with_seed(module_document, &preliminary_parse);
     validate_structured_capture(markdown, &module_document)

@@ -25,20 +25,6 @@ export interface StructuredAnalysisSectionLike {
   content: string;
 }
 
-export interface StructuredAnalysisSparseCandidate {
-  usageModules: Array<{
-    title?: string;
-    explanation?: string;
-    example?: {
-      de?: string;
-      zh?: string;
-    } | null;
-  }>;
-  grammarRows: Array<unknown>;
-  wordNetwork: StructuredAnalysisWordNetwork;
-  deepInsights: StructuredAnalysisDeepInsight[];
-}
-
 const DEEP_INSIGHT_TITLES = [
   "深度解析",
   "避坑",
@@ -93,76 +79,6 @@ export function normalizeWordNetworkDocument(
   };
 }
 
-export function flattenWordNetworkTerms(
-  items: StructuredAnalysisWordNetworkItem[],
-  markdownToPlainText: (markdown: string) => string
-): string[] {
-  return dedupeStrings(
-    items.map((item) => {
-      const extra = [item.partOfSpeech, item.chinese || item.english || item.note]
-        .filter(Boolean)
-        .join(" · ");
-      return extra ? `${item.term} · ${extra}` : item.term;
-    }),
-    markdownToPlainText
-  );
-}
-
-export function looksStructuredTooSparse(
-  structured: StructuredAnalysisSparseCandidate,
-  markdown: string
-): boolean {
-  if (!markdown.trim()) return false;
-
-  const hasUsageSection = markdown.includes("#### 应用与例句");
-  const hasGrammarSection = markdown.includes("#### 语法详情");
-  const hasDeepInsightSection =
-    markdown.includes("#### 深度解析") ||
-    markdown.includes("#### 深度解析与避坑") ||
-    markdown.includes("#### 避坑");
-  const hasWordNetworkSection = markdown.includes("#### 词汇网络");
-
-  if (hasUsageSection) {
-    const completeUsageModules = structured.usageModules.filter(
-      (module) =>
-        module.title &&
-        module.explanation &&
-        module.example?.de &&
-        module.example?.zh
-    ).length;
-    const markdownModuleCount = countUsageLikeBlocks(markdown);
-    if (markdownModuleCount > 0 && completeUsageModules === 0) {
-      return true;
-    }
-  }
-
-  if (hasGrammarSection && markdown.includes("| :--- |") && structured.grammarRows.length === 0) {
-    return true;
-  }
-
-  if (hasDeepInsightSection && structured.deepInsights.length === 0) {
-    return true;
-  }
-
-  if (
-    markdown.includes("词源") &&
-    !structured.deepInsights.some((item) => item.title.includes("词源"))
-  ) {
-    return true;
-  }
-
-  if (
-    hasWordNetworkSection &&
-    structured.wordNetwork.family.length === 0 &&
-    structured.wordNetwork.synonyms.length === 0 &&
-    structured.wordNetwork.antonyms.length === 0
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
 function parseDeepInsights(
   content: string,
   markdownToPlainText: (markdown: string) => string,
@@ -171,6 +87,9 @@ function parseDeepInsights(
   if (!content) return [];
   const lines = content.split("\n");
   const insights: StructuredAnalysisDeepInsight[] = [];
+  const hasBulletTitles = lines.some(isTopLevelInsightBullet);
+  const hasBoldBulletTitles = lines.some((line) => /^[*-]\s+\*\*/.test(line));
+  const bulletMarker = lines.find(isTopLevelInsightBullet)?.[0];
 
   let currentTitle = "";
   let currentLines: string[] = [];
@@ -182,8 +101,11 @@ function parseDeepInsights(
     insights.push(createDeepInsight(currentTitle, body, markdownToPlainText, renderMarkdownHtml));
   }
 
-  for (const line of lines) {
-    if (isTopLevelInsightBullet(line) || isInlineInsightHeading(line) || isOrderedInsightHeading(line)) {
+  for (const [index, line] of lines.entries()) {
+    const bulletTitle = isTopLevelInsightBullet(line) && (hasBoldBulletTitles
+      ? /^[*-]\s+\*\*/.test(line)
+      : line[0] === bulletMarker && (!currentTitle || !lines[index - 1]?.trim()));
+    if (bulletTitle || isInlineInsightHeading(line) || (!hasBulletTitles && isOrderedInsightHeading(line))) {
       flush();
       const rawTitle = normalizeInsightLead(line);
       const { title, rest } = splitInsightLead(rawTitle, markdownToPlainText);
@@ -226,14 +148,6 @@ function splitInsightLead(
     };
   }
 
-  const colonIndex = rawTitle.search(/[:：]/);
-  if (colonIndex >= 0) {
-    return {
-      title: markdownToPlainText(rawTitle.slice(0, colonIndex)),
-      rest: rawTitle.slice(colonIndex + 1).trim(),
-    };
-  }
-
   return {
     title: markdownToPlainText(rawTitle),
     rest: "",
@@ -268,46 +182,11 @@ function dedupeWordNetworkItems(items: Array<{
     }))
     .filter((item) => item.term)
     .filter((item) => {
-      const key = item.term.toLowerCase();
+      const key = JSON.stringify(item);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-}
-
-function dedupeStrings(
-  values: string[],
-  markdownToPlainText: (markdown: string) => string
-): string[] {
-  const seen = new Set<string>();
-  return values
-    .map((value) => markdownToPlainText(value))
-    .filter((value) => !!value)
-    .filter((value) => {
-      const key = value.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-}
-
-function countUsageLikeBlocks(markdown: string): number {
-  return markdown
-    .split("\n\n")
-    .filter((block) => {
-      const lines = block
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
-      return (
-        lines.length >= 3 &&
-        !lines[0].startsWith("####") &&
-        !lines[0].startsWith("|") &&
-        /[A-Za-zÄÖÜäöüß]/.test(lines[1]) &&
-        (lines[2].startsWith("（") || lines[2].startsWith("("))
-      );
-    })
-    .length;
 }
 
 function isTopLevelInsightBullet(line: string): boolean {
@@ -315,11 +194,11 @@ function isTopLevelInsightBullet(line: string): boolean {
 }
 
 function isInlineInsightHeading(line: string): boolean {
-  return /^\*\*[^*]+\*\*[:：]?\s*$/.test(line.trim());
+  return /^\*\*[^*]+\*\*[:：]?\s*$/.test(line);
 }
 
 function isOrderedInsightHeading(line: string): boolean {
-  return /^\s*\d+\.\s+/.test(line);
+  return /^\d+\.\s+/.test(line);
 }
 
 function normalizeInsightLead(line: string): string {

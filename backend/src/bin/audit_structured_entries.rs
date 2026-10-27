@@ -55,6 +55,10 @@ struct EntryAuditRow {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    if args.first().is_some_and(|arg| arg == "--snapshot") {
+        return audit_api_snapshot(args.get(1).context("--snapshot requires a JSON path")?).await;
+    }
     let config = Config::from_env()?;
     let pool = db::create_pool(&config.database_url).await?;
 
@@ -80,6 +84,83 @@ async fn main() -> Result<()> {
         .with_context(|| format!("failed to write {}", path.display()))?;
 
     println!("{}", path.display());
+    Ok(())
+}
+
+// The API snapshot path needs neither database credentials nor a live database connection.
+async fn audit_api_snapshot(path: &str) -> Result<()> {
+    use de_ai_hilfer::services::{
+        analysis_structure_seed::build_structure_seed,
+        analysis_structure_transform::{merge_structured_with_seed, normalize_structured_analysis},
+    };
+    let snapshot: Value = serde_json::from_slice(&tokio::fs::read(path).await?)?;
+    let entries = snapshot["entries"]
+        .as_array()
+        .context("snapshot missing entries")?;
+    anyhow::ensure!(
+        snapshot["failures"]
+            .as_array()
+            .is_some_and(|items| items.is_empty()),
+        "snapshot has unread entries"
+    );
+    let mut failed = Vec::new();
+    let mut recovered = Vec::new();
+    let mut missing = Vec::new();
+    let mut source_errors = Vec::new();
+    let mut recovery_changes = Vec::new();
+    for item in entries {
+        let entry = &item["entry"];
+        let word = entry["query_text"].as_str().context("missing query_text")?;
+        let markdown = entry["analysis_markdown"]
+            .as_str()
+            .context("missing markdown")?;
+        if let Err(error) = de_ai_hilfer::services::analysis_grounded_stage2_quality::validate_stage2_markdown_completeness(markdown) {
+            source_errors.push(serde_json::json!({"word":word,"error":error.to_string()}));
+        }
+        if entry["structured_analysis"].is_null() {
+            missing.push(word);
+            continue;
+        }
+        let structured: StructuredAnalysisDocument =
+            serde_json::from_value(entry["structured_analysis"].clone())?;
+        let merged = merge_structured_with_seed(
+            normalize_structured_analysis(Some(structured.clone()), word)
+                .context("empty stored structure")?,
+            &build_structure_seed(word, markdown),
+        );
+        let before = serde_json::to_value(&structured)?;
+        let after = serde_json::to_value(&merged)?;
+        let fields = before
+            .as_object()
+            .unwrap()
+            .keys()
+            .filter(|key| before[*key] != after[*key])
+            .collect::<Vec<_>>();
+        if !fields.is_empty() {
+            recovery_changes.push(serde_json::json!({"word":word,"fields":fields}));
+        }
+        if let Err(error) = validate_structured_capture(markdown, &structured) {
+            if let Err(remaining) = validate_structured_capture(markdown, &merged) {
+                failed.push(
+                    serde_json::json!({"word": word, "error": error, "after_recovery": remaining}),
+                );
+            } else {
+                recovered.push(serde_json::json!({"word": word, "error": error}));
+            }
+        }
+    }
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "total": entries.len(), "unchanged_quality_ok": entries.len() - failed.len() - recovered.len() - missing.len(),
+            "recoverable": recovered, "unresolved": failed, "missing_structured": missing, "source_errors": source_errors,
+            "unchanged_after_recovery": entries.len() - recovery_changes.len(), "recovery_changes": recovery_changes
+        }))?
+    );
+    anyhow::ensure!(
+        failed.is_empty() && source_errors.is_empty(),
+        "snapshot contains unresolved integrity errors"
+    );
     Ok(())
 }
 

@@ -165,7 +165,7 @@ where
         Value::String(value) if value.trim().is_empty() => Ok(Vec::new()),
         Value::String(value) => serde_json::from_value(Value::String(value))
             .map(|item| vec![item])
-            .or_else(|_| Ok(Vec::new())),
+            .map_err(serde::de::Error::custom),
         Value::Array(values) => values
             .into_iter()
             .map(serde_json::from_value)
@@ -173,13 +173,28 @@ where
             .map_err(serde::de::Error::custom),
         other => serde_json::from_value(other)
             .map(|item| vec![item])
-            .or_else(|_| Ok(Vec::new())),
+            .map_err(serde::de::Error::custom),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::StructuredAnalysisDocument;
+
+    #[test]
+    fn rejects_invalid_nonempty_values_instead_of_silently_erasing_them() {
+        assert!(serde_json::from_str::<StructuredAnalysisDocument>(
+            r#"{"meanings":"not an array"}"#
+        )
+        .is_err());
+        assert!(
+            serde_json::from_str::<StructuredAnalysisDocument>(r#"{"grammar_branches":42}"#)
+                .is_err()
+        );
+        let valid: StructuredAnalysisDocument = serde_json::from_str(r#"{"collocations":"gar nicht","grammar_branches":[{"pos":"adverb","grammar":{"genders":"","comparative":""}}]}"#).unwrap();
+        assert_eq!(valid.collocations, vec!["gar nicht"]);
+        assert_eq!(valid.grammar_branches.len(), 1);
+    }
 
     #[test]
     fn accepts_empty_string_for_array_fields() {

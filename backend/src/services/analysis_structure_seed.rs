@@ -50,13 +50,25 @@ fn parse_usage_block(block: &str) -> Option<StructuredUsageModule> {
         }
     }
 
-    if explanation.is_empty() && example_de.is_empty() && example_zh.is_empty() {
-        explanation = lines.get(1).copied().unwrap_or_default().to_string();
-        example_de = lines.get(2).copied().unwrap_or_default().to_string();
-        example_zh = lines
-            .get(3)
-            .map(|line| strip_wrapping_zh_parentheses(line))
-            .unwrap_or_default();
+    let positional = |index: usize| {
+        lines
+            .get(index)
+            .copied()
+            .filter(|line| {
+                !["用法解析：", "场景例句：", "例句翻译："]
+                    .iter()
+                    .any(|label| line.starts_with(label))
+            })
+            .unwrap_or_default()
+    };
+    if explanation.is_empty() {
+        explanation = positional(1).to_string();
+    }
+    if example_de.is_empty() {
+        example_de = positional(2).to_string();
+    }
+    if example_zh.is_empty() {
+        example_zh = strip_wrapping_zh_parentheses(positional(3));
     }
 
     (!title.is_empty()
@@ -110,19 +122,19 @@ fn parse_word_network(markdown: &str) -> StructuredWordNetwork {
     network
 }
 
-fn is_word_network_bucket_line(line: &str, bucket: &str) -> bool {
+pub(crate) fn is_word_network_bucket_line(line: &str, bucket: &str) -> bool {
     let trimmed = line.trim();
-    if trimmed.contains(&format!("**{bucket}**")) {
-        return true;
-    }
-
     let label = trimmed
         .trim_start_matches(['*', '-', ' ', '\t'])
         .trim()
         .trim_matches('*')
         .trim();
 
-    label.starts_with(bucket)
+    label.strip_prefix(bucket).is_some_and(|rest| {
+        rest.chars()
+            .next()
+            .is_none_or(|ch| ch.is_whitespace() || "(（:：".contains(ch))
+    })
 }
 
 fn parse_word_network_item(line: &str) -> Option<StructuredWordNetworkItem> {
@@ -216,14 +228,30 @@ fn parse_deep_insights(markdown: &str) -> Vec<StructuredDeepInsight> {
     let mut insights = Vec::new();
     let mut current_title = String::new();
     let mut current_content = Vec::new();
+    let has_bold_titles = section.lines().any(|line| {
+        line.strip_prefix(['*', '-'])
+            .is_some_and(|rest| rest.trim_start().starts_with("**"))
+    });
+    let bullet_marker = section
+        .lines()
+        .find(|line| is_top_level_list_item(line))
+        .and_then(|line| line.chars().next());
+    let mut previous_blank = true;
 
     for line in section.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("####") || trimmed.is_empty() {
+            previous_blank = true;
             continue;
         }
 
-        if is_top_level_list_item(line) {
+        if is_top_level_list_item(line)
+            && (if has_bold_titles {
+                line[1..].trim_start().starts_with("**")
+            } else {
+                line.chars().next() == bullet_marker && (current_title.is_empty() || previous_blank)
+            })
+        {
             push_deep_insight(&mut insights, &mut current_title, &mut current_content);
             let (title, inline_content) = parse_deep_title(trimmed);
             current_title = title;
@@ -233,6 +261,7 @@ fn parse_deep_insights(markdown: &str) -> Vec<StructuredDeepInsight> {
         } else if !current_title.is_empty() {
             current_content.push(trimmed.to_string());
         }
+        previous_blank = false;
     }
 
     push_deep_insight(&mut insights, &mut current_title, &mut current_content);
@@ -312,6 +341,16 @@ fn section_by_heading<'a>(markdown: &'a str, headings: &[&str]) -> Option<&'a st
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accepts_mixed_labeled_and_unlabeled_four_line_usage() {
+        let markdown = "#### 应用与例句\n\nsich erholen\n完整的用法解释\n场景例句：Ich erhole mich.\n例句翻译：我在恢复。";
+        let seed = build_structure_seed("erholen", markdown);
+        assert_eq!(seed.usage_modules.len(), 1);
+        assert_eq!(seed.usage_modules[0].explanation, "完整的用法解释");
+        assert_eq!(seed.usage_modules[0].example_de, "Ich erhole mich.");
+        assert!(parse_usage_block("gar nicht\n场景例句：Gar nicht.\n例句翻译：完全不。").is_none());
+    }
 
     #[test]
     fn parses_bold_deep_insight_title_without_marker_leak() {

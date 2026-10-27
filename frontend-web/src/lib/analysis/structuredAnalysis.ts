@@ -6,8 +6,6 @@ import {
 } from "$lib/analysis/usageModules";
 import {
   extractDeepInsights,
-  flattenWordNetworkTerms,
-  looksStructuredTooSparse,
   normalizeWordNetworkDocument,
   type StructuredAnalysisDeepInsight as DeepInsight,
   type StructuredAnalysisWordNetwork as WordNetwork,
@@ -54,9 +52,51 @@ export function resolveStructuredAnalysis(
     fallbackHeadword
   );
   if (normalizedStructured) {
-    return { ...normalizedStructured, sourceType: "structured" };
+    const fallback = parseAnalysisMarkdown(markdown, fallbackHeadword);
+    const result = { ...normalizedStructured, sourceType: "structured" as const };
+    result.phonetic ||= fallback.phonetic;
+    if (!result.meanings.length) result.meanings = fallback.meanings;
+    result.usageModules = recoverMissingItems(result.usageModules, fallback.usageModules, (item) => itemKey(item.title))
+      .map((module) => {
+        const original = fallback.usageModules.find((item) => itemKey(item.title) === itemKey(module.title));
+        if (!original) return module;
+        return {
+          ...module,
+          explanation: module.explanation || original.explanation,
+          example: module.example || original.example
+            ? { de: module.example?.de || original.example?.de || "", zh: module.example?.zh || original.example?.zh || "" }
+            : null,
+        };
+      });
+    // Module examples and titles are already displayed inside their usage card.
+    if (!result.usageModules.length) {
+      if (!result.collocations.length) result.collocations = fallback.collocations;
+      if (!result.examples.length) result.examples = fallback.examples;
+    }
+    if (!result.grammarBranches.length) {
+      result.grammarRows = recoverMissingItems(result.grammarRows, fallback.grammarRows, (item) => itemKey(item.key));
+    }
+    for (const bucket of ["family", "synonyms", "antonyms"] as const) {
+      result.wordNetwork[bucket] = recoverMissingItems(result.wordNetwork[bucket], fallback.wordNetwork[bucket], networkItemKey);
+    }
+    result.deepInsights = recoverMissingItems(result.deepInsights, fallback.deepInsights, (item) => itemKey(item.title));
+    return result;
   }
   return { ...parseAnalysisMarkdown(markdown, fallbackHeadword), sourceType: "markdown" };
+}
+
+function itemKey(value: string): string {
+  return markdownToPlainText(value).toLowerCase();
+}
+
+function recoverMissingItems<T>(items: T[], fallback: T[], key: (item: T) => string): T[] {
+  if (items.length >= fallback.length) return items;
+  const existing = new Set(items.map(key));
+  return [...items, ...fallback.filter((item) => !existing.has(key(item)))];
+}
+
+function networkItemKey(item: WordNetworkItem): string {
+  return JSON.stringify([item.term, item.partOfSpeech, item.chinese, item.english, item.note]);
 }
 
 interface RawSection {
@@ -111,9 +151,6 @@ function normalizeStructuredAnalysisDocument(
 
   const rawMarkdown = (markdown || "").replace(/\r/g, "").trim();
   const wordNetwork = normalizeWordNetworkDocument(structured);
-  const family = flattenWordNetworkTerms(wordNetwork.family, markdownToPlainText);
-  const synonyms = flattenWordNetworkTerms(wordNetwork.synonyms, markdownToPlainText);
-  const antonyms = flattenWordNetworkTerms(wordNetwork.antonyms, markdownToPlainText);
 
   const normalized = {
     headword: (structured.headword || fallbackHeadword || "").trim(),
@@ -169,10 +206,6 @@ function normalizeStructuredAnalysisDocument(
     rawMarkdown,
   } satisfies StructuredAnalysisPayload;
 
-  if (looksStructuredTooSparse(normalized, rawMarkdown)) {
-    return null;
-  }
-
   const isEmpty =
     !normalized.phonetic &&
     normalized.meanings.length === 0 &&
@@ -180,6 +213,8 @@ function normalizeStructuredAnalysisDocument(
     normalized.collocations.length === 0 &&
     normalized.examples.length === 0 &&
     normalized.grammarRows.length === 0 &&
+    normalized.grammarBranches.length === 0 &&
+    Object.values(normalized.wordNetwork).every((items) => items.length === 0) &&
     normalized.deepInsights.length === 0;
 
   return isEmpty ? null : normalized;
@@ -249,13 +284,16 @@ function parseMeanings(content: string): StructuredMeaning[] {
 
 function parseGrammarTable(content: string): GrammarRow[] {
   if (!content) return [];
-  return content.split("\n")
-    .filter(l => l.includes("|") && !l.includes("---"))
+  const lines = content.split("\n").filter((line) => line.trim().startsWith("|"));
+  const isSeparator = (line: string) => line.trim().replace(/^\||\|$/g, "").split("|")
+    .every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
+  return lines
+    .filter((line, index) => !isSeparator(line) && !(lines[index + 1] && isSeparator(lines[index + 1])))
     .map(line => {
       const cells = line.split("|").map(c => markdownToPlainText(c.trim())).filter(Boolean);
       return { key: cells[0] || "", value: cells[1] || "" };
     })
-    .filter(row => row.key && row.value && !row.key.includes("特征"));
+    .filter(row => row.key && row.value);
 }
 
 function parseWordNetwork(content: string): WordNetwork {
@@ -265,18 +303,33 @@ function parseWordNetwork(content: string): WordNetwork {
   for (const line of content.split("\n")) {
     const p = markdownToPlainText(line);
     if (!p) continue;
-    if (p.includes("词族")) { current = "family"; continue; }
-    if (p.includes("同义词")) { current = "synonyms"; continue; }
-    if (p.includes("反义词")) { current = "antonyms"; continue; }
-    if (current && (line.trim().startsWith("*") || line.includes("    *"))) {
+    const label = p.replace(/^[-*]\s+/, "");
+    if (/^词族(?:$|\s|[（(:：])/.test(label)) { current = "family"; continue; }
+    if (/^同义词(?:$|\s|[（(:：])/.test(label)) { current = "synonyms"; continue; }
+    if (/^反义词(?:$|\s|[（(:：])/.test(label)) { current = "antonyms"; continue; }
+    if (current && /^\s*[*-]\s+/.test(line) && !p.includes("无高价值项")) {
+      const linked = line.match(/\[([^\]]+)\]/);
+      // Legacy free-form items remain readable; explicit [term] items keep their identity.
+      const term = linked?.[1]?.trim() || p;
+      const detail = linked ? line.slice(linked.index! + linked[0].length).trim().replace(/^\(|\)$/g, "") : "";
+      const parts = detail.split(",").map((part) => markdownToPlainText(part).trim());
       res[current].push({
-        term: p,
-        partOfSpeech: "",
-        chinese: "",
-        english: "",
-        note: "",
+        term,
+        partOfSpeech: parts.length >= 3 ? parts.slice(0, -2).join(", ") : "",
+        chinese: parts.length >= 3 ? parts.at(-2)! : "",
+        english: parts.length >= 3 ? parts.at(-1)! : "",
+        note: parts.length >= 3 ? "" : markdownToPlainText(detail),
       });
     }
+  }
+  for (const bucket of ["family", "synonyms", "antonyms"] as const) {
+    const seen = new Set<string>();
+    res[bucket] = res[bucket].filter((item) => {
+      const key = networkItemKey(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
   return res;
 }

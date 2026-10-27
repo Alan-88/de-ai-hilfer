@@ -131,15 +131,7 @@ impl AiClient {
             .text()
             .await
             .context("failed to read AI response body")?;
-        let response = parse_chat_completion_response(&body)?;
-
-        response
-            .choices
-            .into_iter()
-            .next()
-            .and_then(|choice| choice.message.extract_text())
-            .filter(|content| !content.trim().is_empty())
-            .ok_or_else(|| anyhow!("AI response did not contain message content"))
+        extract_chat_text(&body)
     }
 
     pub async fn chat_model_connectivity_check(
@@ -330,6 +322,28 @@ fn parse_tool_turn(body: &str) -> Result<ToolTurn> {
 mod tool_tests {
     use super::*;
     #[test]
+    fn rejects_truncated_plain_completions_without_guessing_from_text() {
+        assert!(extract_chat_text(
+            r#"{"choices":[{"finish_reason":"length","message":{"content":"看起来完整。"}}]}"#
+        )
+        .is_err());
+        assert_eq!(
+            extract_chat_text(
+                r#"{"choices":[{"finish_reason":"stop","message":{"content":"没有末尾标点"}}]}"#
+            )
+            .unwrap(),
+            "没有末尾标点"
+        );
+        assert_eq!(
+            extract_chat_text(
+                r#"{"choices":[{"message":{"content":"兼容未返回完成原因的提供商"}}]}"#
+            )
+            .unwrap(),
+            "兼容未返回完成原因的提供商"
+        );
+    }
+
+    #[test]
     fn rejects_incomplete_answers_and_preserves_markdown() {
         assert!(parse_tool_turn(
             r#"{"choices":[{"finish_reason":"length","message":{"content":"半句"}}]}"#
@@ -390,6 +404,8 @@ struct ChatCompletionResponse {
 #[derive(Deserialize)]
 struct ChatChoice {
     message: ChatResponseMessage,
+    #[serde(default)]
+    finish_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -452,6 +468,25 @@ fn parse_chat_completion_response(body: &str) -> Result<ChatCompletionResponse> 
         let preview: String = body.chars().take(600).collect();
         format!("failed to decode AI response body: preview={preview}")
     })
+}
+
+fn extract_chat_text(body: &str) -> Result<String> {
+    let choice = parse_chat_completion_response(body)?
+        .choices
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("AI response did not contain choices"))?;
+    if let Some(reason) = choice.finish_reason {
+        anyhow::ensure!(
+            reason == "stop",
+            "AI response did not complete: finish_reason={reason}"
+        );
+    }
+    choice
+        .message
+        .extract_text()
+        .filter(|text| !text.trim().is_empty())
+        .ok_or_else(|| anyhow!("AI response did not contain message content"))
 }
 
 #[derive(Serialize)]
